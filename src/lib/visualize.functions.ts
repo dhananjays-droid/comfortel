@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import catalogFull from "@/data/catalog-full.json";
+import catalogSlim from "@/data/catalog-slim.json";
 import { buildPlacementPrompt, type VisualizeProduct } from "@/lib/visualize-prompt";
 
 export const visualize = createServerFn({ method: "POST" })
@@ -19,7 +20,11 @@ export const visualize = createServerFn({ method: "POST" })
       const product = catalog[data.productId];
       if (!product) throw new Error("PRODUCT_NOT_FOUND");
 
-      const prompt = buildPlacementPrompt(product);
+      const slim = (catalogSlim as unknown as Array<{ id: string; col?: string }>).find(
+        (p) => p.id === data.productId,
+      );
+      const prompt = buildPlacementPrompt({ ...product, col: slim?.col || null });
+
 
       // Cache key: sha256(productId + roomImageBase64)
       const encoded = new TextEncoder().encode(data.productId + data.roomImageBase64);
