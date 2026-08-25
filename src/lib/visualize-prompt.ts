@@ -240,8 +240,14 @@ function removalClauses(subject: string, product: string, all: boolean): Clause[
       `Step 1 — REMOVE: delete the existing ${subject} from this salon; it must be gone from the final image. Erase it completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind it.`,
     ),
     req(MIRROR_REMOVAL(subject, product, false)),
-    opt(
-      `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others untouched.`,
+    // Scope, stated as a hard count. This was a droppable one-liner buried
+    // mid-prompt, and it did not hold: given several reference views of the new
+    // product, two of two renders broke it — one replaced every chair in the
+    // room, the other deleted the ones it was told to leave. More references
+    // appear to crowd out the scope instruction, so it is now required, phrased
+    // as a count, and restated in the closing check.
+    req(
+      `SCOPE: exactly ONE ${subject} changes. If the salon has several, every other one stays in the final image completely untouched — same model, same colour, same position, same facing. Replacing them too is a failed render, and so is deleting them.`,
     ),
   ];
 }
@@ -497,7 +503,7 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
       req(
         all
           ? `Before you finish, check three things. One: no original ${subject} remains anywhere in the frame INCLUDING inside every mirror, and the count is unchanged. Two: every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one. Three: all of them are identical to each other, and each mirror reflects what is actually in front of it.`
-          : `Before you finish, check: the original ${subject} appears nowhere in the frame — not on the floor and not in any mirror — and the ${product.name} stands in its place, not beside it and not in addition to it.`,
+          : `Before you finish, check both: the ${subject} you replaced appears nowhere — not on the floor, not in any mirror — and the ${product.name} stands in its place, not beside it. And every OTHER ${subject} in the room is still there, still the original, unchanged.`,
       ),
     );
   }

@@ -133,3 +133,27 @@ describe("referenceViews with classified data", () => {
     expect(imageUrls).toEqual(["https://x/6083_001.jpg", "https://x/6083_002.jpg"]);
   });
 });
+
+describe("replace scope", () => {
+  it("states the one-unit scope as a required clause", () => {
+    const { prompt } = buildRenderRequest([product()], "replace");
+    expect(prompt).toContain("SCOPE: exactly ONE styling chair changes");
+  });
+
+  it("keeps the scope clause even at the smallest budget", () => {
+    // Required clauses survive budget pressure; droppable ones do not. This is
+    // the regression guard for the clause being opt() rather than req().
+    const long = product({ name: "B".repeat(200) });
+    expect(buildRenderRequest([long], "replace").prompt).toContain("SCOPE: exactly ONE");
+  });
+
+  it("asks the closing check to confirm the other units survived", () => {
+    const { prompt } = buildRenderRequest([product()], "replace");
+    expect(prompt).toContain("still the original, unchanged");
+  });
+
+  it("does not apply the one-unit scope to replace_all", () => {
+    const { prompt } = buildRenderRequest([product()], "replace_all");
+    expect(prompt).not.toContain("SCOPE: exactly ONE");
+  });
+});

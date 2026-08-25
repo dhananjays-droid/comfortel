@@ -51,13 +51,13 @@ The repo has no test runner at all. Everything below depends on this.
 - Consumes: nothing
 - Produces: `npm test` (watch) and `npm run test:run` (single pass) work from the repo root; tests live in `src/**/__tests__/*.test.ts`
 
-- [ ] **Step 1: Install vitest**
+- [x] **Step 1: Install vitest**
 
 ```bash
 npm install -D vitest@^2
 ```
 
-- [ ] **Step 2: Create the config**
+- [x] **Step 2: Create the config**
 
 `vitest.config.ts`:
 
@@ -80,7 +80,7 @@ export default defineConfig({
 
 The `@` alias must be repeated here — vitest does not read `tsconfig.json` paths.
 
-- [ ] **Step 3: Add the scripts**
+- [x] **Step 3: Add the scripts**
 
 In `package.json` `"scripts"`, add:
 
@@ -89,7 +89,7 @@ In `package.json` `"scripts"`, add:
 "test:run": "vitest run"
 ```
 
-- [ ] **Step 4: Write a smoke test that proves the alias works**
+- [x] **Step 4: Write a smoke test that proves the alias works**
 
 `src/lib/__tests__/smoke.test.ts`:
 
@@ -110,12 +110,12 @@ describe("test harness", () => {
 });
 ```
 
-- [ ] **Step 5: Run it**
+- [x] **Step 5: Run it**
 
 Run: `npm run test:run`
 Expected: 2 passing tests. If the alias fails it errors with "Failed to resolve import @/lib/visualize-prompt".
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add vitest.config.ts package.json package-lock.json src/lib/__tests__/smoke.test.ts
@@ -135,7 +135,7 @@ Before changing `referenceViews()`, pin what it does now. These tests must keep 
 - Consumes: `referenceViews`, `buildRenderRequest`, `MAX_PROMPT_CHARS` from `@/lib/visualize-prompt`
 - Produces: the regression suite every later task runs
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 `src/lib/__tests__/visualize-prompt.test.ts`:
 
@@ -232,12 +232,12 @@ describe("buildRenderRequest", () => {
 });
 ```
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `npm run test:run`
 Expected: all pass against the current implementation. Any failure here is a real bug in today's code — fix it before continuing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/__tests__/visualize-prompt.test.ts
@@ -263,7 +263,7 @@ git commit -m "Pin current reference-view and prompt behaviour in tests"
   - `VisualizeProduct` gains `views?: ProductView[] | undefined`
   - `referenceViews(product, max)` prefers `product.views`, else falls back to today's filename matching
 
-- [ ] **Step 1: Create the empty data file**
+- [x] **Step 1: Create the empty data file**
 
 `src/data/product-views.json`:
 
@@ -271,7 +271,7 @@ git commit -m "Pin current reference-view and prompt behaviour in tests"
 {}
 ```
 
-- [ ] **Step 2: Write the failing loader test**
+- [x] **Step 2: Write the failing loader test**
 
 `src/lib/__tests__/product-views.test.ts`:
 
@@ -297,12 +297,12 @@ describe("ANGLE_PHRASE", () => {
 });
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 Run: `npm run test:run src/lib/__tests__/product-views.test.ts`
 Expected: FAIL — "Failed to resolve import @/lib/product-views".
 
-- [ ] **Step 4: Write the loader**
+- [x] **Step 4: Write the loader**
 
 `src/lib/product-views.ts`:
 
@@ -341,12 +341,12 @@ export function viewsFor(id: string): ProductView[] {
 }
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `npm run test:run src/lib/__tests__/product-views.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Write the failing test for data-driven selection**
+- [x] **Step 6: Write the failing test for data-driven selection**
 
 Append to `src/lib/__tests__/visualize-prompt.test.ts`:
 
@@ -395,12 +395,12 @@ describe("referenceViews with classified data", () => {
 });
 ```
 
-- [ ] **Step 7: Run it and watch it fail**
+- [x] **Step 7: Run it and watch it fail**
 
 Run: `npm run test:run src/lib/__tests__/visualize-prompt.test.ts`
 Expected: FAIL — `views` is not a property of `VisualizeProduct`, and supplied views are ignored.
 
-- [ ] **Step 8: Add `views` to the product type**
+- [x] **Step 8: Add `views` to the product type**
 
 In `src/lib/visualize-prompt.ts`, inside `VisualizeProduct`, add:
 
@@ -413,7 +413,7 @@ In `src/lib/visualize-prompt.ts`, inside `VisualizeProduct`, add:
   views?: Array<{ url: string; angle: ViewAngleName }> | undefined;
 ```
 
-- [ ] **Step 9: Make `referenceViews` prefer the data**
+- [x] **Step 9: Make `referenceViews` prefer the data**
 
 In `src/lib/visualize-prompt.ts`, replace the body of `referenceViews` with:
 
@@ -475,7 +475,7 @@ const ANGLE_PHRASES: Record<ViewAngleName, string> = {
 };
 ```
 
-- [ ] **Step 10: Add the drift guard test**
+- [x] **Step 10: Add the drift guard test**
 
 Append to `src/lib/__tests__/product-views.test.ts`:
 
@@ -495,12 +495,12 @@ it("phrases angles identically in both modules", () => {
 });
 ```
 
-- [ ] **Step 11: Run everything**
+- [x] **Step 11: Run everything**
 
 Run: `npm run test:run && npx tsc --noEmit && npx eslint src`
 Expected: all tests pass, no type errors, no lint errors.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add src/lib/product-views.ts src/lib/visualize-prompt.ts src/data/product-views.json src/lib/__tests__
@@ -518,7 +518,7 @@ git commit -m "Select reference views from classified data, keep filename fallba
 - Consumes: `viewsFor` from `@/lib/product-views`
 - Produces: every product handed to `buildRenderRequest()` carries its `views`
 
-- [ ] **Step 1: Attach the views next to `col`**
+- [x] **Step 1: Attach the views next to `col`**
 
 In `src/lib/visualize.functions.ts`, add the import:
 
@@ -556,7 +556,7 @@ to:
 The spread is conditional because `exactOptionalPropertyTypes` rejects an
 explicit `undefined` for an optional property.
 
-- [ ] **Step 2: Verify the build still separates client and server**
+- [x] **Step 2: Verify the build still separates client and server**
 
 Run: `npx tsc --noEmit && npm run build`
 Expected: build succeeds. `product-views.json` must appear only under
@@ -566,7 +566,7 @@ Expected: build succeeds. `product-views.json` must appear only under
 grep -rl "product-views" .output/public 2>/dev/null || echo "not in client bundle - correct"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/visualize.functions.ts
@@ -584,7 +584,7 @@ git commit -m "Attach classified views to products on the render path"
 - Consumes: `ANTHROPIC_API_KEY` from `.env`, `src/data/catalog-full.json`
 - Produces: `src/data/product-views.json` — `{ [id]: [{ url, angle }] }`
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 `scripts/classify-product-views.mjs`:
 
@@ -767,14 +767,14 @@ console.log(`\nwrote ${OUT}`);
 console.log(`products with a usable multi-view set: ${Object.keys(out).length}`);
 ```
 
-- [ ] **Step 2: Smoke test on five products**
+- [x] **Step 2: Smoke test on five products**
 
 Run: `node --env-file=.env scripts/classify-product-views.mjs --limit 5`
 Expected: prints progress, writes `src/data/product-views.json` with at most 5
 entries. Open the file and eyeball one entry against the product page — the
 angles must be plausible and no lifestyle URL may appear.
 
-- [ ] **Step 3: Verify the strictness actually bites**
+- [x] **Step 3: Verify the strictness actually bites**
 
 Pick `Black Salon Stool` (id with hero `3900-Black-Salon-Stool-Black-Base.jpg`
 and extra `Black-Salon-Stool.jpg`, which is a different base variant). Confirm it
@@ -782,12 +782,12 @@ is either absent from the output or has the variant rejected. If the classifier
 accepted it as another angle, the system prompt is too lenient — tighten and
 re-run before the full pass.
 
-- [ ] **Step 4: Full run**
+- [x] **Step 4: Full run**
 
 Run: `node --env-file=.env scripts/classify-product-views.mjs`
 Expected: 136 products attempted, a report of how many produced a usable set.
 
-- [ ] **Step 5: Commit the script and the data**
+- [x] **Step 5: Commit the script and the data**
 
 ```bash
 git add scripts/classify-product-views.mjs src/data/product-views.json
@@ -804,7 +804,7 @@ git commit -m "Classify product reference views with a vision pass"
 **Interfaces:**
 - Consumes: everything above
 
-- [ ] **Step 1: Count the improvement**
+- [x] **Step 1: Count the improvement**
 
 Run:
 
@@ -829,7 +829,7 @@ console.log('multi-view products before:', before, '-> after:', after);
 
 Expected: `after` is materially greater than 34. Record the number.
 
-- [ ] **Step 2: Live render a product that gained views**
+- [x] **Step 2: Live render a product that gained views**
 
 Pick one product that had exactly one usable view before and more than one now.
 Render it in `replace` mode against a salon photo and compare against a render of
@@ -840,7 +840,7 @@ This is a judgement call, not an assertion — record the two images and say pla
 whether it improved, got worse, or is indistinguishable. "Indistinguishable" is a
 legitimate outcome worth recording.
 
-- [ ] **Step 3: Full check and commit**
+- [x] **Step 3: Full check and commit**
 
 ```bash
 npm run test:run && npx tsc --noEmit && npx eslint src && npm run build
