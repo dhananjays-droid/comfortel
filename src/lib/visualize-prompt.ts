@@ -19,21 +19,91 @@ export function isMultiReferenceMode(mode: VisualizeMode): boolean {
 export const MAX_REFERENCES = 4;
 
 /**
+ * Past its prompt limit kie rejects createTask outright with "The text length
+ * cannot exceed the maximum limit". The failure is total — no task, no credits
+ * spent, the customer just sees the render fail — so every prompt this module
+ * returns goes through assemble() and cannot exceed it by adding a clause here.
+ *
+ * gpt-image/1.5 capped this at exactly 3000 characters (measured: 3000 accepted,
+ * 3001 rejected), which is what silently broke every replace render once the
+ * fidelity clauses pushed the prompt to 3080. GPT Image 2 documents 20000; 6000
+ * is what has been verified against the live API, and the longest prompt built
+ * here is under 3000 anyway, so this is headroom rather than a target — long
+ * prompts also dilute instruction-following.
+ */
+export const MAX_PROMPT_CHARS = 6000;
+
+/**
  * How many views of ONE product to send on the single-product modes.
  *
- * Sending a single hero shot means the model never sees the armrest profile or
- * the base and invents both — the two things a buyer recognises a chair by.
- * Sending three views was the fix, but rendering started failing right after,
- * so the default is back to 1 (the known-working state) and multi-view is
- * opt-in via KIE_MAX_VIEWS=3 while the cause is isolated.
- */
-/**
+ * A single hero shot means the model never sees the armrest profile or the base
+ * and invents both — the two things a buyer recognises a chair by. Four covers
+ * hero + front + side + back, every distinct angle the catalogue actually has;
+ * GPT Image 2 accepts up to 16 images, so this is bounded by the photography
+ * rather than by the API.
+ *
  * NOT env-driven: this module is imported by visualize.functions.ts, whose
  * validator runs in the browser too, so `process.env` here would throw
- * "process is not defined" at import time in the client bundle. Change the
- * constant to 3 to re-enable multi-view references.
+ * "process is not defined" at import time in the client bundle.
  */
-export const MAX_VIEWS = 1;
+export const MAX_VIEWS = 4;
+
+/**
+ * `drop` is the order clauses are sacrificed in when the budget is tight:
+ * lowest first, 0 meaning never. It is an explicit rank rather than "drop from
+ * the end" because the least valuable clause is not the last one — the closing
+ * acceptance check earns its place, the dimension hint does not.
+ */
+type Clause = { text: string; drop: number };
+
+/** Sacrifice order, least valuable first. */
+const DROP = {
+  /** Scale hint — the unit being removed already sets the scale. */
+  size: 1,
+  /** Where it goes — restates what the room already makes obvious. */
+  position: 2,
+  /** Reflections and shadows — the render usually gets these right unprompted. */
+  polish: 3,
+  /** Any other elaboration on an instruction already given. */
+  detail: 4,
+} as const;
+
+const req = (text: string): Clause => ({ text, drop: 0 });
+const opt = (text: string, drop: number = DROP.detail): Clause => ({ text, drop });
+
+/**
+ * Join clauses within MAX_PROMPT_CHARS.
+ *
+ * Over budget, whole clauses are dropped in `drop` order — every optional
+ * clause here elaborates on an instruction already given, so losing one costs
+ * some fidelity but nothing essential. Truncating mid-sentence instead would
+ * hand the model a dangling instruction, which is worse than not sending it.
+ */
+function assemble(clauses: Clause[]): string {
+  const joined = (list: Clause[]) => list.map((c) => c.text).join(" ");
+
+  const kept = [...clauses];
+  while (joined(kept).length > MAX_PROMPT_CHARS) {
+    // Lowest rank goes first; among equals, the later one.
+    let victim = -1;
+    for (let i = 0; i < kept.length; i++) {
+      const d = kept[i]?.drop ?? 0;
+      if (d === 0) continue;
+      if (victim < 0 || d <= (kept[victim]?.drop ?? 0)) victim = i;
+    }
+    if (victim < 0) break;
+    kept.splice(victim, 1);
+  }
+
+  const out = joined(kept);
+  if (out.length <= MAX_PROMPT_CHARS) return out;
+
+  // Required clauses alone should never blow the budget. If they ever do, a
+  // shortened prompt still renders; a rejected request does not.
+  const cut = out.slice(0, MAX_PROMPT_CHARS);
+  const lastStop = cut.lastIndexOf(". ");
+  return lastStop > 0 ? cut.slice(0, lastStop + 1) : cut;
+}
 
 const VIEW_ORDER: Array<[RegExp, string]> = [
   [/front/i, "from the front"],
@@ -91,12 +161,12 @@ export type VisualizeProduct = {
 };
 
 const PLACEMENT: Record<string, string> = {
-  styling_chair: `Position it on the floor facing the mirror station, at the correct working distance a stylist would use.`,
-  shampoo_unit: `Position it against the wall at the wash bay, with the basin oriented away from the wall.`,
-  trolley: `Position it standing on the floor beside the styling station, within a stylist's arm's reach.`,
+  styling_chair: `Position it facing the mirror station at a stylist's working distance.`,
+  shampoo_unit: `Position it against the wall at the wash bay, basin oriented away from the wall.`,
+  trolley: `Position it beside the styling station, within a stylist's arm's reach.`,
   mirror_unit: `Mount it flat against the wall at standard station height.`,
   reception: `Position it in the reception area, facing the entrance.`,
-  dryer: `Position it on the floor beside a waiting chair, at seated head height.`,
+  dryer: `Position it beside a waiting chair, at seated head height.`,
   floor: `Position it standing flat on the salon floor.`,
 };
 
@@ -107,17 +177,21 @@ const PLACEMENT: Record<string, string> = {
  * and restated as an acceptance check at the end — the two positions the model
  * weights most.
  */
-function removalClauses(subject: string, all: boolean): string[] {
+function removalClauses(subject: string, all: boolean): Clause[] {
   if (all) {
     return [
-      `Step 1 — REMOVE: delete every ${subject} currently in this salon from the image. Not one of them may remain.`,
-      `Erase each one completely, including its base, hydraulic column, footrest and any castors, and rebuild the floor, skirting and wall behind where each stood so the space reads as empty and continuous.`,
+      req(
+        `Step 1 — REMOVE: delete every ${subject} in this salon; not one may remain. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind where each stood.`,
+      ),
     ];
   }
   return [
-    `Step 1 — REMOVE: delete the existing ${subject} from this salon. It must be gone from the final image.`,
-    `Erase it completely, including its base, hydraulic column, footrest and any castors, and rebuild the floor, skirting and wall behind it so the space reads as empty and continuous.`,
-    `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others exactly as they are.`,
+    req(
+      `Step 1 — REMOVE: delete the existing ${subject} from this salon; it must be gone from the final image. Erase it completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind it.`,
+    ),
+    opt(
+      `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others untouched.`,
+    ),
   ];
 }
 
@@ -126,15 +200,19 @@ function removalClauses(subject: string, all: boolean): string[] {
  * lighting, mirror reflections, contact shadows — so they live in one place
  * rather than being restated per branch and drifting apart.
  */
-function realismClauses(): string[] {
+function realismClauses(): Clause[] {
   return [
-    `Critical realism requirements:`,
-    `Match the salon's perspective, camera angle and floor plane exactly — every piece must sit flat on the floor with correct foreshortening, not float or tilt.`,
-    `Match the salon's lighting direction, intensity and colour temperature, including the cool overhead lighting typical of salons.`,
-    `If any mirror is visible and a placed piece falls within its line of sight, render a correct reflection of it in that mirror. A missing reflection is the most obvious sign of a fake composite.`,
-    `Salon floors are often glossy tile or vinyl — render a soft reflection of each base on the floor, matching how existing furniture reflects.`,
-    `Cast grounded contact shadows consistent with the room's existing shadows.`,
-    `Photorealistic. The result should look like an unedited photograph of this salon with these products actually installed in it.`,
+    req(
+      `Critical realism: match the salon's perspective, camera angle and floor plane exactly — every piece sits flat on the floor with correct foreshortening, never floating or tilted.`,
+    ),
+    req(`Match the salon's lighting direction, intensity and colour temperature.`),
+    opt(
+      `Render a reflection of any placed piece a mirror can see, a soft floor reflection of each base, and contact shadows matching the room's existing ones.`,
+      DROP.polish,
+    ),
+    req(
+      `Photorealistic — an unedited photograph of this salon with these products actually installed.`,
+    ),
   ];
 }
 
@@ -157,24 +235,33 @@ function describe(product: VisualizeProduct): string {
  * architecture is preserved and the furniture is swapped wholesale.
  */
 function buildRefitPrompt(products: VisualizeProduct[]): string {
-  const parts: string[] = [];
   const list = products.map((p, i) => `Image ${i + 2} is a ${describe(p)}`).join(". ");
 
-  parts.push(
-    `The first image is a photograph of a real hair salon. The images after it are Comfortel product references. ${list}.`,
-    `Refit this salon with the Comfortel products shown.`,
-    `Step 1 — REMOVE: strip out the salon's existing furniture — every styling chair, stool, trolley, mirror unit, reception desk and waiting seat that is visible. Remove each one completely, including bases, hydraulic columns and footrests.`,
-    `Step 2 — INSTALL: fit the Comfortel pieces from the reference images into the room, putting each one where its type belongs — styling chairs at the mirror stations, mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
-    `Where the salon had several of one type, repeat the matching Comfortel piece across all of those positions so the room reads as one coordinated fit-out, keeping the original spacing and orientation.`,
-    `Reproduce each product exactly as shown in its reference image: shape, proportions, upholstery, stitching, base design and hardware finish must match precisely. Do not invent pieces that are not in the references, and do not restyle the ones that are.`,
-    `Keep the room itself untouched: walls, flooring, ceiling, windows, plumbing, wash basins, lighting fixtures, signage, plants and any people stay exactly as they are. Only the furniture changes.`,
-  );
-
-  parts.push(...realismClauses());
-  parts.push(
-    `Before you finish, check the image: none of the salon's original furniture may still be present. Every visible piece is now a Comfortel product from the references.`,
-  );
-  return parts.join(" ");
+  return assemble([
+    req(
+      `The first image is a photograph of a real hair salon. The images after it are Comfortel product references. ${list}.`,
+    ),
+    req(`Refit this salon with the Comfortel products shown.`),
+    req(
+      `Step 1 — REMOVE: strip out the salon's existing furniture — every styling chair, stool, trolley, mirror unit, reception desk and waiting seat visible. Remove each completely, including bases, hydraulic columns and footrests.`,
+    ),
+    req(
+      `Step 2 — INSTALL: fit the Comfortel pieces into the room, each where its type belongs — styling chairs at the mirror stations, mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
+    ),
+    opt(
+      `Where the salon had several of one type, repeat the matching Comfortel piece across all of those positions so the room reads as one coordinated fit-out, keeping the original spacing and orientation.`,
+    ),
+    req(
+      `Reproduce each product exactly as its reference shows it: shape, proportions, upholstery, stitching, base design and hardware finish. Do not invent pieces that are not in the references, and do not restyle the ones that are.`,
+    ),
+    req(
+      `Keep the room itself untouched: walls, flooring, ceiling, windows, plumbing, wash basins, lighting, signage, plants and any people stay exactly as they are. Only the furniture changes.`,
+    ),
+    ...realismClauses(),
+    req(
+      `Before you finish, check: none of the salon's original furniture is still present, and every visible piece is a Comfortel product from the references.`,
+    ),
+  ]);
 }
 
 /**
@@ -187,28 +274,38 @@ function buildRefitPrompt(products: VisualizeProduct[]): string {
  * once, for a quarter of the cost, and gives up like-for-like positioning.
  */
 function buildLineupPrompt(products: VisualizeProduct[]): string {
-  const parts: string[] = [];
   const subject = products[0]?.replaces ?? "unit";
-
   const assignments = products
     .map((p, i) => `Image ${i + 2} is a ${describe(p)} — put this one at position ${i + 1}`)
     .join(". ");
 
-  parts.push(
-    `The first image is a photograph of a real hair salon. The images after it are ${products.length} DIFFERENT Comfortel products.`,
-    `Step 1 — REMOVE: delete the salon's existing ${subject}s from the image, all of them. Erase each one completely, including its base, hydraulic column, footrest and any castors, and rebuild the floor behind where each stood.`,
-    `Step 2 — INSTALL: number the now-empty positions 1 to ${products.length} from left to right as the camera sees them. ${assignments}.`,
-    `Each position gets a DIFFERENT product. Do not repeat one product across positions, and do not blend them into a single averaged design — the whole point is that the customer can see the difference between them side by side.`,
-    `Reproduce each one exactly as shown in its own reference image: shape, proportions, upholstery colour, stitching, base design and hardware finish must match that specific reference and not the others.`,
-    `If the salon has more positions than there are products, leave the extra positions empty. If it has fewer, place only as many products as there are positions, in the order given.`,
-    `Keep the room itself untouched: walls, flooring, ceiling, windows, mirrors, wash basins, lighting fixtures, signage, plants and any people stay exactly as they are.`,
-  );
-
-  parts.push(...realismClauses());
-  parts.push(
-    `Before you finish, check the image: each position holds a visibly different product, matching its own reference, and none of the salon's original ${subject}s remain.`,
-  );
-  return parts.join(" ");
+  return assemble([
+    req(
+      `The first image is a photograph of a real hair salon. The images after it are ${products.length} DIFFERENT Comfortel products.`,
+    ),
+    req(
+      `Step 1 — REMOVE: delete the salon's existing ${subject}s, all of them. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor behind where each stood.`,
+    ),
+    req(
+      `Step 2 — INSTALL: number the now-empty positions 1 to ${products.length} from left to right as the camera sees them. ${assignments}.`,
+    ),
+    req(
+      `Each position gets a DIFFERENT product. Do not repeat one across positions and do not blend them into a single averaged design — the point is that the customer can see the difference side by side.`,
+    ),
+    req(
+      `Reproduce each one exactly as its own reference shows it: shape, proportions, upholstery colour, stitching, base design and hardware finish must match that specific reference and not the others.`,
+    ),
+    opt(
+      `If the salon has more positions than there are products, leave the extra positions empty. If fewer, place only as many products as there are positions, in the order given.`,
+    ),
+    req(
+      `Keep the room itself untouched: walls, flooring, ceiling, windows, mirrors, wash basins, lighting, signage, plants and any people stay exactly as they are.`,
+    ),
+    ...realismClauses(),
+    req(
+      `Before you finish, check: each position holds a visibly different product matching its own reference, and none of the salon's original ${subject}s remain.`,
+    ),
+  ]);
 }
 
 /**
@@ -223,40 +320,68 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
 
-  const parts: string[] = [];
+  const clauses: Clause[] = [];
   const subject = product.replaces ?? "unit";
   const replacing = mode === "replace" || mode === "replace_all";
   const all = mode === "replace_all";
 
   const views = referenceViews(product);
   const viewList = views.map((v, i) => `image ${i + 2} shows it ${v.angle}`).join(", ");
-  parts.push(
-    views.length > 1
-      ? `The first image is a photograph of a real hair salon. The ${views.length} images after it are ALL the same product — a ${product.name} — photographed from different angles: ${viewList}. Study every one of them before you draw it.`
-      : `The first image is a photograph of a real hair salon. The second image is a product reference showing a ${product.name}.`,
+  clauses.push(
+    req(
+      views.length > 1
+        ? `The first image is a photograph of a real hair salon. The ${views.length} images after it are ALL the same product — a ${product.name} — photographed from different angles: ${viewList}. Study every one before you draw it.`
+        : `The first image is a photograph of a real hair salon. The second image is a product reference showing a ${product.name}.`,
+    ),
   );
 
   if (replacing) {
-    parts.push(...removalClauses(subject, all));
-    parts.push(
-      all
-        ? `Step 2 — INSTALL: put a ${product.name} in every one of those now-empty positions. Keep the count exactly as it was — if the salon had four ${subject}s, the result has four, none added and none dropped. Keep each station's original position, spacing and FACING: a ${subject} that was angled towards the camera stays angled towards the camera, one seen from behind stays seen from behind. Draw the product from whichever angle that station needs, using the reference views to work out what it looks like from that side.`
-        : `Step 2 — INSTALL: put the ${product.name} from the reference image in that now-empty position, standing where the old ${subject} stood.`,
+    clauses.push(...removalClauses(subject, all));
+    clauses.push(
+      req(
+        all
+          ? `Step 2 — INSTALL: put a ${product.name} in every one of those now-empty positions, keeping the count exactly as it was — four ${subject}s before means four after, none added and none dropped.`
+          : `Step 2 — INSTALL: put the ${product.name} from the reference in that now-empty position, standing where the old ${subject} stood.`,
+      ),
     );
+    if (all) {
+      clauses.push(
+        req(
+          `Keep each station's original position, spacing and FACING — one angled towards the camera stays so, one seen from behind stays so — drawing the product from whichever angle that station needs.`,
+        ),
+      );
+    }
   } else {
-    parts.push(
-      `Place the ${product.name} from the reference image into the salon, in the clearest available floor space, without moving or removing anything that is already there.`,
+    clauses.push(
+      req(
+        `Place the ${product.name} from the reference into the salon, in the clearest available floor space, without moving or removing anything already there.`,
+      ),
     );
   }
 
   // The single most-reported failure: the room is right, the chair is a
   // generic stand-in. The armrest profile and the base are what a buyer
   // recognises a model by, so they are called out individually.
-  parts.push(
-    `COPY THE PRODUCT EXACTLY. This is the most important requirement in this instruction — a beautiful room containing the wrong chair is a failed render.`,
-    `Match every detail of the references: the silhouette of the back and seat, the exact profile and thickness of the ARMRESTS, the upholstery seams and stitching lines, and the BASE — its shape, its number of legs or its disc, its column, and its footrest if it has one.`,
-    `The armrests and the base are the two parts most often got wrong. Look at them in the reference images specifically and reproduce what is actually there. Do not square off curved arms, do not curve square arms, and do not swap a star base for a disc base or the other way round.`,
-    `Do not substitute a generic salon chair. Do not simplify, restyle or "improve" the design. Do not borrow any part of the shape of the ${subject} you removed — that is a different model.`,
+  clauses.push(
+    req(
+      `COPY THE PRODUCT EXACTLY — the most important requirement here. A beautiful room containing the wrong chair is a failed render.`,
+    ),
+    // The dominant observed failure is not a generic chair: it is the model
+    // RE-UPHOLSTERING what is already there. Asked to fit a black chair it
+    // recolours the existing chrome one black and keeps its frame, base and
+    // footrest. Naming that specific outcome as a failure is what stops it.
+    req(
+      `Do NOT recolour, reupholster or restyle what is already in the room. Re-covering the existing ${subject} in the reference's colour while keeping its frame, base, footrest or headrest is a FAILED render. Delete the old one and build the ${product.name} from scratch in its place.`,
+    ),
+    req(
+      `Match every detail of the reference: the silhouette of the back and seat, the exact profile and thickness of the ARMRESTS, the upholstery seams and stitching, and the BASE — its shape, its legs or its disc, its column and its footrest.`,
+    ),
+    req(
+      `Armrests and base are most often got wrong: reproduce what is actually there. Do not square off curved arms, curve square arms, or swap a star base for a disc base.`,
+    ),
+    req(
+      `Do not substitute a generic salon chair and do not borrow any part of the ${subject} you removed — that is a different model.`,
+    ),
   );
 
   const specs = product.specs ?? {};
@@ -268,36 +393,45 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     specs["Finish"] ||
     specs["Colour"] ||
     specs["Color"];
-  if (material) parts.push(`It is finished in ${material}.`);
+  if (material) clauses.push(req(`It is finished in ${material}.`));
 
   const d = product.dims_cm;
-  if (d?.w && d?.h) {
-    parts.push(
-      `It measures approximately ${d.w}cm wide and ${d.h}cm tall — scale it accurately against the salon's mirrors, counters and floor tiles.`,
-    );
-  } else if (d?.w) {
-    parts.push(
-      `It measures approximately ${d.w}cm wide — scale it accurately against the salon's mirrors, counters and floor tiles.`,
+  const size = d?.w && d?.h ? `${d.w}cm wide and ${d.h}cm tall` : d?.w ? `${d.w}cm wide` : null;
+  if (size) {
+    clauses.push(
+      opt(
+        `It measures approximately ${size} — scale it accurately against the salon's mirrors, counters and floor tiles.`,
+        DROP.size,
+      ),
     );
   }
 
-  const key = product.salon_placement || product.placement || "floor";
-  if (PLACEMENT[key]) parts.push(PLACEMENT[key]);
+  // Only meaningful for `add`: on a replace, the position is already fixed by
+  // whatever is being removed, so this would just spend budget restating it.
+  if (!replacing) {
+    const placementKey = product.salon_placement || product.placement || "floor";
+    const placement = PLACEMENT[placementKey];
+    if (placement) clauses.push(opt(placement, DROP.position));
+  }
 
-  parts.push(...realismClauses());
-  parts.push(
-    `Preserve everything else in the salon exactly: walls, flooring, mirrors, wash basins, lighting fixtures, signage, product shelves, other furniture and any people. Change nothing except what these instructions specify.`,
+  clauses.push(...realismClauses());
+  clauses.push(
+    opt(
+      `Preserve everything else exactly: walls, flooring, mirrors, wash basins, lighting, signage, shelves, other furniture and any people.`,
+    ),
   );
 
   if (replacing) {
-    parts.push(
-      all
-        ? `Before you finish, check the image twice. First: no original ${subject} may still be present anywhere in the frame, and the number of ${subject}s is unchanged. Second: every one of them is unmistakably the ${product.name} from the references — same arms, same base, same seams — and not a generic chair that merely resembles it.`
-        : `Before you finish, check the image: the original ${subject} must not appear anywhere in the frame. The ${product.name} stands in its place — not beside it, not in addition to it.`,
+    clauses.push(
+      req(
+        all
+          ? `Before you finish, check twice: no original ${subject} remains and the count is unchanged; and every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one.`
+          : `Before you finish, check: the original ${subject} appears nowhere in the frame, and the ${product.name} stands in its place — not beside it, not in addition to it.`,
+      ),
     );
   }
 
-  return parts.join(" ");
+  return assemble(clauses);
 }
 
 /**
