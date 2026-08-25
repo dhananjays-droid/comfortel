@@ -149,3 +149,22 @@ describe("single-replace stays minimal", () => {
     expect(prompt).toContain("must agree with whatever now stands in front of it");
   });
 });
+
+describe("zone renders", () => {
+  it("tells the model which part of the salon it is rendering", () => {
+    const { prompt } = buildRenderRequest([product()], "refit_room", "the wash bay");
+    expect(prompt).toContain("This render is of the wash bay");
+    expect(prompt).toContain("do not invent pieces for other areas");
+  });
+
+  it("omits the scene clause entirely for a whole-room refit", () => {
+    const { prompt } = buildRenderRequest([product()], "refit_room");
+    expect(prompt).not.toContain("This render is of");
+  });
+
+  it("keeps a scened zone prompt inside the budget", () => {
+    const long = product({ name: "D".repeat(150) });
+    const { prompt } = buildRenderRequest([long], "refit_room", "the drying and waiting area");
+    expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
+  });
+});

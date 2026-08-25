@@ -18,6 +18,8 @@ type StartInput = {
   roomImageBase64: string;
   mode: VisualizeMode;
   aspectRatio?: string;
+  /** Which part of the salon this render covers, for a zone render. */
+  scene?: string;
 };
 
 /** ~1024px longest edge at JPEG q0.85 lands well under this; anything larger is a client bug. */
@@ -97,6 +99,12 @@ export const visualizeStart = createServerFn({ method: "POST" })
         typeof input.aspectRatio === "string" && ASPECT_RATIOS.has(input.aspectRatio)
           ? input.aspectRatio
           : DEFAULT_ASPECT_RATIO,
+      // Free text, so it is length-capped: it lands inside the prompt, which has
+      // a hard limit the assembler must still be able to honour.
+      scene:
+        typeof input.scene === "string" && input.scene.length <= 120
+          ? input.scene
+          : undefined,
     };
   })
   .handler(async ({ data }): Promise<{ taskId?: string; imageUrl?: string }> => {
@@ -123,14 +131,17 @@ export const visualizeStart = createServerFn({ method: "POST" })
 
       // prompt and reference list come from one call, so the prompt's
       // positional references always match the array actually sent
-      const { prompt, imageUrls } = buildRenderRequest(products, data.mode);
+      const { prompt, imageUrls } = buildRenderRequest(products, data.mode, data.scene);
 
       const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
 
       // Cache key: sha256(ids + mode + roomImageBase64). Mode is in the key
       // because the same photo and products render differently per mode.
       const encoded = new TextEncoder().encode(
-        data.productIds.join(",") + data.mode + data.roomImageBase64,
+        // The scene is part of the key: without it, two zone renders of the same
+        // photo and product set would collide and the second would serve the
+        // first's image.
+        data.productIds.join(",") + data.mode + (data.scene ?? "") + data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);
       const hash = Array.from(new Uint8Array(digest))

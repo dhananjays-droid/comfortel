@@ -15,6 +15,7 @@ import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
+import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
@@ -53,6 +54,8 @@ type VisualizeJob = {
   base64: string;
   mode: VisualizeMode;
   aspectRatio: string;
+  /** Which part of the salon this render covers, on a zone render. */
+  scene?: string | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -118,6 +121,40 @@ type RoomPhoto = { image: ResizedImage; preview: string };
  * only way to get a true A/B — the same position occupied by each candidate in
  * turn — and is why they cost one generation each.
  */
+/**
+ * A zone-split render: one image per salon zone, from one plan and one photo.
+ *
+ * Each zone becomes its own entry, and entries already render in parallel and
+ * poll independently, so the split costs wall-clock nothing beyond the slowest
+ * zone. It costs one generation per zone, which is why it is opt-in.
+ */
+function buildZoneRenderMessage(
+  groups: Array<{ zone: string; label: string; scene: string; products: FullProduct[] }>,
+  photo: RoomPhoto,
+): { message: Message; entries: RenderEntry[] } {
+  const entries: RenderEntry[] = groups.map((group) => ({
+    id: nextId(),
+    job: {
+      productIds: group.products.map((p) => p.id),
+      base64: photo.image.base64,
+      mode: "refit_room" as VisualizeMode,
+      aspectRatio: photo.image.aspectRatio,
+      scene: group.scene,
+    },
+    vis: {
+      productIds: group.products.map((p) => p.id),
+      label: group.label,
+      before: photo.preview,
+      status: "loading",
+    },
+  }));
+
+  return {
+    message: { id: nextId(), role: "assistant", kind: "visualization", content: "", entries },
+    entries,
+  };
+}
+
 function buildRenderMessage(
   mode: VisualizeMode,
   productIds: string[],
@@ -299,6 +336,7 @@ function Index() {
             roomImageBase64: job.base64,
             mode: job.mode,
             aspectRatio: job.aspectRatio,
+            ...(job.scene ? { scene: job.scene } : {}),
           },
         });
 
@@ -483,6 +521,39 @@ function Index() {
   }
 
   /**
+   * Render the plan as one image per salon zone.
+   *
+   * Costs one generation per zone, so it is a separate button rather than
+   * something that happens automatically — the customer decides when a cluttered
+   * single frame is worth splitting.
+   */
+  function renderPlanByZone() {
+    if (!planProducts.length) return;
+    const photo = roomPhotoRef.current;
+    if (!photo) {
+      setPhotoProducts(planProducts);
+      return;
+    }
+
+    const groups = groupByZone(planProducts);
+    const { message, entries } = buildZoneRenderMessage(groups, photo);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "user",
+        kind: "photo",
+        content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
+        photo: photo.preview,
+        productId: planProducts[0]?.id ?? "",
+      },
+      message,
+    ]);
+    entries.forEach((entry) => void runRender(entry));
+  }
+
+  /**
    * The plan's render button. Reuses the room photo when we have one so that
    * adding a piece and looking again is one click, not another upload.
    */
@@ -623,6 +694,8 @@ function Index() {
             onVisualize={renderPlan}
             hasPhoto={hasRoomPhoto}
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
+            zoneCount={groupByZone(planProducts).length}
+            onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
           />
           <ChatComposer
             value={input}

@@ -322,7 +322,7 @@ function describe(product: VisualizeProduct): string {
  * asking "what would my salon look like kitted out in Comfortel", so the
  * architecture is preserved and the furniture is swapped wholesale.
  */
-function buildRefitPrompt(products: VisualizeProduct[]): string {
+function buildRefitPrompt(products: VisualizeProduct[], scene?: string): string {
   const list = products.map((p, i) => `Image ${i + 2} is a ${describe(p)}`).join(". ");
 
   return assemble([
@@ -330,6 +330,15 @@ function buildRefitPrompt(products: VisualizeProduct[]): string {
       `The first image is a photograph of a real hair salon. The images after it are Comfortel product references. ${list}.`,
     ),
     req(`Refit this salon with the Comfortel products shown.`),
+    // A zone render must not invent the rest of the salon. Told it is the wash
+    // bay, the model stops adding styling chairs that are not in the references.
+    ...(scene
+      ? [
+          req(
+            `This render is of ${scene}. Fit out that part of the room only, using exactly the products in the references — do not add furniture of any other kind, and do not invent pieces for other areas.`,
+          ),
+        ]
+      : []),
     req(
       `Step 1 — REMOVE: strip out the salon's existing furniture — every styling chair, stool, trolley, mirror unit, reception desk and waiting seat visible. Remove each completely, including bases, hydraulic columns and footrests.`,
     ),
@@ -401,8 +410,12 @@ function buildLineupPrompt(products: VisualizeProduct[]): string {
  * missing. Takes a list because refit_room and lineup render one image from
  * several product references; the other modes use the first entry only.
  */
-export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMode): string {
-  if (mode === "refit_room") return buildRefitPrompt(products.slice(0, MAX_REFERENCES));
+export function buildSalonPrompt(
+  products: VisualizeProduct[],
+  mode: VisualizeMode,
+  scene?: string,
+): string {
+  if (mode === "refit_room") return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene);
   if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES));
 
   const product = products[0];
@@ -542,8 +555,9 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
 export function buildRenderRequest(
   products: VisualizeProduct[],
   mode: VisualizeMode,
+  scene?: string,
 ): { prompt: string; imageUrls: string[] } {
-  const prompt = buildSalonPrompt(products, mode);
+  const prompt = buildSalonPrompt(products, mode, scene);
 
   const imageUrls = isMultiReferenceMode(mode)
     ? // one hero shot per DIFFERENT product

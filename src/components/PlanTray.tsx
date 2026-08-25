@@ -1,4 +1,4 @@
-import { ImageIcon, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice, type FullProduct } from "@/lib/catalog";
@@ -20,6 +20,8 @@ export function PlanTray({
   onVisualize,
   hasPhoto = false,
   onUseAnotherPhoto,
+  zoneCount = 1,
+  onRenderByZone,
 }: {
   products: FullProduct[];
   onRemove: (product: FullProduct) => void;
@@ -28,6 +30,10 @@ export function PlanTray({
   /** True once a room photo is in the session, so rendering needs no upload. */
   hasPhoto?: boolean;
   onUseAnotherPhoto?: () => void;
+  /** How many salon zones this plan spans. */
+  zoneCount?: number;
+  /** Only supplied when a split would actually produce more than one image. */
+  onRenderByZone?: (() => void) | undefined;
 }) {
   if (!products.length) return null;
 
@@ -111,19 +117,33 @@ export function PlanTray({
             </button>
           ) : null}
         </div>
-        <Button
-          size="sm"
-          onClick={onVisualize}
-          className={cn(
-            "h-8 gap-1.5 bg-primary text-xs font-medium text-primary-foreground shadow-none",
-            "hover:bg-primary-strong",
-          )}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          {hasPhoto
-            ? `Render ${products.length === 1 ? "it" : "these"}`
-            : `See ${products.length === 1 ? "it" : "these"} in my space`}
-        </Button>
+        <div className="flex items-center gap-2">
+          {onRenderByZone ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onRenderByZone}
+              title={`One image per zone — ${zoneCount} generations`}
+              className="h-8 gap-1.5 border-border bg-transparent text-xs font-medium text-ink-2 shadow-none hover:bg-muted hover:text-ink-1"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              By zone ({zoneCount})
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            onClick={onVisualize}
+            className={cn(
+              "h-8 gap-1.5 bg-primary text-xs font-medium text-primary-foreground shadow-none",
+              "hover:bg-primary-strong",
+            )}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {hasPhoto
+              ? `Render ${products.length === 1 ? "it" : "these"}`
+              : `See ${products.length === 1 ? "it" : "these"} in my space`}
+          </Button>
+        </div>
       </div>
     </div>
   );
