@@ -1,93 +1,42 @@
-# Room Reveal AI
+# Comfortel chatbot
 
-Comfortel product-discovery chatbot. A customer describes the space they are
-fitting out, the assistant recommends real Comfortel SKUs as cards, and from any
-card they can either **see the piece rendered into a photo of their own salon**
-or **request a quote**.
+A product-discovery chatbot for Comfortel salon, barber and spa furniture. The
+customer describes the space they're fitting out, the assistant recommends real
+SKUs as cards, and from any card they can see the piece rendered into a photo of
+their own salon or request a quote.
 
-## Secrets
+**→ [GUIDE.md](GUIDE.md) explains how it works** — the request flow, why there
+are two catalog files, how the prompt and marker protocol are built, the render
+modes and what each costs, and the traps that already bit us.
 
-These are read server-side only and are never exposed to the browser.
+## Setup
 
-| Name                        | Required         | What it does                            |
-| --------------------------- | ---------------- | --------------------------------------- |
-| `ANTHROPIC_API_KEY`         | yes              | the chat assistant (`claude-haiku-4-5`) |
-| `KIE_API_KEY`               | yes, for renders | kie.ai `gpt-image/1.5-image-to-image`   |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes, for quotes  | writes `enquiries`; also caches renders |
+Six environment variables. All read server-side except the two `VITE_` ones,
+which are inlined into the client bundle **at build time** — a build without
+them ships a broken client that no runtime setting can fix.
 
-### The render call
+| Name                            | Needed by          | Without it                            |
+| ------------------------------- | ------------------ | ------------------------------------- |
+| `ANTHROPIC_API_KEY`             | server             | chat dead                             |
+| `KIE_API_KEY`                   | server             | renders dead                          |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server             | quote requests fail; render cache off |
+| `SUPABASE_URL`                  | server             | as above                              |
+| `VITE_SUPABASE_URL`             | client, build time | every click throws                    |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | client, build time | every click throws                    |
 
-One model, one shape. [`src/lib/kie.server.ts`](src/lib/kie.server.ts) uploads
-the room photo, then posts two image URLs and a prompt:
+Locally these go in `.env` (gitignored). **Vite reads it once at startup** —
+restart the dev server after editing. On Vercel and Lovable, env vars only apply
+to deployments built _after_ they were added, so redeploy rather than expecting a
+live deployment to pick them up.
 
+```sh
+npm i
+npm run dev     # http://localhost:8080
 ```
-model: "gpt-image/1.5-image-to-image"
-input: { input_urls: [roomUrl, productImageUrl], prompt, aspect_ratio, quality: "medium" }
-```
 
-The array order is the contract — room photo first, product reference second.
-The prompt in [`visualize-prompt.ts`](src/lib/visualize-prompt.ts) refers to them
-as "the first image" and "the second image", so swapping them silently inverts
-the whole instruction.
+Before pushing: `npx tsc --noEmit && npx eslint . && npm run build`.
 
-## Render modes and what they cost
-
-One generation is **4 kie credits = $0.02** (measured from `recordInfo.creditsConsumed`;
-a failed task consumes 0). The mode decides how many generations a request costs,
-so it is the main cost lever.
-
-| Mode          | Images         | Cost      | Use for                                                             |
-| ------------- | -------------- | --------- | ------------------------------------------------------------------- |
-| `replace_all` | 1              | $0.02     | every matching piece becomes the SAME product                       |
-| `lineup`      | 1              | $0.02     | 2–4 DIFFERENT products side by side, one per station, left to right |
-| `refit_room`  | 1              | $0.02     | whole room refitted across furniture types                          |
-| `add`         | 1              | $0.02     | drop one piece into free space                                      |
-| `replace`     | **one per id** | $0.02 × n | true A/B — the same position occupied by each candidate in turn     |
-
-`replace` is the only mode that multiplies, and it has to: one image can show one
-state of a room, so comparing candidates in the _same spot_ is inherently one
-image each. The assistant is instructed to prefer `lineup` unless the customer
-explicitly asks for like-for-like positioning.
-
-**Fidelity trades against reference count.** With one reference the render tracks
-the product closely. With four, the model treats them as a palette — `lineup`
-reliably differentiates colour and finish but tends to converge the silhouettes,
-and `refit_room` is looser still. Steer anyone choosing between two actual frame
-shapes to a single-product `replace`.
-
-The `visualizations` cache means a repeat of the same photo + products + mode is
-free, so `SUPABASE_SERVICE_ROLE_KEY` is the second cost lever — without it every
-re-run bills again.
-
-## Database
-
-| Table            | Written by               | Notes                                                                  |
-| ---------------- | ------------------------ | ---------------------------------------------------------------------- |
-| `visualizations` | `visualize.functions.ts` | render cache, keyed `sha256(productId + mode + photo)`                 |
-| `enquiries`      | `enquiry.functions.ts`   | quote requests, with the customer's render attached when they made one |
-
-Both have RLS enabled with **no policy**, deliberately: they are reached only
-through the service role in server functions, so no anon client can read another
-customer's contact details. The linter flag on this is expected.
-
-## Flows
-
-1. **Discovery** — `chat.functions.ts` sends the instruction block plus
-   `catalog-slim.json` (cached with `cache_control: ephemeral`) and parses a
-   trailing `[PRODUCTS: id, ...]` marker. Every id is checked against
-   `catalog-full.json` before it reaches the client — that is the hallucination
-   guard, do not remove it.
-2. **Render** — the customer picks a mode (`replace`, `replace_all`, `add`),
-   uploads a photo, and it is resized client-side to a 1024px longest edge
-   before it ever leaves the browser. The server uploads to kie, creates a task,
-   and the browser polls. The result lands in the chat transcript, not a modal.
-3. **Quote** — the enquiry form writes to `enquiries` and returns a short
-   reference (`CF-XXXXXX`) which is echoed back into the transcript.
-
-The transcript is kept in `sessionStorage` so a reload does not lose a demo.
-Room photos and in-flight renders are excluded from that copy on purpose.
-
----
+Migrations in `supabase/migrations/` need applying for quote requests to work.
 
 ## Theme reference
 

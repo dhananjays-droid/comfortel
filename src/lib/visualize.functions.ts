@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import catalogFull from "@/data/catalog-full.json";
 import catalogSlim from "@/data/catalog-slim.json";
 import {
-  buildSalonPrompt,
+  buildRenderRequest,
   isVisualizeMode,
   MAX_REFERENCES,
   type VisualizeMode,
@@ -98,8 +98,9 @@ export const visualizeStart = createServerFn({ method: "POST" })
         return { ...product, col: slim.find((p) => p.id === id)?.col || null };
       });
 
-      const productImageUrls = products.map((p) => p.images[0] as string);
-      const prompt = buildSalonPrompt(products, data.mode);
+      // prompt and reference list come from one call, so the prompt's
+      // positional references always match the array actually sent
+      const { prompt, imageUrls } = buildRenderRequest(products, data.mode);
 
       const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
 
@@ -120,7 +121,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
       if (cached) return { imageUrl: cached };
 
       const roomUrl = await uploadToKie(data.roomImageBase64);
-      const taskId = await createVisualizeTask(roomUrl, productImageUrls, prompt, data.aspectRatio);
+      const taskId = await createVisualizeTask(roomUrl, imageUrls, prompt, data.aspectRatio);
 
       await writeCache({
         hash,
@@ -133,8 +134,11 @@ export const visualizeStart = createServerFn({ method: "POST" })
       return { taskId };
     } catch (err) {
       console.error("visualizeStart failed", err);
-      if (err instanceof Error && err.message === "PRODUCT_NOT_FOUND") {
-        throw new Error("PRODUCT_NOT_FOUND");
+      if (err instanceof Error) {
+        if (err.message === "PRODUCT_NOT_FOUND") throw new Error("PRODUCT_NOT_FOUND");
+        // Same reasoning as the chat codes: a host missing its kie key needs a
+        // different fix from a render that genuinely failed, so say which.
+        if (err.message.includes("KIE_API_KEY")) throw new Error("VISUALIZE_NOT_CONFIGURED");
       }
       throw new Error("VISUALIZE_FAILED");
     }

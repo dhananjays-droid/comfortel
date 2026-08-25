@@ -169,7 +169,7 @@ function Index() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
-  const [chatFailed, setChatFailed] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const [sheetProduct, setSheetProduct] = useState<FullProduct | null>(null);
   const [photoProduct, setPhotoProduct] = useState<FullProduct | null>(null);
@@ -300,7 +300,7 @@ function Index() {
   const runChat = useCallback(
     async (history: Message[], photoAttached: boolean) => {
       setThinking(true);
-      setChatFailed(false);
+      setChatError(null);
       lastHistoryRef.current = { history, photoAttached };
       try {
         const payload: ChatMessageInput[] = history
@@ -341,8 +341,8 @@ function Index() {
         }
 
         setMessages(next);
-      } catch {
-        setChatFailed(true);
+      } catch (err) {
+        setChatError(err instanceof Error ? err.message : "CHAT_FAILED");
       } finally {
         setThinking(false);
       }
@@ -452,7 +452,7 @@ function Index() {
     setInput("");
     setPendingPhoto(null);
     roomPhotoRef.current = null;
-    setChatFailed(false);
+    setChatError(null);
     setThinking(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
@@ -520,11 +520,11 @@ function Index() {
               </div>
             ) : null}
 
-            {chatFailed ? (
+            {chatError ? (
               <div className="flex gap-3">
                 <BrandMark className="mt-0.5 h-6 w-6" />
                 <div className="space-y-2">
-                  <p className="text-sm text-ink-2">Something went wrong — try that again?</p>
+                  <p className="text-sm text-ink-2">{chatErrorMessage(chatError)}</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -714,6 +714,26 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       </div>
     </div>
   );
+}
+
+/**
+ * A deployed host missing its API key and a transient network fault both used to
+ * read "Something went wrong", which is useless to whoever has to fix it. These
+ * name the class of fault without exposing anything sensitive.
+ */
+function chatErrorMessage(code: string): string {
+  switch (code) {
+    case "CHAT_NOT_CONFIGURED":
+      return "The assistant isn't switched on for this site yet — ANTHROPIC_API_KEY is missing on the server.";
+    case "CHAT_KEY_REJECTED":
+      return "The assistant's API key was rejected. It may be expired or out of credit.";
+    case "CHAT_RATE_LIMITED":
+      return "We're being rate-limited right now. Give it a few seconds and try again.";
+    case "CHAT_UPSTREAM_ERROR":
+      return "The assistant is having trouble responding. Try that again?";
+    default:
+      return "Something went wrong — try that again?";
+  }
 }
 
 function TypingDots() {
