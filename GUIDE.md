@@ -259,6 +259,39 @@ the chairs and you get the chair's rear view in the mirror when the chair's back
 is to the camera, which is physically impossible. The replace framing works
 anyway because it never asks the model to reason about geometry.
 
+### Single-unit replacement is approximate — `replace_all` is the default
+
+`replace_all` has been correct in every live test: right product, right count,
+facings kept, mirrors consistent with the floor. Swapping a **single** unit in a
+room containing several identical ones has never been reliable.
+
+Four prompt formulations were tried against the same three-chair fixture, each
+more specific than the last:
+
+| Wording | What the render did |
+| --- | --- |
+| "remove only the one nearest the camera" | replaced every chair in the room |
+| hard count: "exactly ONE changes" | deleted the two it was told to leave |
+| + "mirror scope follows floor scope" | changed the wrong chair, left reflections stale |
+| + spatial "FOREGROUND" anchor | still wrong |
+
+The task is instance tracking — pick one of several identical objects and edit
+only it, and only its reflection. Image models do not do that from prose. The
+industry answer is a **mask**, and kie exposes none: `gpt-image-2-image-to-image`
+takes only `prompt`, `input_urls`, `aspect_ratio` and `resolution`. A `mask` field
+is not rejected, it is silently ignored, which is the worst failure mode.
+
+So the product stops fighting it. `replace_all` is the default in the dialog, in
+the chat marker fallback, and in the server validator. Single swap is offered
+last and labelled "Approximate — with several in view it may change a different
+one". The prompt keeps one plain sentence instead of the four failed stacked
+clauses; a test asserts the dead wordings do not come back.
+
+**If single-unit precision is needed later**, the fix is spatial input, not more
+words: have the customer tap the unit, crop that region client-side, render the
+crop alone (one unit in frame means nothing to disambiguate), and composite it
+back. The client already does canvas work in `resize-image.ts`.
+
 ### Every copy is the same model
 
 Pinning count and facing said nothing about the copies matching *each other*, so

@@ -217,7 +217,7 @@ const PLACEMENT: Record<string, string> = {
 const MIRROR_REMOVAL = (subject: string, product: string, all: boolean): string =>
   all
     ? `Mirrors count as positions too. Every mirror reflects the salon, so each ${subject} appears more than once — once as itself and again in every mirror that can see it. Treat each reflected ${subject} as ANOTHER ONE TO REPLACE, not as something to erase: when you are done, each reflection shows the new ${product}, exactly as the floor does. Two failures to avoid — a mirror still showing an old ${subject}, and a mirror emptied of a chair that is still standing in front of it. Both are failed renders.`
-    : `Mirrors count as positions too. If a mirror reflects the ${subject} you are replacing, replace it inside that reflection as well, so the mirror ends up showing the new ${product}. Do not simply erase the reflection and leave the mirror empty while the chair still stands in front of it — that is a failed render.`;
+    : `Each mirror must agree with whatever now stands in front of it: a mirror facing the replaced ${subject} shows the new ${product}, and a mirror facing one you left alone still shows that original.`;
 
 /**
  * Removal is the instruction these models are most likely to soft-pedal: asked
@@ -246,8 +246,16 @@ function removalClauses(subject: string, product: string, all: boolean): Clause[
     // room, the other deleted the ones it was told to leave. More references
     // appear to crowd out the scope instruction, so it is now required, phrased
     // as a count, and restated in the closing check.
+    // Deliberately one plain sentence. Prose scoping was tried four times with
+    // escalating specificity — "nearest the camera", a hard count, mirror-scope
+    // rules, a spatial FOREGROUND anchor — and produced four different wrong
+    // outcomes: all chairs replaced, the others deleted, the wrong chair
+    // targeted, reflections left stale. The model cannot track one instance
+    // among identical units, and the fix for that is a mask, which this vendor
+    // does not expose. So single-replace is best-effort and `replace_all` is the
+    // default; see GUIDE.md.
     req(
-      `SCOPE: exactly ONE ${subject} changes. If the salon has several, every other one stays in the final image completely untouched — same model, same colour, same position, same facing. Replacing them too is a failed render, and so is deleting them.`,
+      `Change only the ${subject} closest to the camera. Leave every other ${subject} in the room exactly as it is.`,
     ),
   ];
 }
@@ -503,7 +511,7 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
       req(
         all
           ? `Before you finish, check three things. One: no original ${subject} remains anywhere in the frame INCLUDING inside every mirror, and the count is unchanged. Two: every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one. Three: all of them are identical to each other, and each mirror reflects what is actually in front of it.`
-          : `Before you finish, check both: the ${subject} you replaced appears nowhere — not on the floor, not in any mirror — and the ${product.name} stands in its place, not beside it. And every OTHER ${subject} in the room is still there, still the original, unchanged.`,
+          : `Before you finish, check: the ${subject} you replaced is gone and the ${product.name} stands in its place, not beside it; every other ${subject} is untouched; and each mirror matches what is in front of it.`,
       ),
     );
   }

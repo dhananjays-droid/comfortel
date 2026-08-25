@@ -134,26 +134,18 @@ describe("referenceViews with classified data", () => {
   });
 });
 
-describe("replace scope", () => {
-  it("states the one-unit scope as a required clause", () => {
+describe("single-replace stays minimal", () => {
+  it("keeps one plain scope sentence, not the failed prose stack", () => {
     const { prompt } = buildRenderRequest([product()], "replace");
-    expect(prompt).toContain("SCOPE: exactly ONE styling chair changes");
-  });
-
-  it("keeps the scope clause even at the smallest budget", () => {
-    // Required clauses survive budget pressure; droppable ones do not. This is
-    // the regression guard for the clause being opt() rather than req().
-    const long = product({ name: "B".repeat(200) });
-    expect(buildRenderRequest([long], "replace").prompt).toContain("SCOPE: exactly ONE");
-  });
-
-  it("asks the closing check to confirm the other units survived", () => {
-    const { prompt } = buildRenderRequest([product()], "replace");
-    expect(prompt).toContain("still the original, unchanged");
-  });
-
-  it("does not apply the one-unit scope to replace_all", () => {
-    const { prompt } = buildRenderRequest([product()], "replace_all");
+    expect(prompt).toContain("Change only the styling chair closest to the camera");
+    // Guards against the four wordings that each produced a different wrong render.
+    expect(prompt).not.toContain("TARGET:");
     expect(prompt).not.toContain("SCOPE: exactly ONE");
+    expect(prompt).not.toContain("mirror scope follows floor scope");
+  });
+
+  it("still reconciles mirrors with the floor", () => {
+    const { prompt } = buildRenderRequest([product()], "replace");
+    expect(prompt).toContain("must agree with whatever now stands in front of it");
   });
 });

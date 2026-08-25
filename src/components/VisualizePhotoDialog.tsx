@@ -38,7 +38,7 @@ export function VisualizePhotoDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [image, setImage] = useState<ResizedImage | null>(null);
-  const [mode, setMode] = useState<VisualizeMode>("replace");
+  const [mode, setMode] = useState<VisualizeMode>("replace_all");
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function VisualizePhotoDialog({
     if (open) return;
     setPreview(null);
     setImage(null);
-    setMode("replace");
+    setMode("replace_all");
     setDragging(false);
     setReading(false);
     setError(null);
@@ -90,12 +90,10 @@ export function VisualizePhotoDialog({
   if (!product) return null;
 
   const subject = product.replaces ?? "unit";
+  // replace_all leads because it is the reliable one. Swapping a single unit
+  // asks the model to track one instance among identical units, which it does
+  // not do dependably — so it is offered last and labelled as approximate.
   const modes: Array<{ value: VisualizeMode; label: string; hint: string }> = [
-    {
-      value: "replace",
-      label: `Swap out one ${subject}`,
-      hint: "Removes the nearest one and puts this in its place",
-    },
     {
       value: "replace_all",
       label: `Refit every ${subject}`,
@@ -105,6 +103,11 @@ export function VisualizePhotoDialog({
       value: "add",
       label: "Add to an empty spot",
       hint: "Leaves everything already in the room untouched",
+    },
+    {
+      value: "replace",
+      label: `Swap just one ${subject}`,
+      hint: "Approximate — with several in view it may change a different one",
     },
   ];
 

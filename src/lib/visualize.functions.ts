@@ -87,7 +87,11 @@ export const visualizeStart = createServerFn({ method: "POST" })
     return {
       productIds: productIds.slice(0, MAX_REFERENCES),
       roomImageBase64: input.roomImageBase64,
-      mode: isVisualizeMode(input.mode) ? input.mode : "replace",
+      // replace_all, not replace: single-unit replacement needs the model to
+      // track one instance among identical units, which it does not do
+      // reliably. replace_all has been correct in every live test, mirrors
+      // included. See GUIDE.md.
+      mode: isVisualizeMode(input.mode) ? input.mode : "replace_all",
       aspectRatio:
         typeof input.aspectRatio === "string" && ASPECT_RATIOS.has(input.aspectRatio)
           ? input.aspectRatio
