@@ -180,10 +180,10 @@ const PLACEMENT: Record<string, string> = {
  * A salon is the worst case for this — a wall of mirrors means most of the
  * furniture appears twice, and half of those copies were going unedited.
  */
-const MIRROR_REMOVAL = (subject: string, all: boolean): string =>
+const MIRROR_REMOVAL = (subject: string, product: string, all: boolean): string =>
   all
-    ? `Mirrors are part of this removal. Every mirror in the room reflects the salon, so each ${subject} appears more than once — once as itself and again in every mirror that can see it. Remove ALL of those copies. A mirror still showing an old ${subject} is a failed render, even when the floor is correct.`
-    : `Mirrors are part of this removal. If any mirror reflects the ${subject} you are removing, clear it from that reflection too — deleting the chair from the floor but leaving it standing in the mirror is a failed render.`;
+    ? `Mirrors count as positions too. Every mirror reflects the salon, so each ${subject} appears more than once — once as itself and again in every mirror that can see it. Treat each reflected ${subject} as ANOTHER ONE TO REPLACE, not as something to erase: when you are done, each reflection shows the new ${product}, exactly as the floor does. Two failures to avoid — a mirror still showing an old ${subject}, and a mirror emptied of a chair that is still standing in front of it. Both are failed renders.`
+    : `Mirrors count as positions too. If a mirror reflects the ${subject} you are replacing, replace it inside that reflection as well, so the mirror ends up showing the new ${product}. Do not simply erase the reflection and leave the mirror empty while the chair still stands in front of it — that is a failed render.`;
 
 /**
  * Removal is the instruction these models are most likely to soft-pedal: asked
@@ -192,20 +192,20 @@ const MIRROR_REMOVAL = (subject: string, all: boolean): string =>
  * and restated as an acceptance check at the end — the two positions the model
  * weights most.
  */
-function removalClauses(subject: string, all: boolean): Clause[] {
+function removalClauses(subject: string, product: string, all: boolean): Clause[] {
   if (all) {
     return [
       req(
         `Step 1 — REMOVE: delete every ${subject} in this salon; not one may remain. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind where each stood.`,
       ),
-      req(MIRROR_REMOVAL(subject, true)),
+      req(MIRROR_REMOVAL(subject, product, true)),
     ];
   }
   return [
     req(
       `Step 1 — REMOVE: delete the existing ${subject} from this salon; it must be gone from the final image. Erase it completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind it.`,
     ),
-    req(MIRROR_REMOVAL(subject, false)),
+    req(MIRROR_REMOVAL(subject, product, false)),
     opt(
       `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others untouched.`,
     ),
@@ -364,7 +364,7 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
   );
 
   if (replacing) {
-    clauses.push(...removalClauses(subject, all));
+    clauses.push(...removalClauses(subject, product.name, all));
     clauses.push(
       req(
         all

@@ -230,31 +230,34 @@ GPT Image 2 cannot fetch `comfortelfurniture.com` — it fails the whole task wi
 concurrently, with a short in-memory TTL cache. The room photo already went
 through that upload path; product references now do too.
 
-### Mirrors — what works and what does not
+### Mirrors — reflections are handled
 
 A salon is a wall of mirrors, so most furniture appears twice: once as itself and
-again in every mirror that can see it. Half of those copies were going unedited.
+again in every mirror that can see it. Half of those copies were going unedited,
+leaving the customer's old chair standing in every reflection.
 
-**Fixed.** Removal now covers mirrors explicitly. The old instruction said to
-rebuild "the floor, skirting and wall behind" each unit and never mentioned
-reflections, so the old chair was deleted from the room and left standing in the
-mirror. Stating that mirrors are part of the removal clears them.
+The fix is a framing, and the framing is the whole trick. Three attempts:
 
-**Not fixed, and not fixable by prompting.** Getting the model to *draw* a
-reflection of the inserted piece does not work. Two instructions were tested
-live — "show that piece from the angle that mirror sees" and an explicit "a
-mirror shows the OPPOSITE side to the camera; reproducing the camera's view
-inside the mirror is a duplicate, not a reflection" — and both were ignored,
-leaving the mirrors simply empty. These models duplicate rather than reflect;
-there is no mirror geometry to instruct. The same fault is visible in generated
-*fixtures*: ask for a salon whose mirrors reflect the chairs and you get the
-chair's rear view in the mirror when the chair's back is to the camera, which is
-physically impossible.
+| Instruction | Result |
+| --- | --- |
+| "rebuild the floor, skirting and wall behind it" (original — no mention of mirrors) | old chair left standing in every mirror |
+| "mirrors are part of this REMOVAL — remove all those copies" | stale reflections gone, mirrors left **empty** |
+| "treat each reflected ${subject} as ANOTHER ONE TO REPLACE" | **reflections show the new product** |
 
-So the shipped behaviour is: **no stale product in a mirror, but no reflection of
-the new one either.** An empty mirror is wrong, just less wrong than a mirror
-reflecting a chair the customer no longer owns. Only the clause that measurably
-changes the output is kept — dead prompt text is a liability, not insurance.
+Telling the model to *clear* a reflection gets it cleared and not repainted.
+Telling it the reflection is simply another instance of the thing being replaced
+puts it inside the operation the model is already good at, and the mirror comes
+back correct — including from a different angle than the camera sees.
+
+The clause names both failure modes explicitly, because each was a real
+observed output: a mirror still showing the old unit, and a mirror emptied of a
+chair that is still standing in front of it.
+
+Worth knowing: these models do not compute reflection geometry, they duplicate.
+Generated *fixtures* show the same tell — ask for a salon whose mirrors reflect
+the chairs and you get the chair's rear view in the mirror when the chair's back
+is to the camera, which is physically impossible. The replace framing works
+anyway because it never asks the model to reason about geometry.
 
 ### Every copy is the same model
 
