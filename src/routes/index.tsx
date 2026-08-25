@@ -211,6 +211,13 @@ function Index() {
   const lastHistoryRef = useRef<{ history: Message[]; photoAttached: boolean } | null>(null);
   // A ref, not state: runChat reads it in the same tick that send() sets it.
   const roomPhotoRef = useRef<RoomPhoto | null>(null);
+  /**
+   * Mirrors whether roomPhotoRef holds anything. The ref stays a ref because
+   * send() reads it in the same tick it is set; this state exists so the plan
+   * tray actually re-renders when a photo arrives, rather than showing a stale
+   * label until some unrelated update happens to flush it.
+   */
+  const [hasRoomPhoto, setHasRoomPhoto] = useState(false);
 
   // ---- session persistence ------------------------------------------------
   // Room photos are megabyte-scale data URLs, so they are dropped on the way
@@ -387,7 +394,10 @@ function Index() {
     const attached = pendingPhoto;
     // The attached photo becomes the session's room photo, so later turns can
     // render into it without the customer re-uploading.
-    if (attached) roomPhotoRef.current = attached;
+    if (attached) {
+      roomPhotoRef.current = attached;
+      setHasRoomPhoto(true);
+    }
 
     const content = trimmed || "Here is a photo of my salon. What would you put in this space?";
 
@@ -431,20 +441,20 @@ function Index() {
     }
   }, []);
 
-  function acceptPhoto(request: VisualizeRequest) {
-    setPhotoProducts([]);
-    const photo: RoomPhoto = { image: request.image, preview: request.preview };
-    roomPhotoRef.current = photo;
-
+  /**
+   * Kick off a render against a room photo we already hold.
+   *
+   * Split out of acceptPhoto so changing the plan and rendering again does not
+   * ask for the photo a second time: the room is already resized and, on the
+   * server, already uploaded to kie. Re-asking for it was the main reason
+   * comparing options felt like starting over.
+   */
+  function startRender(products: FullProduct[], mode: VisualizeMode, photo: RoomPhoto) {
     const verb =
-      request.mode === "add"
-        ? "into"
-        : request.mode === "replace_all"
-          ? "throughout"
-          : "in place of what's in";
+      mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
 
-    const ids = request.products.map((p) => p.id);
-    const { message, entries } = buildRenderMessage(request.mode, ids, photo);
+    const ids = products.map((p) => p.id);
+    const { message, entries } = buildRenderMessage(mode, ids, photo);
 
     setMessages((prev) => [
       ...prev,
@@ -453,15 +463,37 @@ function Index() {
         role: "user",
         kind: "photo",
         content:
-          request.products.length > 1
-            ? `Fit my space out with these ${request.products.length} pieces.`
-            : `Show me the ${request.products[0]?.name ?? "this piece"} ${verb} my space.`,
-        photo: request.preview,
+          products.length > 1
+            ? `Fit my space out with these ${products.length} pieces.`
+            : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`,
+        photo: photo.preview,
         productId: ids[0] as string,
       },
       message,
     ]);
     entries.forEach((entry) => void runRender(entry));
+  }
+
+  function acceptPhoto(request: VisualizeRequest) {
+    setPhotoProducts([]);
+    const photo: RoomPhoto = { image: request.image, preview: request.preview };
+    roomPhotoRef.current = photo;
+    setHasRoomPhoto(true);
+    startRender(request.products, request.mode, photo);
+  }
+
+  /**
+   * The plan's render button. Reuses the room photo when we have one so that
+   * adding a piece and looking again is one click, not another upload.
+   */
+  function renderPlan() {
+    if (!planProducts.length) return;
+    const photo = roomPhotoRef.current;
+    if (!photo) {
+      setPhotoProducts(planProducts);
+      return;
+    }
+    startRender(planProducts, planProducts.length > 1 ? "refit_room" : "replace_all", photo);
   }
 
   function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
@@ -485,6 +517,7 @@ function Index() {
     setPendingPhoto(null);
     setPlanIds([]);
     roomPhotoRef.current = null;
+    setHasRoomPhoto(false);
     setChatError(null);
     setThinking(false);
     try {
@@ -587,7 +620,9 @@ function Index() {
             products={planProducts}
             onRemove={togglePlan}
             onClear={() => setPlanIds([])}
-            onVisualize={() => setPhotoProducts(planProducts)}
+            onVisualize={renderPlan}
+            hasPhoto={hasRoomPhoto}
+            onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
           />
           <ChatComposer
             value={input}

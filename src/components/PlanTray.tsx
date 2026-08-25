@@ -18,11 +18,16 @@ export function PlanTray({
   onRemove,
   onClear,
   onVisualize,
+  hasPhoto = false,
+  onUseAnotherPhoto,
 }: {
   products: FullProduct[];
   onRemove: (product: FullProduct) => void;
   onClear: () => void;
   onVisualize: () => void;
+  /** True once a room photo is in the session, so rendering needs no upload. */
+  hasPhoto?: boolean;
+  onUseAnotherPhoto?: () => void;
 }) {
   if (!products.length) return null;
 
@@ -92,9 +97,20 @@ export function PlanTray({
       ) : null}
 
       <div className="mt-2.5 flex items-center justify-between gap-3">
-        <p className="text-xs text-ink-3">
-          Subtotal <span className="font-semibold text-ink-1">{formatPrice(subtotal)}</span>
-        </p>
+        <div className="min-w-0">
+          <p className="text-xs text-ink-3">
+            Subtotal <span className="font-semibold text-ink-1">{formatPrice(subtotal)}</span>
+          </p>
+          {hasPhoto && onUseAnotherPhoto ? (
+            <button
+              type="button"
+              onClick={onUseAnotherPhoto}
+              className="text-[11px] text-ink-4 underline-offset-2 transition-colors hover:text-ink-2 hover:underline"
+            >
+              Use another photo
+            </button>
+          ) : null}
+        </div>
         <Button
           size="sm"
           onClick={onVisualize}
@@ -104,7 +120,9 @@ export function PlanTray({
           )}
         >
           <Sparkles className="h-3.5 w-3.5" />
-          See {products.length === 1 ? "it" : "these"} in my space
+          {hasPhoto
+            ? `Render ${products.length === 1 ? "it" : "these"}`
+            : `See ${products.length === 1 ? "it" : "these"} in my space`}
         </Button>
       </div>
     </div>
