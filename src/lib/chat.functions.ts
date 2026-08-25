@@ -7,6 +7,26 @@ export type ChatMessageInput = { role: "user" | "assistant"; content: string };
 
 export type RenderRequest = { mode: VisualizeMode; productIds: string[] };
 
+/**
+ * Reasons the assistant can be unavailable, safe to send to the browser: they
+ * name the class of fault, never a key, a URL or an upstream body. Collapsing
+ * every cause into one opaque code made a missing key on a deployed host
+ * indistinguishable from a network fault — two problems, completely different
+ * fixes.
+ */
+export type ChatErrorCode =
+  | "CHAT_NOT_CONFIGURED"
+  | "CHAT_KEY_REJECTED"
+  | "CHAT_RATE_LIMITED"
+  | "CHAT_UPSTREAM_ERROR"
+  | "CHAT_FAILED";
+
+class ChatError extends Error {
+  constructor(readonly code: ChatErrorCode) {
+    super(code);
+  }
+}
+
 const SYSTEM_INSTRUCTIONS = `You are the product specialist for Comfortel, a salon, barber and spa furniture brand. Customers are salon owners, barbers, stylists and spa operators fitting out or refreshing a room. You help them find the right pieces from the catalog below.
 
 What the catalog is
@@ -51,6 +71,12 @@ When a photo IS attached, you can render products into it yourself by adding a s
 
 When NO photo is attached, do not emit a RENDER line. Ask them to attach one with the photo button in the message box, in one short sentence. Still show relevant products as cards in the same reply.
 
+You have no tools
+You cannot call functions and you have no tools available. Never write XML or
+tool-call syntax — no <function_calls>, no <invoke>, no <parameter>, no tags of
+any kind. The bracket marker lines above are not function calls; they are plain
+text lines and that is the only structured output you ever produce.
+
 Style
 - Two or three sentences of plain prose above the marker. Say why these suit what was asked.
 - Light markdown is fine and renders properly: **bold** for emphasis, and a short bullet list when you are genuinely contrasting two or three options. No headings. No emoji. Never bold a product name that already appears on a card.
@@ -72,6 +98,31 @@ Mention these naturally when they are useful — for example, suggest seeing a c
  */
 const PRODUCTS_MARKER = /\[PRODUCTS:\s*([^\]]*)\]/gi;
 const RENDER_MARKER = /\[RENDER:\s*([^\]]*)\]/gi;
+
+/**
+ * Haiku sometimes leaks tool-call syntax from its training data straight into
+ * the visible reply — a <function_calls>/<invoke>/<parameter> block, rendered in
+ * the chat as literal XML. Teaching it a bracket-marker protocol seems to invite
+ * it: the markers look enough like a function call to pull the real syntax out.
+ *
+ * This app gives the model no tools at all, so such a block is always junk.
+ * Stripped rather than merely discouraged, because prompt rules alone don't hold.
+ * The unterminated `|$` branch matters — the block is often cut off by max_tokens
+ * with no closing tag.
+ */
+const TOOL_CALL_BLOCKS = [
+  /<(?:antml:)?function_calls\b[\s\S]*?(?:<\/(?:antml:)?function_calls>|$)/gi,
+  /<(?:antml:)?invoke\b[\s\S]*?(?:<\/(?:antml:)?invoke>|$)/gi,
+];
+/** Orphan tags left behind when only a fragment leaked. */
+const TOOL_CALL_TAGS =
+  /<\/?(?:antml:)?(?:function_calls|function_results|invoke|parameter)\b[^>]*>/gi;
+
+function stripToolCallSyntax(text: string): string {
+  let out = text;
+  for (const pattern of TOOL_CALL_BLOCKS) out = out.replace(pattern, "");
+  return out.replace(TOOL_CALL_TAGS, "");
+}
 
 /** Hard ceiling on renders per reply, since each one bills. */
 const MAX_RENDERS = 4;
@@ -105,7 +156,7 @@ export const chat = createServerFn({ method: "POST" })
     }): Promise<{ text: string; productIds: string[]; render: RenderRequest | null }> => {
       try {
         const apiKey = process.env["ANTHROPIC_API_KEY"];
-        if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
+        if (!apiKey) throw new ChatError("CHAT_NOT_CONFIGURED");
 
         // The Anthropic API rejects a leading assistant turn, which happens when a
         // trimmed window starts mid-exchange.
@@ -147,7 +198,15 @@ export const chat = createServerFn({ method: "POST" })
 
         if (!res.ok) {
           console.error("Anthropic error", res.status, await res.text());
-          throw new Error(`Assistant unavailable (${res.status})`);
+          // 401/403 means the key is present but rejected — a different fix
+          // from the key being absent, so it gets a different code.
+          throw new ChatError(
+            res.status === 401 || res.status === 403
+              ? "CHAT_KEY_REJECTED"
+              : res.status === 429
+                ? "CHAT_RATE_LIMITED"
+                : "CHAT_UPSTREAM_ERROR",
+          );
         }
 
         const json = (await res.json()) as {
@@ -194,7 +253,7 @@ export const chat = createServerFn({ method: "POST" })
           }
         }
 
-        const text = raw
+        const text = stripToolCallSyntax(raw)
           .replace(PRODUCTS_MARKER, "")
           .replace(RENDER_MARKER, "")
           // stripping a marker off its own line leaves a hole in the prose
@@ -205,6 +264,7 @@ export const chat = createServerFn({ method: "POST" })
         return { text, productIds, render };
       } catch (err) {
         console.error("chat failed", err);
+        if (err instanceof ChatError) throw new Error(err.code);
         throw new Error("CHAT_FAILED");
       }
     },

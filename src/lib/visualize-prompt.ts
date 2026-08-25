@@ -15,8 +15,56 @@ export function isMultiReferenceMode(mode: VisualizeMode): boolean {
   return MULTI_REFERENCE_MODES.includes(mode);
 }
 
-/** refit_room renders one image from several product references; the rest take one. */
+/** refit_room and lineup render one image from several product references. */
 export const MAX_REFERENCES = 4;
+
+/**
+ * How many views of ONE product to send on the single-product modes.
+ *
+ * Sending a single hero shot was the biggest fidelity bug in this feature: the
+ * model never saw the armrest profile or the base, so it invented both — the two
+ * things a buyer recognises a chair by. Most products carry explicit front, side
+ * and back photographs; send them.
+ */
+export const MAX_VIEWS = 3;
+
+const VIEW_ORDER: Array<[RegExp, string]> = [
+  [/front/i, "from the front"],
+  [/side/i, "from the side"],
+  [/back/i, "from the back"],
+];
+
+/**
+ * Ordered, de-duplicated views of one product: the hero shot first, then any
+ * explicit front/side/back photograph.
+ *
+ * Lifestyle shots are skipped deliberately — a photo of the chair already
+ * standing in someone else's salon competes with "the first image is the salon"
+ * and confuses which room is being edited.
+ */
+export function referenceViews(
+  product: VisualizeProduct,
+  max = MAX_VIEWS,
+): Array<{ url: string; angle: string }> {
+  const images = product.images ?? [];
+  const out: Array<{ url: string; angle: string }> = [];
+  const seen = new Set<string>();
+
+  const push = (url: string | undefined, angle: string) => {
+    if (!url || seen.has(url) || out.length >= max) return;
+    seen.add(url);
+    out.push({ url, angle });
+  };
+
+  push(images[0], "as the catalogue shows it");
+  for (const [pattern, angle] of VIEW_ORDER) {
+    push(
+      images.find((u) => pattern.test(u) && !/salon-chair-\d|lifestyle|interior/i.test(u)),
+      angle,
+    );
+  }
+  return out;
+}
 
 export function isVisualizeMode(value: unknown): value is VisualizeMode {
   return typeof value === "string" && (VISUALIZE_MODES as string[]).includes(value);
@@ -173,15 +221,19 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
   const replacing = mode === "replace" || mode === "replace_all";
   const all = mode === "replace_all";
 
+  const views = referenceViews(product);
+  const viewList = views.map((v, i) => `image ${i + 2} shows it ${v.angle}`).join(", ");
   parts.push(
-    `The first image is a photograph of a real hair salon. The second image is a product reference showing a ${product.name}.`,
+    views.length > 1
+      ? `The first image is a photograph of a real hair salon. The ${views.length} images after it are ALL the same product — a ${product.name} — photographed from different angles: ${viewList}. Study every one of them before you draw it.`
+      : `The first image is a photograph of a real hair salon. The second image is a product reference showing a ${product.name}.`,
   );
 
   if (replacing) {
     parts.push(...removalClauses(subject, all));
     parts.push(
       all
-        ? `Step 2 — INSTALL: put a ${product.name} from the reference image in each of those now-empty positions, matching the original spacing and orientation so the room reads as one matching set.`
+        ? `Step 2 — INSTALL: put a ${product.name} in every one of those now-empty positions. Keep the count exactly as it was — if the salon had four ${subject}s, the result has four, none added and none dropped. Keep each station's original position, spacing and FACING: a ${subject} that was angled towards the camera stays angled towards the camera, one seen from behind stays seen from behind. Draw the product from whichever angle that station needs, using the reference views to work out what it looks like from that side.`
         : `Step 2 — INSTALL: put the ${product.name} from the reference image in that now-empty position, standing where the old ${subject} stood.`,
     );
   } else {
@@ -190,8 +242,14 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     );
   }
 
+  // The single most-reported failure: the room is right, the chair is a
+  // generic stand-in. The armrest profile and the base are what a buyer
+  // recognises a model by, so they are called out individually.
   parts.push(
-    `Reproduce the product exactly as shown in the reference: its shape, proportions, upholstery, stitching, base design and hardware finish must match precisely. Do not restyle it, do not simplify it and do not borrow the shape of the ${subject} you removed.`,
+    `COPY THE PRODUCT EXACTLY. This is the most important requirement in this instruction — a beautiful room containing the wrong chair is a failed render.`,
+    `Match every detail of the references: the silhouette of the back and seat, the exact profile and thickness of the ARMRESTS, the upholstery seams and stitching lines, and the BASE — its shape, its number of legs or its disc, its column, and its footrest if it has one.`,
+    `The armrests and the base are the two parts most often got wrong. Look at them in the reference images specifically and reproduce what is actually there. Do not square off curved arms, do not curve square arms, and do not swap a star base for a disc base or the other way round.`,
+    `Do not substitute a generic salon chair. Do not simplify, restyle or "improve" the design. Do not borrow any part of the shape of the ${subject} you removed — that is a different model.`,
   );
 
   const specs = product.specs ?? {};
@@ -227,10 +285,36 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
   if (replacing) {
     parts.push(
       all
-        ? `Before you finish, check the image: no original ${subject} may still be present anywhere in the frame. Every one of them has been replaced by the ${product.name}.`
+        ? `Before you finish, check the image twice. First: no original ${subject} may still be present anywhere in the frame, and the number of ${subject}s is unchanged. Second: every one of them is unmistakably the ${product.name} from the references — same arms, same base, same seams — and not a generic chair that merely resembles it.`
         : `Before you finish, check the image: the original ${subject} must not appear anywhere in the frame. The ${product.name} stands in its place — not beside it, not in addition to it.`,
     );
   }
 
   return parts.join(" ");
+}
+
+/**
+ * The prompt and the image array in one call, deliberately.
+ *
+ * The prompt refers to its references positionally ("image 2 shows it from the
+ * front"), so the two have to be built from the same decision. Returning them
+ * separately invited exactly one bug: the prompt claiming a view the array
+ * didn't contain.
+ */
+export function buildRenderRequest(
+  products: VisualizeProduct[],
+  mode: VisualizeMode,
+): { prompt: string; imageUrls: string[] } {
+  const prompt = buildSalonPrompt(products, mode);
+
+  const imageUrls = isMultiReferenceMode(mode)
+    ? // one hero shot per DIFFERENT product
+      products
+        .slice(0, MAX_REFERENCES)
+        .map((p) => p.images?.[0])
+        .filter((u): u is string => Boolean(u))
+    : // several views of THE SAME product
+      referenceViews(products[0] as VisualizeProduct).map((v) => v.url);
+
+  return { prompt, imageUrls };
 }
