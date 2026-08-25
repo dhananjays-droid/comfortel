@@ -1,127 +1,100 @@
 /**
- * kie.ai gpt-image integration — ISOLATED ON PURPOSE.
+ * kie.ai integration — ISOLATED ON PURPOSE.
  *
- * Everything about the kie.ai HTTP contract lives in this one file:
- *   - the endpoint URLs
- *   - the request body shape
- *   - the response parsing
- *
- * Replace the marked sections with the exact kie.ai spec; nothing outside
- * this file needs to change.
- *
- * Contract assumed here (async task model):
- *   1. POST a task  -> returns a task id
- *   2. Poll the task -> returns state + result image url
- * Timeout: 90s. Poll interval: 3s.
+ * Flow: upload room photo (base64 -> public URL) -> createTask -> client polls status.
+ * Never poll in a server-side loop; the browser drives polling.
  */
 
-const KIE_BASE_URL = "https://api.kie.ai";
-// --- REPLACE: task submission endpoint ---------------------------------------
-const KIE_CREATE_TASK_URL = `${KIE_BASE_URL}/api/v1/jobs/createTask`;
-// --- REPLACE: task polling endpoint (task id appended as query param) --------
-const KIE_TASK_STATUS_URL = `${KIE_BASE_URL}/api/v1/jobs/recordInfo`;
+const KIE_API = "https://api.kie.ai";
+const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 
-const POLL_INTERVAL_MS = 3_000;
-const TIMEOUT_MS = 90_000;
+function key(): string {
+  const k = process.env["KIE_API_KEY"];
+  if (!k) throw new Error("KIE_API_KEY is not configured");
+  return k;
+}
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+function jsonHeaders() {
+  return { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" };
+}
 
-/**
- * Submits an image-edit task to kie.ai and returns the finished image URL.
- *
- * @param roomImageBase64  the customer's room photo, base64 (no data: prefix)
- * @param productImageUrl  catalog-full[productId].images[0]
- * @param prompt           the fully-built placement prompt
- */
-export async function callKieImageEdit(
-  roomImageBase64: string,
-  productImageUrl: string,
-  prompt: string,
-): Promise<string> {
-  const apiKey = process.env["KIE_API_KEY"];
-  if (!apiKey) throw new Error("KIE_API_KEY is not configured");
-
-  const headers = {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-  };
-
-  // ── 1. SUBMIT TASK ───────────────────────────────────────────────────────
-  // --- REPLACE: request body shape ---
-  const createBody = {
-    model: "gpt-image",
-    input: {
-      prompt,
-      // room photo as an inline data URL + the product reference image
-      image_urls: [`data:image/jpeg;base64,${roomImageBase64}`, productImageUrl],
-      output_format: "png",
-      image_size: "auto",
-    },
-  };
-
-  const createRes = await fetch(KIE_CREATE_TASK_URL, {
+/** Step 1 — push the room photo to kie's temp storage, get a public URL. */
+export async function uploadToKie(base64Data: string): Promise<string> {
+  const res = await fetch(KIE_UPLOAD, {
     method: "POST",
-    headers,
-    body: JSON.stringify(createBody),
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      base64Data,
+      uploadPath: "images/rooms",
+      fileName: `room-${Date.now()}.jpg`,
+    }),
   });
 
-  if (!createRes.ok) {
-    throw new Error(`kie.ai task creation failed (${createRes.status})`);
+  const json = (await res.json()) as any;
+  if (!json?.success || !json?.data?.downloadUrl) {
+    throw new Error(`kie upload failed: ${json?.msg ?? res.status}`);
+  }
+  return json.data.downloadUrl as string;
+}
+
+/**
+ * Step 2 — create the generation task. Returns a taskId immediately.
+ * input_urls is an ARRAY: room photo FIRST, product reference SECOND.
+ */
+export async function createVisualizeTask(
+  roomUrl: string,
+  productImageUrl: string,
+  prompt: string,
+  aspectRatio: string,
+): Promise<string> {
+  const res = await fetch(`${KIE_API}/api/v1/jobs/createTask`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      model: "gpt-image/1.5-image-to-image",
+      input: {
+        input_urls: [roomUrl, productImageUrl],
+        prompt,
+        aspect_ratio: aspectRatio,
+        quality: "medium",
+      },
+    }),
+  });
+
+  const json = (await res.json()) as any;
+  if (json?.code !== 200 || !json?.data?.taskId) {
+    throw new Error(`kie createTask failed: ${json?.msg ?? res.status}`);
+  }
+  return json.data.taskId as string;
+}
+
+export type KieTaskResult =
+  | { done: false; progress: number }
+  | { done: true; imageUrl: string };
+
+/** Step 3 — poll a single time. Called per client poll, never in a loop here. */
+export async function getTaskResult(taskId: string): Promise<KieTaskResult> {
+  const res = await fetch(
+    `${KIE_API}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+    { headers: { Authorization: `Bearer ${key()}` } },
+  );
+
+  const json = (await res.json()) as any;
+  const d = json?.data;
+  if (!d) throw new Error("kie recordInfo returned no data");
+
+  // TRAP 1: do NOT branch on json.code — kie returns 505 alongside msg:"success".
+  // States: waiting | queuing | generating | success | fail
+  if (d.state === "fail") {
+    throw new Error(d.failMsg || d.failCode || "generation failed");
+  }
+  if (d.state !== "success") {
+    return { done: false, progress: Number(d.progress ?? 0) };
   }
 
-  const createJson = (await createRes.json()) as Record<string, unknown>;
-  // --- REPLACE: task id extraction ---
-  const taskId =
-    (createJson as any)?.data?.taskId ??
-    (createJson as any)?.data?.task_id ??
-    (createJson as any)?.taskId;
-
-  if (!taskId || typeof taskId !== "string") {
-    throw new Error("kie.ai did not return a task id");
-  }
-
-  // ── 2. POLL UNTIL COMPLETE ───────────────────────────────────────────────
-  const deadline = Date.now() + TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    await sleep(POLL_INTERVAL_MS);
-
-    const pollRes = await fetch(
-      `${KIE_TASK_STATUS_URL}?taskId=${encodeURIComponent(taskId)}`,
-      { headers },
-    );
-
-    if (!pollRes.ok) continue; // transient — keep polling until the deadline
-
-    const pollJson = (await pollRes.json()) as any;
-    // --- REPLACE: response parsing ---
-    const data = pollJson?.data ?? pollJson;
-    const state: string = String(data?.state ?? data?.status ?? "").toLowerCase();
-
-    if (state === "success" || state === "succeeded" || state === "completed") {
-      let result = data?.resultJson ?? data?.result ?? data?.output;
-      if (typeof result === "string") {
-        try {
-          result = JSON.parse(result);
-        } catch {
-          // a bare URL string is also acceptable
-          if (result.startsWith("http")) return result;
-        }
-      }
-      const url: string | undefined =
-        result?.resultUrls?.[0] ??
-        result?.image_urls?.[0] ??
-        result?.images?.[0] ??
-        result?.url;
-
-      if (!url) throw new Error("kie.ai finished but returned no image URL");
-      return url;
-    }
-
-    if (state === "fail" || state === "failed" || state === "error") {
-      throw new Error("kie.ai image generation failed");
-    }
-  }
-
-  throw new Error("kie.ai image generation timed out after 90 seconds");
+  // TRAP 2: resultJson is a JSON *string*, not an object.
+  const parsed = typeof d.resultJson === "string" ? JSON.parse(d.resultJson) : d.resultJson;
+  const url = parsed?.resultUrls?.[0];
+  if (!url) throw new Error("kie finished but returned no image URL");
+  return { done: true, imageUrl: url as string };
 }
