@@ -1,20 +1,23 @@
+/** The aspect ratios gpt-image accepts. A photo is mapped to the nearest one. */
+const ASPECTS = [
+  { label: "1:1", value: 1 },
+  { label: "3:2", value: 3 / 2 },
+  { label: "2:3", value: 2 / 3 },
+] as const;
+
+export type AspectRatio = (typeof ASPECTS)[number]["label"];
+
 export type ResizedImage = {
   /** base64 JPEG, no data: prefix */
   base64: string;
   width: number;
   height: number;
-  /** nearest supported kie aspect ratio */
-  aspectRatio: "1:1" | "3:2" | "2:3";
+  aspectRatio: AspectRatio;
 };
 
-function nearestAspect(width: number, height: number): "1:1" | "3:2" | "2:3" {
+function nearestAspect(width: number, height: number): AspectRatio {
   const ratio = width / height;
-  const options: Array<{ label: "1:1" | "3:2" | "2:3"; value: number }> = [
-    { label: "1:1", value: 1 },
-    { label: "3:2", value: 3 / 2 },
-    { label: "2:3", value: 2 / 3 },
-  ];
-  return options.reduce((best, o) =>
+  return ASPECTS.reduce((best, o) =>
     Math.abs(Math.log(o.value / ratio)) < Math.abs(Math.log(best.value / ratio)) ? o : best,
   ).label;
 }
@@ -44,6 +47,10 @@ export async function resizeImage(file: File, maxEdge = 1024): Promise<ResizedIm
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas unavailable");
+  // Phone photos are often shot in low light; smoothing the downscale keeps the
+  // room's texture readable for the model instead of aliasing it into noise.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, width, height);
 
   const jpeg = canvas.toDataURL("image/jpeg", 0.85);

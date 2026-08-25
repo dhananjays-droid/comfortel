@@ -126,7 +126,6 @@
   --sidebar-ring: oklch(0.7854 0.1837 124.79);
 }
 
-
 @layer base {
   * {
     border-color: var(--color-border);
@@ -135,5 +134,49 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+}
+
+@layer utilities {
+  /* Card rails scroll horizontally; the native bar is visual noise under them. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Sweep over the blurred room photo while a render is in flight. */
+@keyframes comfortel-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--surface2) 70%, transparent) 50%,
+    transparent 100%
+  );
+  animation: comfortel-shimmer 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after {
+    animation: none;
   }
 }

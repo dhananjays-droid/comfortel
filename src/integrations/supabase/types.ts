@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      enquiries: {
+        Row: {
+          business_name: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          notes: string | null
+          phone: string | null
+          product_id: string
+          product_name: string
+          product_url: string | null
+          quantity: number
+          reference: string
+          visualization_url: string | null
+        }
+        Insert: {
+          business_name?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          product_id: string
+          product_name: string
+          product_url?: string | null
+          quantity?: number
+          reference: string
+          visualization_url?: string | null
+        }
+        Update: {
+          business_name?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          product_id?: string
+          product_name?: string
+          product_url?: string | null
+          quantity?: number
+          reference?: string
+          visualization_url?: string | null
+        }
+        Relationships: []
+      }
       visualizations: {
         Row: {
           created_at: string
