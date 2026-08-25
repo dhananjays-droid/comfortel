@@ -91,7 +91,14 @@ const SEED_PROMPTS = [
 ];
 
 const POLL_INTERVAL_MS = 3000;
-const MAX_POLLS = 40;
+
+/**
+ * 100 x 3s = 5 minutes. GPT Image 2 renders measured at 80-98s, against the old
+ * 40-poll (120s) ceiling — close enough that a slow render would have shown the
+ * customer a timeout for an image kie had generated and charged us for. The
+ * window costs nothing when renders are fast; it only has to outlast the worst.
+ */
+const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
