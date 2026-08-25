@@ -19,6 +19,7 @@ import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
+import { shareDesign } from "@/lib/design.functions";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
@@ -520,6 +521,48 @@ function Index() {
     startRender(request.products, request.mode, photo);
   }
 
+  const runShare = useServerFn(shareDesign);
+
+  /**
+   * Share every finished render in one message, plus the products behind them.
+   *
+   * Unfinished renders are excluded rather than shared as blanks, and if none
+   * have finished there is nothing worth a link yet.
+   */
+  const shareRenders = useCallback(
+    async (entries: RenderEntry[]) => {
+      const renders = entries
+        .filter((e) => e.vis.status === "done" && e.vis.imageUrl)
+        .map((e) => ({ imageUrl: e.vis.imageUrl as string, label: e.vis.label }));
+
+      if (!renders.length) {
+        toast("Nothing to share yet", { description: "Wait for the render to finish." });
+        return;
+      }
+
+      const ids = [...new Set(entries.flatMap((e) => e.vis.productIds))];
+      const subtotal = ids.reduce((sum, id) => sum + (getProduct(id)?.price ?? 0), 0);
+
+      try {
+        const { code } = await runShare({
+          data: { productIds: ids, renders, subtotalCents: subtotal },
+        });
+        const url = `${window.location.origin}/d/${code}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          toast("Link copied", { description: url });
+        } catch {
+          // Clipboard access is denied in plenty of contexts; the link is the
+          // point, so show it rather than failing the whole share.
+          toast("Your share link", { description: url });
+        }
+      } catch {
+        toast("Couldn't create a share link", { description: "Please try again." });
+      }
+    },
+    [runShare],
+  );
+
   /**
    * Render the plan as one image per salon zone.
    *
@@ -637,6 +680,7 @@ function Index() {
                 onOpenProduct={setSheetProduct}
                 planIds={planIds}
                 onTogglePlan={togglePlan}
+                onShareRenders={shareRenders}
                 onVisualize={(product) => setPhotoProducts([product])}
                 onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
                 onRetryRender={(entry) => {
@@ -756,12 +800,14 @@ function MessageRow({
   onRetryRender,
   planIds,
   onTogglePlan,
+  onShareRenders,
 }: {
   message: Message;
   onOpenProduct: (product: FullProduct) => void;
   onVisualize: (product: FullProduct) => void;
   planIds: string[];
   onTogglePlan: (product: FullProduct) => void;
+  onShareRenders: (entries: RenderEntry[]) => void | Promise<void>;
   onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
   onRetryRender: (entry: RenderEntry) => void;
 }) {
@@ -827,6 +873,7 @@ function MessageRow({
                   const entry = message.entries[index];
                   if (entry) onRetryRender(entry);
                 }}
+                onShare={() => void onShareRenders(message.entries)}
                 onEnquire={(index, imageUrl) => {
                   // A refit lists several products; the quote hangs off the lead one.
                   const id = message.entries[index]?.vis.productIds[0];

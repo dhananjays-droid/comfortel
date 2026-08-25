@@ -1,4 +1,4 @@
-import { Download, Expand, RefreshCw, Sparkles } from "lucide-react";
+import { Download, Expand, RefreshCw, Share2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ProductStrip } from "@/components/ProductStrip";
@@ -38,10 +38,13 @@ export function VisualizationMessage({
   states,
   onRetry,
   onEnquire,
+  onShare,
 }: {
   states: VisualizationState[];
   onRetry: (index: number) => void;
   onEnquire: (index: number, imageUrl: string) => void;
+  /** Shares the whole message — every render in it, not just one. */
+  onShare?: (() => void) | undefined;
 }) {
   if (states.length === 1) {
     return (
@@ -49,6 +52,7 @@ export function VisualizationMessage({
         state={states[0]!}
         onRetry={() => onRetry(0)}
         onEnquire={(url) => onEnquire(0, url)}
+        onShare={onShare}
       />
     );
   }
@@ -80,11 +84,13 @@ function RenderCard({
   compact = false,
   onRetry,
   onEnquire,
+  onShare,
 }: {
   state: VisualizationState;
   compact?: boolean;
   onRetry: () => void;
   onEnquire: (imageUrl: string) => void;
+  onShare?: (() => void) | undefined;
 }) {
   const [tick, setTick] = useState(0);
   const [view, setView] = useState<"after" | "before">("after");
@@ -230,6 +236,17 @@ function RenderCard({
             <Sparkles className="h-3.5 w-3.5" />
             Request a quote
           </Button>
+          {onShare ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onShare}
+              className="border-border bg-transparent text-xs text-ink-2 shadow-none hover:bg-muted hover:text-ink-1"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Share
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="outline"
