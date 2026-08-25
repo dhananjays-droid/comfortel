@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import catalogFull from "@/data/catalog-full.json";
 import catalogSlim from "@/data/catalog-slim.json";
+import { resolveDims } from "@/lib/dims";
 import { viewsFor } from "@/lib/product-views";
 import {
   buildRenderRequest,
@@ -113,6 +114,9 @@ export const visualizeStart = createServerFn({ method: "POST" })
         return {
           ...product,
           col: slim.find((p) => p.id === id)?.col || null,
+          // Recovered from the spec sheet when the catalogue lacked them, which
+          // is 31 more products getting an accurate scale clause in the prompt.
+          dims_cm: resolveDims(product),
           ...(views.length ? { views } : {}),
         };
       });
