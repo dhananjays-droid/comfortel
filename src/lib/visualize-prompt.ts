@@ -21,12 +21,19 @@ export const MAX_REFERENCES = 4;
 /**
  * How many views of ONE product to send on the single-product modes.
  *
- * Sending a single hero shot was the biggest fidelity bug in this feature: the
- * model never saw the armrest profile or the base, so it invented both — the two
- * things a buyer recognises a chair by. Most products carry explicit front, side
- * and back photographs; send them.
+ * Sending a single hero shot means the model never sees the armrest profile or
+ * the base and invents both — the two things a buyer recognises a chair by.
+ * Sending three views was the fix, but rendering started failing right after,
+ * so the default is back to 1 (the known-working state) and multi-view is
+ * opt-in via KIE_MAX_VIEWS=3 while the cause is isolated.
  */
-export const MAX_VIEWS = 3;
+/**
+ * NOT env-driven: this module is imported by visualize.functions.ts, whose
+ * validator runs in the browser too, so `process.env` here would throw
+ * "process is not defined" at import time in the client bundle. Change the
+ * constant to 3 to re-enable multi-view references.
+ */
+export const MAX_VIEWS = 1;
 
 const VIEW_ORDER: Array<[RegExp, string]> = [
   [/front/i, "from the front"],
