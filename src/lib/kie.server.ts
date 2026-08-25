@@ -14,14 +14,15 @@ const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 const MODEL = "gpt-image/1.5-image-to-image";
 
 /**
- * Fidelity lever. "medium" was the original setting and it visibly approximated
- * hardware — armrests and bases came back generic. "high" is the default now
- * because reproducing the actual product is the point of the feature; set
- * KIE_IMAGE_QUALITY=medium to trade detail back for cost.
+ * Fidelity lever. "medium" is the default because it is the setting that is
+ * known to work end to end on this model; "high" was tried as a fidelity fix
+ * and rendering started failing, so it is opt-in via KIE_IMAGE_QUALITY=high
+ * until that is confirmed as the cause or ruled out.
+ * Only "medium" and "high" are valid — "low" is rejected by the API.
  */
 function quality(): string {
-  const q = (process.env["KIE_IMAGE_QUALITY"] ?? "high").trim();
-  return ["low", "medium", "high"].includes(q) ? q : "high";
+  const q = (process.env["KIE_IMAGE_QUALITY"] ?? "medium").trim();
+  return ["medium", "high"].includes(q) ? q : "medium";
 }
 
 // Narrow shapes for the three kie responses this module reads. Only the fields
