@@ -22,11 +22,18 @@ type StartInput = {
 const MAX_BASE64_CHARS = 8_000_000;
 
 /**
- * What gpt-image accepts. Declared here rather than imported from kie.server.ts
- * because the validator below runs on the client too, and kie.server.ts must
- * never reach the browser bundle.
+ * What gpt-image accepts — verified against the live API, which rejects
+ * anything else with "This aspect_ratio is not within the range of allowed
+ * options". There is no "auto": a photo must be mapped to one of these three.
+ *
+ * Declared here rather than imported from kie.server.ts because the validator
+ * below runs on the client too, and kie.server.ts must never reach the browser
+ * bundle.
  */
-const ASPECT_RATIOS = new Set(["auto", "1:1", "3:2", "2:3"]);
+const ASPECT_RATIOS = new Set(["1:1", "3:2", "2:3"]);
+
+/** gpt-image's own default, and the closest match to a landscape room photo. */
+const DEFAULT_ASPECT_RATIO = "3:2";
 
 async function readCache(hash: string): Promise<string | null> {
   try {
@@ -83,7 +90,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
       aspectRatio:
         typeof input.aspectRatio === "string" && ASPECT_RATIOS.has(input.aspectRatio)
           ? input.aspectRatio
-          : "auto",
+          : DEFAULT_ASPECT_RATIO,
     };
   })
   .handler(async ({ data }): Promise<{ taskId?: string; imageUrl?: string }> => {

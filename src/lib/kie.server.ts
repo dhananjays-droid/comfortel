@@ -4,25 +4,36 @@
  * Flow: upload room photo (base64 -> public URL) -> createTask -> client polls status.
  * Never poll in a server-side loop; the browser drives polling.
  *
- * The whole operation is: two image URLs plus a prompt. Room photo first,
- * product reference second — the order is what tells gpt-image which is which.
+ * The whole operation is: image URLs plus a prompt. Room photo first, product
+ * references after — the order is what tells the model which is which.
  */
 
 const KIE_API = "https://api.kie.ai";
 const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 
-const MODEL = "gpt-image/1.5-image-to-image";
+/**
+ * GPT Image 2. Chosen over gpt-image/1.5-image-to-image after rendering the
+ * same salon photo through both: 1.5 does not replace furniture, it RE-SKINS
+ * it — asked to fit a black Comfortel chair into a room of chrome barber
+ * chairs it recoloured the existing chairs black and kept their frames, bases
+ * and footrests. GPT Image 2 removed them and installed the actual product,
+ * preserving the room, the chair count and each station's facing.
+ *
+ * It also lifts two hard limits that shaped this module: the prompt cap goes
+ * from 3000 characters to 20000, and up to 16 reference images are accepted.
+ *
+ * Note the id has NO slash, unlike the 1.5 ids.
+ */
+const MODEL = "gpt-image-2-image-to-image";
 
 /**
- * Fidelity lever. "medium" is the default because it is the setting that is
- * known to work end to end on this model; "high" was tried as a fidelity fix
- * and rendering started failing, so it is opt-in via KIE_IMAGE_QUALITY=high
- * until that is confirmed as the cause or ruled out.
- * Only "medium" and "high" are valid — "low" is rejected by the API.
+ * 1K is the default because it is what the aspect ratios we send support (the
+ * API only returns 4K for some ratios, and "auto" is 1K-only) and because the
+ * render is viewed in a chat bubble. 2K/4K are opt-in via KIE_IMAGE_RESOLUTION.
  */
-function quality(): string {
-  const q = (process.env["KIE_IMAGE_QUALITY"] ?? "medium").trim();
-  return ["medium", "high"].includes(q) ? q : "medium";
+function resolution(): string {
+  const r = (process.env["KIE_IMAGE_RESOLUTION"] ?? "1K").trim();
+  return ["1K", "2K", "4K"].includes(r) ? r : "1K";
 }
 
 // Narrow shapes for the three kie responses this module reads. Only the fields
@@ -60,16 +71,16 @@ function jsonHeaders() {
   return { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" };
 }
 
-/** Step 1 — push the room photo to kie's temp storage, get a public URL. */
-export async function uploadToKie(base64Data: string): Promise<string> {
+/** Step 1 — push an image to kie's temp storage, get a publicly fetchable URL. */
+export async function uploadToKie(
+  base64Data: string,
+  uploadPath = "images/rooms",
+  fileName = `room-${Date.now()}.jpg`,
+): Promise<string> {
   const res = await fetch(KIE_UPLOAD, {
     method: "POST",
     headers: jsonHeaders(),
-    body: JSON.stringify({
-      base64Data,
-      uploadPath: "images/rooms",
-      fileName: `room-${Date.now()}.jpg`,
-    }),
+    body: JSON.stringify({ base64Data, uploadPath, fileName }),
   });
 
   const json = (await res.json()) as KieUploadResponse;
@@ -77,6 +88,40 @@ export async function uploadToKie(base64Data: string): Promise<string> {
     throw new Error(`kie upload failed: ${json?.msg ?? res.status}`);
   }
   return json.data.downloadUrl;
+}
+
+/**
+ * Copy a product image onto kie's own storage and return that URL.
+ *
+ * Necessary, not defensive: GPT Image 2 fails the whole task with "Image fetch
+ * failed. Check access settings or use our File Upload API instead." when given
+ * a comfortelfurniture.com URL. (1.5 could fetch them, which is why this only
+ * surfaced on the model switch.) Downloading and re-uploading is the documented
+ * workaround.
+ */
+const mirrored = new Map<string, { url: string; at: number }>();
+
+/** kie serves these from tempfile storage, so a mirror is not cached for long. */
+const MIRROR_TTL_MS = 20 * 60 * 1000;
+
+async function mirror(sourceUrl: string): Promise<string> {
+  const hit = mirrored.get(sourceUrl);
+  if (hit && Date.now() - hit.at < MIRROR_TTL_MS) return hit.url;
+
+  const res = await fetch(sourceUrl);
+  if (!res.ok) throw new Error(`product image fetch failed: ${res.status} ${sourceUrl}`);
+  const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+
+  const name = sourceUrl.split("/").pop()?.split("?")[0] || "product.jpg";
+  const url = await uploadToKie(base64, "images/products", name);
+
+  mirrored.set(sourceUrl, { url, at: Date.now() });
+  return url;
+}
+
+/** Mirrors run concurrently — they are independent and each is a full upload. */
+async function mirrorAll(urls: string[]): Promise<string[]> {
+  return Promise.all(urls.map((u) => mirror(u)));
 }
 
 /**
@@ -92,16 +137,18 @@ export async function createVisualizeTask(
   prompt: string,
   aspectRatio: string,
 ): Promise<string> {
+  const references = await mirrorAll(productImageUrls);
+
   const res = await fetch(`${KIE_API}/api/v1/jobs/createTask`, {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({
       model: MODEL,
       input: {
-        input_urls: [roomUrl, ...productImageUrls],
+        input_urls: [roomUrl, ...references],
         prompt,
         aspect_ratio: aspectRatio,
-        quality: quality(),
+        resolution: resolution(),
       },
     }),
   });

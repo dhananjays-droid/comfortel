@@ -8,7 +8,7 @@ photo of their own salon or request a quote.
 Two providers, doing different jobs:
 
 - **Anthropic (Claude Haiku 4.5)** — the conversation and product selection.
-- **kie.ai (`gpt-image/1.5-image-to-image`)** — the room renders. Nothing to do
+- **kie.ai (`gpt-image-2-image-to-image`)** — the room renders. Nothing to do
   with Claude.
 
 ---
@@ -23,7 +23,7 @@ flowchart TD
     H --> V["parse + validate<br/><small>strip markers, check every id</small>"]
     F["catalog-full.json<br/><small>374 KB · never sent to the model</small>"] --> V
     V --> C["product cards<br/><small>price, images, specs</small>"]
-    V --> R["renders<br/><small>kie · gpt-image · $0.02 each</small>"]
+    V --> R["renders<br/><small>kie · GPT Image 2 · $0.03 each</small>"]
 ```
 
 The server function is the only thing that talks to Anthropic. No API call is
@@ -86,7 +86,7 @@ Cost per reply with the cache warm:
 | output     | ~150   | $5.00 / MTok | $0.0008       |
 |            |        |              | **≈ $0.0017** |
 
-For scale: **one render costs $0.02 — about twelve chat replies.** The chat model
+For scale: **one render costs $0.03 — about eighteen chat replies.** The chat model
 is rounding error next to image generation.
 
 ### What the instructions actually enforce
@@ -112,7 +112,7 @@ flowchart LR
     A["raw reply<br/><small>prose + up to 2 markers</small>"] --> M1["PRODUCTS: ids<br/><small>max 4, every id validated</small>"]
     A --> M2["RENDER: mode, ids<br/><small>dead without a photo</small>"]
     M1 --> C["cards<br/><small>no extra cost</small>"]
-    M2 --> R["images<br/><small>$0.02 each</small>"]
+    M2 --> R["images<br/><small>$0.03 each</small>"]
 ```
 
 ```
@@ -153,16 +153,16 @@ their ids. That shipped and was visible in the UI.
 
 ## 5. Render modes and cost
 
-One generation is **4 kie credits = $0.02**, measured from
+One generation is **6 kie credits = $0.03** at 1K, measured from
 `recordInfo.creditsConsumed`. A failed task consumes 0 — failures are free.
 
 | Mode          | Images         | Cost      | Use for                                                             |
 | ------------- | -------------- | --------- | ------------------------------------------------------------------- |
-| `replace_all` | 1              | $0.02     | every matching piece becomes the SAME product                       |
-| `lineup`      | 1              | $0.02     | 2–4 DIFFERENT products side by side, one per station, left to right |
-| `refit_room`  | 1              | $0.02     | whole room refitted across furniture types                          |
-| `add`         | 1              | $0.02     | drop one piece into free space                                      |
-| `replace`     | **one per id** | $0.02 × n | true A/B — same position, each candidate in turn                    |
+| `replace_all` | 1              | $0.03     | every matching piece becomes the SAME product                       |
+| `lineup`      | 1              | $0.03     | 2–4 DIFFERENT products side by side, one per station, left to right |
+| `refit_room`  | 1              | $0.03     | whole room refitted across furniture types                          |
+| `add`         | 1              | $0.03     | drop one piece into free space                                      |
+| `replace`     | **one per id** | $0.03 × n | true A/B — same position, each candidate in turn                    |
 
 `replace` is the only mode that multiplies, and it has to: one image shows one
 state of a room, so comparing candidates _in the same spot_ is inherently one
@@ -178,10 +178,11 @@ to a single-product `replace`.
 ### The render call
 
 ```ts
-model: "gpt-image/1.5-image-to-image"
+model: "gpt-image-2-image-to-image"      // NO slash, unlike the 1.5 ids
 input: {
-  input_urls: [roomUrl, ...imageUrls],   // ORDER IS THE CONTRACT
-  prompt, aspect_ratio, quality,         // quality defaults to "high"
+  input_urls: [roomUrl, ...references],  // ORDER IS THE CONTRACT
+  prompt, aspect_ratio,
+  resolution,                            // "1K" by default
 }
 ```
 
@@ -191,21 +192,57 @@ returns the prompt **and** the image array from one call — building them
 separately invited exactly one bug, a prompt claiming a view the array didn't
 contain.
 
-### Product fidelity — the reference set
+### Product fidelity — why the model changed
 
-The most-reported failure isn't the room, it's the product: right salon, wrong
-chair. Armrests get squared off, a five-star base becomes a disc.
+The most-reported failure was never the room, it was the product: right salon,
+wrong chair. Armrests squared off, a five-star base rendered as a disc.
 
-The cause was sending **one** reference image. `referenceViews()` now sends up to
-three views of the same product — the hero shot plus any explicit front/side/back
-photograph — so the model can actually see the armrest profile and the base
-instead of inferring them from a single 3/4 angle. Lifestyle shots are skipped:
-a photo of the chair already standing in another salon competes with "the first
-image is the salon".
+Rendering the same salon photo through both models found the cause, and it was
+not the prompt. **`gpt-image/1.5-image-to-image` does not replace furniture, it
+re-skins it.** Asked to fit a black Comfortel chair into a room of chrome barber
+chairs, it recoloured the existing chairs black and kept their frames, bases,
+footrests and headrests. Stating "do NOT recolour or reupholster what is already
+there — that is a FAILED render" verbatim in the prompt did not change it.
 
-`quality` moved from `medium` to `high` for the same reason, configurable with
-`KIE_IMAGE_QUALITY`. Higher quality costs more per render — fidelity is the
-point of the feature, so it's the default, but it is one env var to revert.
+**GPT Image 2 does replace them**, and preserves the room, the chair count and
+each station's facing while doing it. That is the whole reason for the switch.
+It also lifts the two limits that shaped this code:
+
+| | gpt-image/1.5 | GPT Image 2 |
+| --- | --- | --- |
+| prompt limit | 3000 chars (hard reject) | 20000 documented, 6000 verified |
+| reference images | effectively few | 16 |
+| sizing | `quality: medium\|high` | `resolution: 1K\|2K\|4K` |
+| fetches `comfortelfurniture.com` | yes | **no — must be mirrored** |
+
+`referenceViews()` sends up to **four** views of the same product — the hero shot
+plus any explicit front/side/back photograph — so the model can see the armrest
+profile and the base instead of inferring them from one 3/4 angle. Lifestyle
+shots are skipped: a photo of the chair already standing in another salon
+competes with "the first image is the salon".
+
+### Product images must be mirrored
+
+GPT Image 2 cannot fetch `comfortelfurniture.com` — it fails the whole task with
+"Image fetch failed. Check access settings or use our File Upload API instead."
+1.5 could, which is why this only surfaced on the switch. `mirrorAll()` in
+`kie.server.ts` downloads each reference and re-uploads it to kie's own storage,
+concurrently, with a short in-memory TTL cache. The room photo already went
+through that upload path; product references now do too.
+
+### The prompt budget
+
+`assemble()` in `visualize-prompt.ts` caps every prompt at `MAX_PROMPT_CHARS` and
+drops whole clauses in an explicit `DROP` priority order when over — never
+truncating mid-sentence, which would leave a dangling instruction.
+
+This exists because of a real outage. Adding the fidelity clauses pushed the
+`replace` prompt from 2432 to 3080 characters, past 1.5's hard 3000-char limit
+(measured: 3000 accepted, 3001 rejected). kie rejected `createTask` outright, so
+**every** render failed instantly, for free, with a message that never mentioned
+length. `replace` is the default mode, which is why it looked like "everything is
+broken". Nothing enforced the limit, so a wording change could silently break
+rendering — now it cannot.
 
 **Coverage is the remaining limit.** Of the 126 renderable products, only **34**
 have more than one usable view; the other **92** ship a single photograph, and
@@ -285,6 +322,7 @@ distinct copy so whoever is testing can self-diagnose.
 | ------------------------------- | ---------------------- | ------------------------------------- |
 | `ANTHROPIC_API_KEY`             | server                 | chat dead                             |
 | `KIE_API_KEY`                   | server                 | renders dead                          |
+| `KIE_IMAGE_RESOLUTION`          | server, optional       | defaults to `1K` (`2K`/`4K` cost more) |
 | `SUPABASE_SERVICE_ROLE_KEY`     | server                 | quote requests fail; render cache off |
 | `SUPABASE_URL`                  | server                 | as above                              |
 | `VITE_SUPABASE_URL`             | client, **build time** | see below                             |
