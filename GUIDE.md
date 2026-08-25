@@ -230,6 +230,81 @@ GPT Image 2 cannot fetch `comfortelfurniture.com` — it fails the whole task wi
 concurrently, with a short in-memory TTL cache. The room photo already went
 through that upload path; product references now do too.
 
+### Mirrors — reflections are handled
+
+A salon is a wall of mirrors, so most furniture appears twice: once as itself and
+again in every mirror that can see it. Half of those copies were going unedited,
+leaving the customer's old chair standing in every reflection.
+
+The fix is a framing, and the framing is the whole trick. Three attempts:
+
+| Instruction | Result |
+| --- | --- |
+| "rebuild the floor, skirting and wall behind it" (original — no mention of mirrors) | old chair left standing in every mirror |
+| "mirrors are part of this REMOVAL — remove all those copies" | stale reflections gone, mirrors left **empty** |
+| "treat each reflected ${subject} as ANOTHER ONE TO REPLACE" | **reflections show the new product** |
+
+Telling the model to *clear* a reflection gets it cleared and not repainted.
+Telling it the reflection is simply another instance of the thing being replaced
+puts it inside the operation the model is already good at, and the mirror comes
+back correct — including from a different angle than the camera sees.
+
+The clause names both failure modes explicitly, because each was a real
+observed output: a mirror still showing the old unit, and a mirror emptied of a
+chair that is still standing in front of it.
+
+Worth knowing: these models do not compute reflection geometry, they duplicate.
+Generated *fixtures* show the same tell — ask for a salon whose mirrors reflect
+the chairs and you get the chair's rear view in the mirror when the chair's back
+is to the camera, which is physically impossible. The replace framing works
+anyway because it never asks the model to reason about geometry.
+
+### Single-unit replacement is approximate — `replace_all` is the default
+
+`replace_all` has been correct in every live test: right product, right count,
+facings kept, mirrors consistent with the floor. Swapping a **single** unit in a
+room containing several identical ones has never been reliable.
+
+Four prompt formulations were tried against the same three-chair fixture, each
+more specific than the last:
+
+| Wording | What the render did |
+| --- | --- |
+| "remove only the one nearest the camera" | replaced every chair in the room |
+| hard count: "exactly ONE changes" | deleted the two it was told to leave |
+| + "mirror scope follows floor scope" | changed the wrong chair, left reflections stale |
+| + spatial "FOREGROUND" anchor | still wrong |
+
+The task is instance tracking — pick one of several identical objects and edit
+only it, and only its reflection. Image models do not do that from prose. The
+industry answer is a **mask**, and kie exposes none: `gpt-image-2-image-to-image`
+takes only `prompt`, `input_urls`, `aspect_ratio` and `resolution`. A `mask` field
+is not rejected, it is silently ignored, which is the worst failure mode.
+
+So the product stops fighting it. `replace_all` is the default in the dialog, in
+the chat marker fallback, and in the server validator. Single swap is offered
+last and labelled "Approximate — with several in view it may change a different
+one". The prompt keeps one plain sentence instead of the four failed stacked
+clauses; a test asserts the dead wordings do not come back.
+
+**If single-unit precision is needed later**, the fix is spatial input, not more
+words: have the customer tap the unit, crop that region client-side, render the
+crop alone (one unit in frame means nothing to disambiguate), and composite it
+back. The client already does canvas work in `resize-image.ts`.
+
+### Every copy is the same model
+
+Pinning count and facing said nothing about the copies matching *each other*, so
+each position became a fresh interpretation of the references and the chairs
+drifted apart. The prompt now states that all instances are one model, identical
+in silhouette, arms, base, seams and finish, differing **only** in size, angle
+and position.
+
+**Count is still not perfectly reliable.** Across three renders of the same
+three-station fixture, two kept three chairs and one produced four, despite the
+prompt pinning the count both in the install step and in the closing check.
+Treat exact count as likely, not guaranteed.
+
 ### The prompt budget
 
 `assemble()` in `visualize-prompt.ts` caps every prompt at `MAX_PROMPT_CHARS` and

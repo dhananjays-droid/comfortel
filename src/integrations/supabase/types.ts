@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      shared_designs: {
+        Row: {
+          created_at: string
+          id: string
+          product_ids: string[]
+          renders: Json
+          share_code: string
+          subtotal_cents: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_ids: string[]
+          renders?: Json
+          share_code: string
+          subtotal_cents?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_ids?: string[]
+          renders?: Json
+          share_code?: string
+          subtotal_cents?: number | null
+        }
+        Relationships: []
+      }
       enquiries: {
         Row: {
           business_name: string | null

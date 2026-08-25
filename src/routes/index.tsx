@@ -6,16 +6,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/BrandMark";
 import { ChatComposer } from "@/components/ChatComposer";
+import { EmptyState } from "@/components/EmptyState";
 import { EnquiryDialog, type EnquiryTarget } from "@/components/EnquiryDialog";
 import { Markdown } from "@/components/Markdown";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductSheet } from "@/components/ProductSheet";
+import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
+import { MAX_REFERENCES } from "@/lib/visualize-prompt";
+import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
+import { shareDesign } from "@/lib/design.functions";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
@@ -51,6 +56,8 @@ type VisualizeJob = {
   base64: string;
   mode: VisualizeMode;
   aspectRatio: string;
+  /** Which part of the salon this render covers, on a zone render. */
+  scene?: string | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -83,15 +90,15 @@ type Message =
       productId: string;
     };
 
-const SEED_PROMPTS = [
-  "I'm fitting out a four-chair salon from scratch",
-  "Black styling chairs under $500",
-  "Backwash units with an electric recline",
-  "A reception desk and waiting seating that go together",
-];
-
 const POLL_INTERVAL_MS = 3000;
-const MAX_POLLS = 40;
+
+/**
+ * 100 x 3s = 5 minutes. GPT Image 2 renders measured at 80-98s, against the old
+ * 40-poll (120s) ceiling — close enough that a slow render would have shown the
+ * customer a timeout for an image kie had generated and charged us for. The
+ * window costs nothing when renders are fast; it only has to outlast the worst.
+ */
+const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
@@ -109,6 +116,40 @@ type RoomPhoto = { image: ResizedImage; preview: string };
  * only way to get a true A/B — the same position occupied by each candidate in
  * turn — and is why they cost one generation each.
  */
+/**
+ * A zone-split render: one image per salon zone, from one plan and one photo.
+ *
+ * Each zone becomes its own entry, and entries already render in parallel and
+ * poll independently, so the split costs wall-clock nothing beyond the slowest
+ * zone. It costs one generation per zone, which is why it is opt-in.
+ */
+function buildZoneRenderMessage(
+  groups: Array<{ zone: string; label: string; scene: string; products: FullProduct[] }>,
+  photo: RoomPhoto,
+): { message: Message; entries: RenderEntry[] } {
+  const entries: RenderEntry[] = groups.map((group) => ({
+    id: nextId(),
+    job: {
+      productIds: group.products.map((p) => p.id),
+      base64: photo.image.base64,
+      mode: "refit_room" as VisualizeMode,
+      aspectRatio: photo.image.aspectRatio,
+      scene: group.scene,
+    },
+    vis: {
+      productIds: group.products.map((p) => p.id),
+      label: group.label,
+      before: photo.preview,
+      status: "loading",
+    },
+  }));
+
+  return {
+    message: { id: nextId(), role: "assistant", kind: "visualization", content: "", entries },
+    entries,
+  };
+}
+
 function buildRenderMessage(
   mode: VisualizeMode,
   productIds: string[],
@@ -172,7 +213,26 @@ function Index() {
   const [chatError, setChatError] = useState<string | null>(null);
 
   const [sheetProduct, setSheetProduct] = useState<FullProduct | null>(null);
-  const [photoProduct, setPhotoProduct] = useState<FullProduct | null>(null);
+  const [photoProducts, setPhotoProducts] = useState<FullProduct[]>([]);
+  /**
+   * The plan: ids the customer wants rendered together. Ids rather than
+   * products so it survives sessionStorage without duplicating the catalogue.
+   */
+  const [planIds, setPlanIds] = useState<string[]>([]);
+
+  const planProducts = planIds
+    .map((id) => getProduct(id))
+    .filter((p): p is FullProduct => Boolean(p));
+
+  const togglePlan = useCallback((product: FullProduct) => {
+    setPlanIds((prev) =>
+      prev.includes(product.id)
+        ? prev.filter((id) => id !== product.id)
+        : prev.length >= MAX_REFERENCES
+          ? prev
+          : [...prev, product.id],
+    );
+  }, []);
   const [enquiry, setEnquiry] = useState<EnquiryTarget | null>(null);
 
   // Attached in the composer but not yet sent.
@@ -183,6 +243,13 @@ function Index() {
   const lastHistoryRef = useRef<{ history: Message[]; photoAttached: boolean } | null>(null);
   // A ref, not state: runChat reads it in the same tick that send() sets it.
   const roomPhotoRef = useRef<RoomPhoto | null>(null);
+  /**
+   * Mirrors whether roomPhotoRef holds anything. The ref stays a ref because
+   * send() reads it in the same tick it is set; this state exists so the plan
+   * tray actually re-renders when a photo arrives, rather than showing a stale
+   * label until some unrelated update happens to flush it.
+   */
+  const [hasRoomPhoto, setHasRoomPhoto] = useState(false);
 
   // ---- session persistence ------------------------------------------------
   // Room photos are megabyte-scale data URLs, so they are dropped on the way
@@ -264,6 +331,7 @@ function Index() {
             roomImageBase64: job.base64,
             mode: job.mode,
             aspectRatio: job.aspectRatio,
+            ...(job.scene ? { scene: job.scene } : {}),
           },
         });
 
@@ -359,7 +427,10 @@ function Index() {
     const attached = pendingPhoto;
     // The attached photo becomes the session's room photo, so later turns can
     // render into it without the customer re-uploading.
-    if (attached) roomPhotoRef.current = attached;
+    if (attached) {
+      roomPhotoRef.current = attached;
+      setHasRoomPhoto(true);
+    }
 
     const content = trimmed || "Here is a photo of my salon. What would you put in this space?";
 
@@ -403,19 +474,20 @@ function Index() {
     }
   }, []);
 
-  function acceptPhoto(request: VisualizeRequest) {
-    setPhotoProduct(null);
-    const photo: RoomPhoto = { image: request.image, preview: request.preview };
-    roomPhotoRef.current = photo;
-
+  /**
+   * Kick off a render against a room photo we already hold.
+   *
+   * Split out of acceptPhoto so changing the plan and rendering again does not
+   * ask for the photo a second time: the room is already resized and, on the
+   * server, already uploaded to kie. Re-asking for it was the main reason
+   * comparing options felt like starting over.
+   */
+  function startRender(products: FullProduct[], mode: VisualizeMode, photo: RoomPhoto) {
     const verb =
-      request.mode === "add"
-        ? "into"
-        : request.mode === "replace_all"
-          ? "throughout"
-          : "in place of what's in";
+      mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
 
-    const { message, entries } = buildRenderMessage(request.mode, [request.product.id], photo);
+    const ids = products.map((p) => p.id);
+    const { message, entries } = buildRenderMessage(mode, ids, photo);
 
     setMessages((prev) => [
       ...prev,
@@ -423,13 +495,113 @@ function Index() {
         id: nextId(),
         role: "user",
         kind: "photo",
-        content: `Show me the ${request.product.name} ${verb} my space.`,
-        photo: request.preview,
-        productId: request.product.id,
+        content:
+          products.length > 1
+            ? `Fit my space out with these ${products.length} pieces.`
+            : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`,
+        photo: photo.preview,
+        productId: ids[0] as string,
       },
       message,
     ]);
     entries.forEach((entry) => void runRender(entry));
+  }
+
+  function acceptPhoto(request: VisualizeRequest) {
+    setPhotoProducts([]);
+    const photo: RoomPhoto = { image: request.image, preview: request.preview };
+    roomPhotoRef.current = photo;
+    setHasRoomPhoto(true);
+    startRender(request.products, request.mode, photo);
+  }
+
+  const runShare = useServerFn(shareDesign);
+
+  /**
+   * Share every finished render in one message, plus the products behind them.
+   *
+   * Unfinished renders are excluded rather than shared as blanks, and if none
+   * have finished there is nothing worth a link yet.
+   */
+  const shareRenders = useCallback(
+    async (entries: RenderEntry[]) => {
+      const renders = entries
+        .filter((e) => e.vis.status === "done" && e.vis.imageUrl)
+        .map((e) => ({ imageUrl: e.vis.imageUrl as string, label: e.vis.label }));
+
+      if (!renders.length) {
+        toast("Nothing to share yet", { description: "Wait for the render to finish." });
+        return;
+      }
+
+      const ids = [...new Set(entries.flatMap((e) => e.vis.productIds))];
+      const subtotal = ids.reduce((sum, id) => sum + (getProduct(id)?.price ?? 0), 0);
+
+      try {
+        const { code } = await runShare({
+          data: { productIds: ids, renders, subtotalCents: subtotal },
+        });
+        const url = `${window.location.origin}/d/${code}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          toast("Link copied", { description: url });
+        } catch {
+          // Clipboard access is denied in plenty of contexts; the link is the
+          // point, so show it rather than failing the whole share.
+          toast("Your share link", { description: url });
+        }
+      } catch {
+        toast("Couldn't create a share link", { description: "Please try again." });
+      }
+    },
+    [runShare],
+  );
+
+  /**
+   * Render the plan as one image per salon zone.
+   *
+   * Costs one generation per zone, so it is a separate button rather than
+   * something that happens automatically — the customer decides when a cluttered
+   * single frame is worth splitting.
+   */
+  function renderPlanByZone() {
+    if (!planProducts.length) return;
+    const photo = roomPhotoRef.current;
+    if (!photo) {
+      setPhotoProducts(planProducts);
+      return;
+    }
+
+    const groups = groupByZone(planProducts);
+    const { message, entries } = buildZoneRenderMessage(groups, photo);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "user",
+        kind: "photo",
+        content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
+        photo: photo.preview,
+        productId: planProducts[0]?.id ?? "",
+      },
+      message,
+    ]);
+    entries.forEach((entry) => void runRender(entry));
+  }
+
+  /**
+   * The plan's render button. Reuses the room photo when we have one so that
+   * adding a piece and looking again is one click, not another upload.
+   */
+  function renderPlan() {
+    if (!planProducts.length) return;
+    const photo = roomPhotoRef.current;
+    if (!photo) {
+      setPhotoProducts(planProducts);
+      return;
+    }
+    startRender(planProducts, planProducts.length > 1 ? "refit_room" : "replace_all", photo);
   }
 
   function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
@@ -451,7 +623,9 @@ function Index() {
     setMessages([]);
     setInput("");
     setPendingPhoto(null);
+    setPlanIds([]);
     roomPhotoRef.current = null;
+    setHasRoomPhoto(false);
     setChatError(null);
     setThinking(false);
     try {
@@ -490,7 +664,7 @@ function Index() {
 
       <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
         {empty ? (
-          <EmptyState onPick={send} />
+          <EmptyState onPick={send} onPickPhoto={pickPhoto} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -498,14 +672,17 @@ function Index() {
                 key={message.id}
                 message={message}
                 onOpenProduct={setSheetProduct}
-                onVisualize={setPhotoProduct}
+                planIds={planIds}
+                onTogglePlan={togglePlan}
+                onShareRenders={shareRenders}
+                onVisualize={(product) => setPhotoProducts([product])}
                 onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
                 onRetryRender={(entry) => {
                   // Without the original photo — after a page reload — the only
                   // honest retry is to ask for a new one.
                   if (!entry.job.base64) {
                     const product = getProduct(entry.job.productIds[0] ?? "");
-                    if (product) setPhotoProduct(product);
+                    if (product) setPhotoProducts([product]);
                     return;
                   }
                   void runRender(entry);
@@ -547,7 +724,17 @@ function Index() {
       </main>
 
       <div className="sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3">
-        <div className="mx-auto w-full max-w-[820px] px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-[820px] space-y-2.5 px-4 sm:px-6">
+          <PlanTray
+            products={planProducts}
+            onRemove={togglePlan}
+            onClear={() => setPlanIds([])}
+            onVisualize={renderPlan}
+            hasPhoto={hasRoomPhoto}
+            onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
+            zoneCount={groupByZone(planProducts).length}
+            onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
+          />
           <ChatComposer
             value={input}
             onChange={setInput}
@@ -570,7 +757,7 @@ function Index() {
         onClose={() => setSheetProduct(null)}
         onVisualize={(product) => {
           setSheetProduct(null);
-          setPhotoProduct(product);
+          setPhotoProducts([product]);
         }}
         onEnquire={(product) => {
           setSheetProduct(null);
@@ -579,9 +766,9 @@ function Index() {
       />
 
       <VisualizePhotoDialog
-        product={photoProduct}
-        open={photoProduct !== null}
-        onClose={() => setPhotoProduct(null)}
+        products={photoProducts}
+        open={photoProducts.length > 0}
+        onClose={() => setPhotoProducts([])}
         onSubmit={acceptPhoto}
       />
 
@@ -605,10 +792,16 @@ function MessageRow({
   onVisualize,
   onEnquire,
   onRetryRender,
+  planIds,
+  onTogglePlan,
+  onShareRenders,
 }: {
   message: Message;
   onOpenProduct: (product: FullProduct) => void;
   onVisualize: (product: FullProduct) => void;
+  planIds: string[];
+  onTogglePlan: (product: FullProduct) => void;
+  onShareRenders: (entries: RenderEntry[]) => void | Promise<void>;
   onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
   onRetryRender: (entry: RenderEntry) => void;
 }) {
@@ -658,6 +851,9 @@ function MessageRow({
                       onOpen={onOpenProduct}
                       onVisualize={onVisualize}
                       onEnquire={(p) => onEnquire(p)}
+                      inPlan={planIds.includes(id)}
+                      planFull={planIds.length >= MAX_REFERENCES}
+                      onTogglePlan={onTogglePlan}
                     />
                   );
                 })}
@@ -671,6 +867,7 @@ function MessageRow({
                   const entry = message.entries[index];
                   if (entry) onRetryRender(entry);
                 }}
+                onShare={() => void onShareRenders(message.entries)}
                 onEnquire={(index, imageUrl) => {
                   // A refit lists several products; the quote hangs off the lead one.
                   const id = message.entries[index]?.vis.productIds[0];
@@ -681,36 +878,6 @@ function MessageRow({
             ) : null}
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
-  return (
-    <div className="flex min-h-[58vh] flex-col justify-center py-10">
-      <div className="max-w-[560px]">
-        <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-ink-1 sm:text-3xl">
-          What are you fitting out?
-        </h1>
-        <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-          Tell us about the space — the area, how many stations, the look you&apos;re after. We will
-          pull the right pieces from the Comfortel range, and you can see any of them rendered into
-          a photo of your own salon.
-        </p>
-      </div>
-
-      <div className="mt-7 flex flex-wrap gap-2">
-        {SEED_PROMPTS.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            onClick={() => onPick(prompt)}
-            className="rounded-full border border-border bg-surface2 px-3.5 py-2 text-sm text-ink-2 transition-colors hover:border-border-strong hover:bg-muted hover:text-ink-1"
-          >
-            {prompt}
-          </button>
-        ))}
       </div>
     </div>
   );

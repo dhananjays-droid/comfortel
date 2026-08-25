@@ -15,8 +15,20 @@ export function isMultiReferenceMode(mode: VisualizeMode): boolean {
   return MULTI_REFERENCE_MODES.includes(mode);
 }
 
-/** refit_room and lineup render one image from several product references. */
-export const MAX_REFERENCES = 4;
+/**
+ * How many DIFFERENT products one render may contain.
+ *
+ * GPT Image 2 accepts 16 input images, and the room takes one, so the API
+ * allows 15. Ten is the product cap because the binding limit is not the API,
+ * it is fidelity: each additional product in a frame gets fewer pixels and the
+ * silhouettes start converging. Past roughly six the individual pieces stop
+ * being recognisable, so the UI warns beyond RECOMMENDED_REFERENCES and a
+ * zone-split is the better answer for a big plan.
+ */
+export const MAX_REFERENCES = 10;
+
+/** Above this, per-product fidelity is visibly worse. The UI says so. */
+export const RECOMMENDED_REFERENCES = 6;
 
 /**
  * Past its prompt limit kie rejects createTask outright with "The text length
@@ -105,6 +117,25 @@ function assemble(clauses: Clause[]): string {
   return lastStop > 0 ? cut.slice(0, lastStop + 1) : cut;
 }
 
+/**
+ * Mirrors ANGLE_PHRASE in product-views.ts. Duplicated on purpose: that module
+ * imports JSON and this one is reachable from the client bundle, which must not
+ * pull the data in. product-views.test.ts asserts the two stay in step.
+ *
+ * Typed by the literal union rather than `string`: this repo has
+ * noUncheckedIndexedAccess, so a string-keyed record would make every lookup
+ * `string | undefined`.
+ */
+type ViewAngleName = "hero" | "front" | "side" | "back" | "detail";
+
+const ANGLE_PHRASES: Record<ViewAngleName, string> = {
+  hero: "as the catalogue shows it",
+  front: "from the front",
+  side: "from the side",
+  back: "from the back",
+  detail: "in close-up detail",
+};
+
 const VIEW_ORDER: Array<[RegExp, string]> = [
   [/front/i, "from the front"],
   [/side/i, "from the side"],
@@ -123,6 +154,15 @@ export function referenceViews(
   product: VisualizeProduct,
   max = MAX_VIEWS,
 ): Array<{ url: string; angle: string }> {
+  // Classified data wins: it knows which photos are the same physical product,
+  // which a filename cannot. The classifier already orders these hero-first.
+  if (product.views?.length) {
+    return product.views.slice(0, max).map((v) => ({
+      url: v.url,
+      angle: ANGLE_PHRASES[v.angle],
+    }));
+  }
+
   const images = product.images ?? [];
   const out: Array<{ url: string; angle: string }> = [];
   const seen = new Set<string>();
@@ -158,6 +198,12 @@ export type VisualizeProduct = {
   replaces?: string | null;
   col?: string | null;
   colour?: string | null;
+  /**
+   * Verified reference views, attached by the caller from product-views.json.
+   * Optional so this module stays free of data imports — it is reachable from
+   * the client bundle.
+   */
+  views?: Array<{ url: string; angle: ViewAngleName }> | undefined;
 };
 
 const PLACEMENT: Record<string, string> = {
@@ -171,26 +217,57 @@ const PLACEMENT: Record<string, string> = {
 };
 
 /**
+ * Mirrors are the single most-reported remaining fault, and the cause was an
+ * omission: the removal step told the model to rebuild "the floor, skirting and
+ * wall behind" each unit and never mentioned reflections, while the realism
+ * clause only asked it to ADD a reflection of the new piece. So the old chair
+ * was deleted from the room and left standing in every mirror.
+ *
+ * A salon is the worst case for this — a wall of mirrors means most of the
+ * furniture appears twice, and half of those copies were going unedited.
+ */
+const MIRROR_REMOVAL = (subject: string, product: string, all: boolean): string =>
+  all
+    ? `Mirrors count as positions too. Every mirror reflects the salon, so each ${subject} appears more than once — once as itself and again in every mirror that can see it. Treat each reflected ${subject} as ANOTHER ONE TO REPLACE, not as something to erase: when you are done, each reflection shows the new ${product}, exactly as the floor does. Two failures to avoid — a mirror still showing an old ${subject}, and a mirror emptied of a chair that is still standing in front of it. Both are failed renders.`
+    : `Each mirror must agree with whatever now stands in front of it: a mirror facing the replaced ${subject} shows the new ${product}, and a mirror facing one you left alone still shows that original.`;
+
+/**
  * Removal is the instruction these models are most likely to soft-pedal: asked
  * to "replace" a chair they will often add the new one and leave the old one
  * standing next to it. So the removal is stated first, stated as its own step,
  * and restated as an acceptance check at the end — the two positions the model
  * weights most.
  */
-function removalClauses(subject: string, all: boolean): Clause[] {
+function removalClauses(subject: string, product: string, all: boolean): Clause[] {
   if (all) {
     return [
       req(
         `Step 1 — REMOVE: delete every ${subject} in this salon; not one may remain. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind where each stood.`,
       ),
+      req(MIRROR_REMOVAL(subject, product, true)),
     ];
   }
   return [
     req(
       `Step 1 — REMOVE: delete the existing ${subject} from this salon; it must be gone from the final image. Erase it completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind it.`,
     ),
-    opt(
-      `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others untouched.`,
+    req(MIRROR_REMOVAL(subject, product, false)),
+    // Scope, stated as a hard count. This was a droppable one-liner buried
+    // mid-prompt, and it did not hold: given several reference views of the new
+    // product, two of two renders broke it — one replaced every chair in the
+    // room, the other deleted the ones it was told to leave. More references
+    // appear to crowd out the scope instruction, so it is now required, phrased
+    // as a count, and restated in the closing check.
+    // Deliberately one plain sentence. Prose scoping was tried four times with
+    // escalating specificity — "nearest the camera", a hard count, mirror-scope
+    // rules, a spatial FOREGROUND anchor — and produced four different wrong
+    // outcomes: all chairs replaced, the others deleted, the wrong chair
+    // targeted, reflections left stale. The model cannot track one instance
+    // among identical units, and the fix for that is a mask, which this vendor
+    // does not expose. So single-replace is best-effort and `replace_all` is the
+    // default; see GUIDE.md.
+    req(
+      `Change only the ${subject} closest to the camera. Leave every other ${subject} in the room exactly as it is.`,
     ),
   ];
 }
@@ -206,8 +283,19 @@ function realismClauses(): Clause[] {
       `Critical realism: match the salon's perspective, camera angle and floor plane exactly — every piece sits flat on the floor with correct foreshortening, never floating or tilted.`,
     ),
     req(`Match the salon's lighting direction, intensity and colour temperature.`),
+    // Clearing stale reflections works and is kept. Making the model DRAW a
+    // reflection of the inserted piece does not: two escalating instructions
+    // were tested live — "show that piece from the angle that mirror sees" and
+    // an explicit "a mirror shows the OPPOSITE side to the camera" geometry
+    // rule — and both were ignored, leaving the mirrors simply empty. These
+    // models duplicate rather than reflect; they have no mirror geometry to
+    // instruct. Prompt text that demonstrably does nothing is dead weight, so
+    // only the clause that measurably changes the output stays.
+    req(
+      `No mirror may still show anything that was removed. A mirror must not reflect a piece that is no longer in the room.`,
+    ),
     opt(
-      `Render a reflection of any placed piece a mirror can see, a soft floor reflection of each base, and contact shadows matching the room's existing ones.`,
+      `Add a soft floor reflection of each base and contact shadows consistent with the room's existing ones.`,
       DROP.polish,
     ),
     req(
@@ -234,7 +322,7 @@ function describe(product: VisualizeProduct): string {
  * asking "what would my salon look like kitted out in Comfortel", so the
  * architecture is preserved and the furniture is swapped wholesale.
  */
-function buildRefitPrompt(products: VisualizeProduct[]): string {
+function buildRefitPrompt(products: VisualizeProduct[], scene?: string): string {
   const list = products.map((p, i) => `Image ${i + 2} is a ${describe(p)}`).join(". ");
 
   return assemble([
@@ -242,6 +330,15 @@ function buildRefitPrompt(products: VisualizeProduct[]): string {
       `The first image is a photograph of a real hair salon. The images after it are Comfortel product references. ${list}.`,
     ),
     req(`Refit this salon with the Comfortel products shown.`),
+    // A zone render must not invent the rest of the salon. Told it is the wash
+    // bay, the model stops adding styling chairs that are not in the references.
+    ...(scene
+      ? [
+          req(
+            `This render is of ${scene}. Fit out that part of the room only, using exactly the products in the references — do not add furniture of any other kind, and do not invent pieces for other areas.`,
+          ),
+        ]
+      : []),
     req(
       `Step 1 — REMOVE: strip out the salon's existing furniture — every styling chair, stool, trolley, mirror unit, reception desk and waiting seat visible. Remove each completely, including bases, hydraulic columns and footrests.`,
     ),
@@ -313,8 +410,12 @@ function buildLineupPrompt(products: VisualizeProduct[]): string {
  * missing. Takes a list because refit_room and lineup render one image from
  * several product references; the other modes use the first entry only.
  */
-export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMode): string {
-  if (mode === "refit_room") return buildRefitPrompt(products.slice(0, MAX_REFERENCES));
+export function buildSalonPrompt(
+  products: VisualizeProduct[],
+  mode: VisualizeMode,
+  scene?: string,
+): string {
+  if (mode === "refit_room") return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene);
   if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES));
 
   const product = products[0];
@@ -336,7 +437,7 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
   );
 
   if (replacing) {
-    clauses.push(...removalClauses(subject, all));
+    clauses.push(...removalClauses(subject, product.name, all));
     clauses.push(
       req(
         all
@@ -348,6 +449,12 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
       clauses.push(
         req(
           `Keep each station's original position, spacing and FACING — one angled towards the camera stays so, one seen from behind stays so — drawing the product from whichever angle that station needs.`,
+        ),
+        // Reported fault: the copies drifted. Pinning count and facing said
+        // nothing about the instances matching EACH OTHER, so the model treated
+        // each position as a fresh interpretation of the references.
+        req(
+          `Every ${product.name} you place is the same single model and must be identical to the others: same silhouette, same armrests, same base, same seams, same finish. Two chairs in this room differing in design is a failed render. Between positions they may differ ONLY in size, angle and position, as perspective requires.`,
         ),
       );
     }
@@ -381,6 +488,9 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     ),
     req(
       `Do not substitute a generic salon chair and do not borrow any part of the ${subject} you removed — that is a different model.`,
+    ),
+    req(
+      `Only the size, angle and position of the piece may differ from the reference images. Every other aspect of its design — proportions, armrests, base, seams, hardware and finish — must match them exactly.`,
     ),
   );
 
@@ -425,8 +535,8 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     clauses.push(
       req(
         all
-          ? `Before you finish, check twice: no original ${subject} remains and the count is unchanged; and every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one.`
-          : `Before you finish, check: the original ${subject} appears nowhere in the frame, and the ${product.name} stands in its place — not beside it, not in addition to it.`,
+          ? `Before you finish, check three things. One: no original ${subject} remains anywhere in the frame INCLUDING inside every mirror, and the count is unchanged. Two: every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one. Three: all of them are identical to each other, and each mirror reflects what is actually in front of it.`
+          : `Before you finish, check: the ${subject} you replaced is gone and the ${product.name} stands in its place, not beside it; every other ${subject} is untouched; and each mirror matches what is in front of it.`,
       ),
     );
   }
@@ -445,8 +555,9 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
 export function buildRenderRequest(
   products: VisualizeProduct[],
   mode: VisualizeMode,
+  scene?: string,
 ): { prompt: string; imageUrls: string[] } {
-  const prompt = buildSalonPrompt(products, mode);
+  const prompt = buildSalonPrompt(products, mode, scene);
 
   const imageUrls = isMultiReferenceMode(mode)
     ? // one hero shot per DIFFERENT product

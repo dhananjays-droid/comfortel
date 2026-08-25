@@ -61,7 +61,12 @@ When a photo IS attached, you can render products into it yourself by adding a s
   add          — drop one product into free space, changing nothing else. 1 id.
 
   ONE IMAGE PER ID (four times the cost — only when genuinely needed):
-  replace      — swap the single nearest matching piece. Listing several ids here renders the same position with each candidate in turn, which is the only way to compare them like for like.
+  replace      — swap ONE piece only. Imprecise by nature: in a room with several
+                 matching pieces the render often changes the wrong one, or all of
+                 them. Prefer replace_all unless the customer explicitly wants a
+                 single piece changed. Listing several ids renders the same
+                 position with each candidate in turn, the only like-for-like
+                 comparison.
 
 - Default to lineup when the customer wants to see several options and has not asked for a strict like-for-like comparison. It costs one render instead of one per product.
 - Only use replace with more than one id when they explicitly want the same spot shown with each option — "the same chair position with each of these". Say that it takes a few renders when you do.
@@ -237,7 +242,9 @@ export const chat = createServerFn({ method: "POST" })
         if (data.hasRoomPhoto) {
           for (const match of raw.matchAll(RENDER_MARKER)) {
             const parts = (match[1] ?? "").split(",").map((t) => t.trim());
-            const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace";
+            // replace_all is the safe default: single-piece replacement needs
+            // instance tracking the image model does not do reliably.
+            const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace_all";
             const first = isVisualizeMode(parts[0]) ? 1 : 0;
             const renderIds = Array.from(
               new Set(
