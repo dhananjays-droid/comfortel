@@ -80,3 +80,56 @@ describe("buildRenderRequest", () => {
     expect(prompt).toContain("identical to the others");
   });
 });
+
+describe("referenceViews with classified data", () => {
+  it("prefers supplied views over filename guessing", () => {
+    const views = referenceViews(
+      product({
+        images: ["https://x/hero.jpg", "https://x/IMG_2231.jpg"],
+        views: [
+          { url: "https://x/hero.jpg", angle: "hero" },
+          { url: "https://x/IMG_2231.jpg", angle: "back" },
+        ],
+      }),
+    );
+    expect(views.map((v) => v.angle)).toEqual(["as the catalogue shows it", "from the back"]);
+  });
+
+  it("honours the cap on supplied views", () => {
+    const views = referenceViews(
+      product({
+        images: [],
+        views: [
+          { url: "a", angle: "hero" },
+          { url: "b", angle: "front" },
+          { url: "c", angle: "side" },
+        ],
+      }),
+      2,
+    );
+    expect(views).toHaveLength(2);
+  });
+
+  it("falls back to filenames when no views are supplied", () => {
+    const views = referenceViews(
+      product({ images: ["https://x/hero.jpg", "https://x/chair-Back.jpg"] }),
+    );
+    expect(views.map((v) => v.angle)).toEqual(["as the catalogue shows it", "from the back"]);
+  });
+
+  it("uses classified views even when the filenames say nothing", () => {
+    const { imageUrls } = buildRenderRequest(
+      [
+        product({
+          images: ["https://x/6083_001.jpg", "https://x/6083_002.jpg"],
+          views: [
+            { url: "https://x/6083_001.jpg", angle: "hero" },
+            { url: "https://x/6083_002.jpg", angle: "side" },
+          ],
+        }),
+      ],
+      "replace",
+    );
+    expect(imageUrls).toEqual(["https://x/6083_001.jpg", "https://x/6083_002.jpg"]);
+  });
+});

@@ -105,6 +105,25 @@ function assemble(clauses: Clause[]): string {
   return lastStop > 0 ? cut.slice(0, lastStop + 1) : cut;
 }
 
+/**
+ * Mirrors ANGLE_PHRASE in product-views.ts. Duplicated on purpose: that module
+ * imports JSON and this one is reachable from the client bundle, which must not
+ * pull the data in. product-views.test.ts asserts the two stay in step.
+ *
+ * Typed by the literal union rather than `string`: this repo has
+ * noUncheckedIndexedAccess, so a string-keyed record would make every lookup
+ * `string | undefined`.
+ */
+type ViewAngleName = "hero" | "front" | "side" | "back" | "detail";
+
+const ANGLE_PHRASES: Record<ViewAngleName, string> = {
+  hero: "as the catalogue shows it",
+  front: "from the front",
+  side: "from the side",
+  back: "from the back",
+  detail: "in close-up detail",
+};
+
 const VIEW_ORDER: Array<[RegExp, string]> = [
   [/front/i, "from the front"],
   [/side/i, "from the side"],
@@ -123,6 +142,15 @@ export function referenceViews(
   product: VisualizeProduct,
   max = MAX_VIEWS,
 ): Array<{ url: string; angle: string }> {
+  // Classified data wins: it knows which photos are the same physical product,
+  // which a filename cannot. The classifier already orders these hero-first.
+  if (product.views?.length) {
+    return product.views.slice(0, max).map((v) => ({
+      url: v.url,
+      angle: ANGLE_PHRASES[v.angle],
+    }));
+  }
+
   const images = product.images ?? [];
   const out: Array<{ url: string; angle: string }> = [];
   const seen = new Set<string>();
@@ -158,6 +186,12 @@ export type VisualizeProduct = {
   replaces?: string | null;
   col?: string | null;
   colour?: string | null;
+  /**
+   * Verified reference views, attached by the caller from product-views.json.
+   * Optional so this module stays free of data imports — it is reachable from
+   * the client bundle.
+   */
+  views?: Array<{ url: string; angle: ViewAngleName }> | undefined;
 };
 
 const PLACEMENT: Record<string, string> = {
