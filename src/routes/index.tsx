@@ -1,17 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, RefreshCw, SquarePen } from "lucide-react";
+import { toast } from "sonner";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { BrandMark } from "@/components/BrandMark";
+import { ChatComposer } from "@/components/ChatComposer";
+import { EnquiryDialog, type EnquiryTarget } from "@/components/EnquiryDialog";
+import { Markdown } from "@/components/Markdown";
 import { ProductCard } from "@/components/ProductCard";
-import { VisualizeModal } from "@/components/VisualizeModal";
+import { ProductSheet } from "@/components/ProductSheet";
+import { ProductStrip } from "@/components/ProductStrip";
+import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
+import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { getProduct, type FullProduct } from "@/lib/catalog";
+import { chat, type ChatMessageInput } from "@/lib/chat.functions";
+import { resizeImage, type ResizedImage } from "@/lib/resize-image";
+import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
+import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
-const TITLE = "Comfortel — Product Discovery Assistant";
+const TITLE = "Comfortel — Salon Furniture Assistant";
 const DESCRIPTION =
-  "Chat with our assistant to find salon and spa furniture, then see any piece placed in a photo of your own space.";
+  "Chat with a Comfortel specialist to find salon, barber and spa furniture, see any piece rendered into a photo of your own space, and request a quote.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,17 +38,683 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-  productIds?: string[];
+// ---------------------------------------------------------------------------
+// message model
+// ---------------------------------------------------------------------------
+// Every message carries a plain `content` string, which is what gets replayed
+// to the model as history. The rich payloads hang off that so the transcript
+// the customer reads and the transcript the model reads never drift apart.
+
+type VisualizeJob = {
+  /** One id for the placement modes; several for a refit or a lineup. */
+  productIds: string[];
+  base64: string;
+  mode: VisualizeMode;
+  aspectRatio: string;
 };
 
+/** One render inside a visualization message. A comparison set holds several. */
+type RenderEntry = { id: string; vis: VisualizationState; job: VisualizeJob };
+
+type Message =
+  | { id: string; role: "user"; kind: "text"; content: string }
+  | {
+      id: string;
+      role: "user";
+      kind: "photo";
+      content: string;
+      photo: string;
+      productId: string;
+    }
+  | { id: string; role: "assistant"; kind: "text"; content: string; productIds?: string[] }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "visualization";
+      content: string;
+      entries: RenderEntry[];
+    }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "receipt";
+      content: string;
+      reference: string;
+      productId: string;
+    };
+
 const SEED_PROMPTS = [
-  "Show me chairs for a small living room",
-  "I need something to brighten up a dark corner",
-  "What works with a wooden dining table?",
+  "I'm fitting out a four-chair salon from scratch",
+  "Black styling chairs under $500",
+  "Backwash units with an electric recline",
+  "A reception desk and waiting seating that go together",
 ];
+
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLLS = 40;
+const STORAGE_KEY = "comfortel.chat.v1";
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+let seq = 0;
+const nextId = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`;
+
+/** The customer's salon photo, held for the session so later turns can reuse it. */
+type RoomPhoto = { image: ResizedImage; preview: string };
+
+/**
+ * Turns a render request into one assistant message.
+ *
+ * refit_room and lineup each produce a SINGLE image from several product
+ * references. The placement modes render one image per product, which is the
+ * only way to get a true A/B — the same position occupied by each candidate in
+ * turn — and is why they cost one generation each.
+ */
+function buildRenderMessage(
+  mode: VisualizeMode,
+  productIds: string[],
+  photo: RoomPhoto,
+): { message: Message; entries: RenderEntry[] } {
+  const base = {
+    base64: photo.image.base64,
+    mode,
+    aspectRatio: photo.image.aspectRatio,
+  };
+
+  // refit_room and lineup are ONE image built from several references. Every
+  // other mode renders each product separately, which is what a true A/B needs
+  // and is why it costs one generation per product.
+  const groups: string[][] = isMultiReferenceMode(mode)
+    ? [productIds]
+    : productIds.map((id) => [id]);
+
+  const entries: RenderEntry[] = groups.map((ids) => ({
+    id: nextId(),
+    job: { ...base, productIds: ids },
+    vis: {
+      productIds: ids,
+      label:
+        mode === "refit_room"
+          ? "Your salon, refitted"
+          : mode === "lineup"
+            ? `${ids.length} options in your space`
+            : (getProduct(ids[0]!)?.name ?? "Your render"),
+      before: photo.preview,
+      status: "loading",
+    },
+  }));
+
+  const names = productIds.map((id) => getProduct(id)?.name).filter(Boolean);
+  const content =
+    mode === "refit_room"
+      ? "Here is your salon refitted with those Comfortel pieces."
+      : mode === "lineup"
+        ? // Naming them in order is what makes the single image readable — without
+          // it the customer cannot tell which chair is which.
+          `Here they are in your space, left to right: ${names.join(", ")}.`
+        : entries.length > 1
+          ? `Here are ${entries.length} options rendered into your space.`
+          : `Here is the ${entries[0]?.vis.label} rendered into your space.`;
+
+  return {
+    message: { id: nextId(), role: "assistant", kind: "visualization", content, entries },
+    entries,
+  };
+}
+
+function Index() {
+  const sendChat = useServerFn(chat);
+  const startVisualize = useServerFn(visualizeStart);
+  const pollVisualize = useServerFn(visualizeStatus);
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [chatFailed, setChatFailed] = useState(false);
+
+  const [sheetProduct, setSheetProduct] = useState<FullProduct | null>(null);
+  const [photoProduct, setPhotoProduct] = useState<FullProduct | null>(null);
+  const [enquiry, setEnquiry] = useState<EnquiryTarget | null>(null);
+
+  // Attached in the composer but not yet sent.
+  const [pendingPhoto, setPendingPhoto] = useState<RoomPhoto | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+
+  const endRef = useRef<HTMLDivElement>(null);
+  const lastHistoryRef = useRef<{ history: Message[]; photoAttached: boolean } | null>(null);
+  // A ref, not state: runChat reads it in the same tick that send() sets it.
+  const roomPhotoRef = useRef<RoomPhoto | null>(null);
+
+  // ---- session persistence ------------------------------------------------
+  // Room photos are megabyte-scale data URLs, so they are dropped on the way
+  // into storage rather than blowing the quota. A rehydrated render still shows
+  // its result; only the before/after toggle is unavailable.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) setMessages(JSON.parse(raw) as Message[]);
+    } catch {
+      /* a corrupt or unavailable store just means an empty thread */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const persistable = messages
+        .filter((m, i) => {
+          // An unfinished render can't be resumed after a reload, so it is not
+          // stored — and neither is the photo request that produced it, or the
+          // rehydrated thread would show a question with no answer.
+          if (m.kind === "visualization") return m.entries.every((e) => e.vis.status === "done");
+          if (m.kind === "photo") {
+            const reply = messages[i + 1];
+            return (
+              reply?.kind !== "visualization" || reply.entries.every((e) => e.vis.status === "done")
+            );
+          }
+          return true;
+        })
+        .map((m) => {
+          if (m.kind === "photo") return { ...m, photo: "" };
+          if (m.kind === "visualization") {
+            return {
+              ...m,
+              entries: m.entries.map((e) => ({
+                ...e,
+                vis: { ...e.vis, before: "" },
+                job: { ...e.job, base64: "" },
+              })),
+            };
+          }
+          return m;
+        });
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(persistable));
+    } catch {
+      /* over quota or storage disabled — the thread still works in memory */
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, thinking]);
+
+  const patchRender = useCallback((entryId: string, patch: Partial<VisualizationState>) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.kind === "visualization"
+          ? {
+              ...m,
+              entries: m.entries.map((e) =>
+                e.id === entryId ? { ...e, vis: { ...e.vis, ...patch } } : e,
+              ),
+            }
+          : m,
+      ),
+    );
+  }, []);
+
+  // ---- render -------------------------------------------------------------
+  const runRender = useCallback(
+    async (entry: RenderEntry) => {
+      const { id, job } = entry;
+      patchRender(id, { status: "loading", progress: 0, error: undefined });
+      try {
+        const started = await startVisualize({
+          data: {
+            productIds: job.productIds,
+            roomImageBase64: job.base64,
+            mode: job.mode,
+            aspectRatio: job.aspectRatio,
+          },
+        });
+
+        if (started.imageUrl) {
+          patchRender(id, { status: "done", imageUrl: started.imageUrl });
+          return;
+        }
+        if (!started.taskId) throw new Error("no task id");
+
+        for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          const res = await pollVisualize({ data: { taskId: started.taskId } });
+          if (res.done && res.imageUrl) {
+            patchRender(id, { status: "done", imageUrl: res.imageUrl });
+            return;
+          }
+          patchRender(id, { progress: res.progress ?? 0 });
+        }
+        patchRender(id, {
+          status: "error",
+          error: "This is taking longer than expected. Please try again.",
+        });
+      } catch {
+        patchRender(id, {
+          status: "error",
+          error: "We couldn't place that piece in your space just now.",
+        });
+      }
+    },
+    [patchRender, pollVisualize, startVisualize],
+  );
+
+  // ---- chat ---------------------------------------------------------------
+  const runChat = useCallback(
+    async (history: Message[], photoAttached: boolean) => {
+      setThinking(true);
+      setChatFailed(false);
+      lastHistoryRef.current = { history, photoAttached };
+      try {
+        const payload: ChatMessageInput[] = history
+          .filter((m) => m.content.trim().length > 0)
+          .slice(-12)
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        const res = await sendChat({
+          data: { messages: payload, hasRoomPhoto: photoAttached },
+        });
+
+        const next: Message[] = [
+          ...history,
+          {
+            id: nextId(),
+            role: "assistant",
+            kind: "text",
+            content: res.text,
+            productIds: res.productIds,
+          },
+        ];
+
+        // The assistant can ask for renders itself. It only ever gets here when
+        // a photo is attached — the server refuses to parse the marker otherwise.
+        const photo = roomPhotoRef.current;
+        if (res.render && photo) {
+          const { message, entries } = buildRenderMessage(
+            res.render.mode,
+            res.render.productIds,
+            photo,
+          );
+          if (entries.length) {
+            next.push(message);
+            setMessages(next);
+            entries.forEach((entry) => void runRender(entry));
+            return;
+          }
+        }
+
+        setMessages(next);
+      } catch {
+        setChatFailed(true);
+      } finally {
+        setThinking(false);
+      }
+    },
+    [sendChat, runRender],
+  );
+
+  function send(text: string) {
+    const trimmed = text.trim();
+    if (thinking) return;
+    // A photo on its own is a valid message, and so is text on its own.
+    if (!trimmed && !pendingPhoto) return;
+
+    const attached = pendingPhoto;
+    // The attached photo becomes the session's room photo, so later turns can
+    // render into it without the customer re-uploading.
+    if (attached) roomPhotoRef.current = attached;
+
+    const content = trimmed || "Here is a photo of my salon. What would you put in this space?";
+
+    const next: Message[] = [
+      ...messages,
+      attached
+        ? {
+            id: nextId(),
+            role: "user",
+            kind: "photo",
+            content,
+            photo: attached.preview,
+            productId: "",
+          }
+        : { id: nextId(), role: "user", kind: "text", content },
+    ];
+    setMessages(next);
+    setInput("");
+    setPendingPhoto(null);
+    void runChat(next, roomPhotoRef.current !== null);
+  }
+
+  const pickPhoto = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast("That file isn't an image", { description: "Pick a photo of your space." });
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      toast("That photo is over 10MB", { description: "Try a smaller one." });
+      return;
+    }
+    setPhotoLoading(true);
+    try {
+      const image = await resizeImage(file);
+      setPendingPhoto({ image, preview: `data:image/jpeg;base64,${image.base64}` });
+    } catch {
+      toast("We couldn't read that photo", { description: "Try a different one." });
+    } finally {
+      setPhotoLoading(false);
+    }
+  }, []);
+
+  function acceptPhoto(request: VisualizeRequest) {
+    setPhotoProduct(null);
+    const photo: RoomPhoto = { image: request.image, preview: request.preview };
+    roomPhotoRef.current = photo;
+
+    const verb =
+      request.mode === "add"
+        ? "into"
+        : request.mode === "replace_all"
+          ? "throughout"
+          : "in place of what's in";
+
+    const { message, entries } = buildRenderMessage(request.mode, [request.product.id], photo);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "user",
+        kind: "photo",
+        content: `Show me the ${request.product.name} ${verb} my space.`,
+        photo: request.preview,
+        productId: request.product.id,
+      },
+      message,
+    ]);
+    entries.forEach((entry) => void runRender(entry));
+  }
+
+  function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
+    setEnquiry(null);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "assistant",
+        kind: "receipt",
+        content: `The quote request for the ${product.name} is in, reference ${reference}. The team will be in touch by email.`,
+        reference,
+        productId: product.id,
+      },
+    ]);
+  }
+
+  function reset() {
+    setMessages([]);
+    setInput("");
+    setPendingPhoto(null);
+    roomPhotoRef.current = null;
+    setChatFailed(false);
+    setThinking(false);
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* nothing to clear */
+    }
+  }
+
+  const empty = messages.length === 0 && !thinking;
+
+  return (
+    <div className="flex min-h-[100dvh] flex-col bg-background">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-[820px] items-center gap-3 px-4 py-3 sm:px-6">
+          <BrandMark className="h-8 w-8 text-lg" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold leading-tight tracking-tight text-ink-1">
+              Comfortel
+            </p>
+            <p className="truncate text-xs text-ink-3">Salon, barber &amp; spa furniture</p>
+          </div>
+          {!empty ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={reset}
+              className="h-8 gap-1.5 px-2.5 text-xs text-ink-3 hover:bg-muted hover:text-ink-1"
+            >
+              <SquarePen className="h-3.5 w-3.5" />
+              New chat
+            </Button>
+          ) : null}
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
+        {empty ? (
+          <EmptyState onPick={send} />
+        ) : (
+          <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
+            {messages.map((message) => (
+              <MessageRow
+                key={message.id}
+                message={message}
+                onOpenProduct={setSheetProduct}
+                onVisualize={setPhotoProduct}
+                onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
+                onRetryRender={(entry) => {
+                  // Without the original photo — after a page reload — the only
+                  // honest retry is to ask for a new one.
+                  if (!entry.job.base64) {
+                    const product = getProduct(entry.job.productIds[0] ?? "");
+                    if (product) setPhotoProduct(product);
+                    return;
+                  }
+                  void runRender(entry);
+                }}
+              />
+            ))}
+
+            {thinking ? (
+              <div className="flex gap-3">
+                <BrandMark className="mt-0.5 h-6 w-6" />
+                <TypingDots />
+              </div>
+            ) : null}
+
+            {chatFailed ? (
+              <div className="flex gap-3">
+                <BrandMark className="mt-0.5 h-6 w-6" />
+                <div className="space-y-2">
+                  <p className="text-sm text-ink-2">Something went wrong — try that again?</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-border bg-transparent text-ink-1 shadow-none hover:bg-muted"
+                    onClick={() => {
+                      const last = lastHistoryRef.current;
+                      if (last) void runChat(last.history, last.photoAttached);
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div ref={endRef} />
+          </div>
+        )}
+      </main>
+
+      <div className="sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3">
+        <div className="mx-auto w-full max-w-[820px] px-4 sm:px-6">
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onSend={() => send(input)}
+            disabled={thinking}
+            photo={pendingPhoto?.preview ?? null}
+            photoLoading={photoLoading}
+            onPickPhoto={pickPhoto}
+            onClearPhoto={() => setPendingPhoto(null)}
+          />
+          <p className="mt-2 text-center text-[11px] text-ink-4">
+            Renders are AI approximations — check dimensions before you order.
+          </p>
+        </div>
+      </div>
+
+      <ProductSheet
+        product={sheetProduct}
+        open={sheetProduct !== null}
+        onClose={() => setSheetProduct(null)}
+        onVisualize={(product) => {
+          setSheetProduct(null);
+          setPhotoProduct(product);
+        }}
+        onEnquire={(product) => {
+          setSheetProduct(null);
+          setEnquiry({ product });
+        }}
+      />
+
+      <VisualizePhotoDialog
+        product={photoProduct}
+        open={photoProduct !== null}
+        onClose={() => setPhotoProduct(null)}
+        onSubmit={acceptPhoto}
+      />
+
+      <EnquiryDialog
+        target={enquiry}
+        open={enquiry !== null}
+        onClose={() => setEnquiry(null)}
+        onSubmitted={onEnquirySubmitted}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// pieces
+// ---------------------------------------------------------------------------
+
+function MessageRow({
+  message,
+  onOpenProduct,
+  onVisualize,
+  onEnquire,
+  onRetryRender,
+}: {
+  message: Message;
+  onOpenProduct: (product: FullProduct) => void;
+  onVisualize: (product: FullProduct) => void;
+  onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
+  onRetryRender: (entry: RenderEntry) => void;
+}) {
+  if (message.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] space-y-2">
+          {message.kind === "photo" && message.photo ? (
+            <img
+              src={message.photo}
+              alt="The space you uploaded"
+              className="ml-auto max-h-56 rounded-2xl border border-border object-cover"
+            />
+          ) : null}
+          <p className="ml-auto w-fit rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-sm leading-relaxed text-ink-1">
+            {message.content}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-3">
+      <BrandMark className="mt-0.5 h-6 w-6" />
+      <div className="min-w-0 flex-1 space-y-3">
+        {message.kind === "receipt" ? (
+          <div className="flex max-w-[440px] items-start gap-2.5 rounded-2xl border border-border bg-primary-soft px-3.5 py-3">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-1" />
+            <p className="text-sm leading-relaxed text-ink-1">{message.content}</p>
+          </div>
+        ) : (
+          <>
+            {message.content && message.kind !== "visualization" ? (
+              <Markdown text={message.content} />
+            ) : null}
+
+            {message.kind === "text" && message.productIds?.length ? (
+              <ProductStrip>
+                {message.productIds.map((id) => {
+                  const product = getProduct(id);
+                  if (!product) return null;
+                  return (
+                    <ProductCard
+                      key={id}
+                      product={product}
+                      onOpen={onOpenProduct}
+                      onVisualize={onVisualize}
+                      onEnquire={(p) => onEnquire(p)}
+                    />
+                  );
+                })}
+              </ProductStrip>
+            ) : null}
+
+            {message.kind === "visualization" ? (
+              <VisualizationMessage
+                states={message.entries.map((e) => e.vis)}
+                onRetry={(index) => {
+                  const entry = message.entries[index];
+                  if (entry) onRetryRender(entry);
+                }}
+                onEnquire={(index, imageUrl) => {
+                  // A refit lists several products; the quote hangs off the lead one.
+                  const id = message.entries[index]?.vis.productIds[0];
+                  const product = id ? getProduct(id) : undefined;
+                  if (product) onEnquire(product, imageUrl);
+                }}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+  return (
+    <div className="flex min-h-[58vh] flex-col justify-center py-10">
+      <div className="max-w-[560px]">
+        <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-ink-1 sm:text-3xl">
+          What are you fitting out?
+        </h1>
+        <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
+          Tell us about the space — the area, how many stations, the look you&apos;re after. We will
+          pull the right pieces from the Comfortel range, and you can see any of them rendered into
+          a photo of your own salon.
+        </p>
+      </div>
+
+      <div className="mt-7 flex flex-wrap gap-2">
+        {SEED_PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            onClick={() => onPick(prompt)}
+            className="rounded-full border border-border bg-surface2 px-3.5 py-2 text-sm text-ink-2 transition-colors hover:border-border-strong hover:bg-muted hover:text-ink-1"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function TypingDots() {
   return (
@@ -49,165 +726,6 @@ function TypingDots() {
           style={{ animationDelay: `${i * 0.15}s` }}
         />
       ))}
-    </div>
-  );
-}
-
-function Index() {
-  const sendChat = useServerFn(chat);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [visualizing, setVisualizing] = useState<FullProduct | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const lastSentRef = useRef<Message[] | null>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, loading]);
-
-  async function run(history: Message[]) {
-    setLoading(true);
-    setFailed(false);
-    lastSentRef.current = history;
-    try {
-      const payload: ChatMessageInput[] = history
-        .slice(-12)
-        .map((m) => ({ role: m.role, content: m.content }));
-      const res = await sendChat({ data: { messages: payload } });
-      setMessages([
-        ...history,
-        { role: "assistant", content: res.text, productIds: res.productIds },
-      ]);
-    } catch {
-      setFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function send(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || loading) return;
-    const next: Message[] = [...messages, { role: "user", content: trimmed }];
-    setMessages(next);
-    setInput("");
-    void run(next);
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto flex min-h-screen w-full max-w-[780px] flex-col px-4 sm:px-6">
-        <header className="border-b border-border py-6">
-          <h1 className="text-lg font-semibold tracking-tight text-ink-1">Comfortel</h1>
-          <p className="mt-1 text-sm text-ink-3">
-            Tell us about your space — we&apos;ll find the pieces that fit.
-          </p>
-        </header>
-
-        <main className="flex-1 py-8">
-          {messages.length === 0 && !loading ? (
-            <div className="space-y-5">
-              <p className="text-sm text-ink-2">
-                What are you looking for today? Start with one of these, or just describe your space.
-              </p>
-              <div className="flex flex-col gap-2">
-                {SEED_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => send(prompt)}
-                    className="rounded-xl border border-border bg-surface px-4 py-3 text-left text-sm text-ink-1 transition-colors hover:bg-primary-soft"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {messages.map((message, index) =>
-                message.role === "user" ? (
-                  <div key={index} className="flex justify-end">
-                    <p className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-sm text-ink-1">
-                      {message.content}
-                    </p>
-                  </div>
-                ) : (
-                  <div key={index} className="space-y-4">
-                    {message.content ? (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-1">
-                        {message.content}
-                      </p>
-                    ) : null}
-                    {message.productIds && message.productIds.length > 0 ? (
-                      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-                        {message.productIds.map((id) => {
-                          const product = getProduct(id);
-                          if (!product) return null;
-                          return (
-                            <ProductCard
-                              key={id}
-                              product={product}
-                              onVisualize={setVisualizing}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                ),
-              )}
-
-              {loading ? <TypingDots /> : null}
-
-              {failed ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-ink-2">Something went wrong — try that again?</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-border"
-                    onClick={() => lastSentRef.current && void run(lastSentRef.current)}
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          )}
-          <div ref={endRef} />
-        </main>
-
-        <form
-          className="sticky bottom-0 flex gap-2 border-t border-border bg-background py-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send(input);
-          }}
-        >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe what you're looking for"
-            className="h-11 border-border bg-surface2 text-sm text-ink-1 placeholder:text-ink-4"
-          />
-          <Button
-            type="submit"
-            disabled={loading || input.trim().length === 0}
-            className="h-11 bg-primary px-5 text-primary-foreground hover:bg-primary-strong"
-          >
-            Send
-          </Button>
-        </form>
-      </div>
-
-      <VisualizeModal
-        product={visualizing}
-        open={visualizing !== null}
-        onClose={() => setVisualizing(null)}
-      />
     </div>
   );
 }
