@@ -230,6 +230,45 @@ GPT Image 2 cannot fetch `comfortelfurniture.com` — it fails the whole task wi
 concurrently, with a short in-memory TTL cache. The room photo already went
 through that upload path; product references now do too.
 
+### Mirrors — what works and what does not
+
+A salon is a wall of mirrors, so most furniture appears twice: once as itself and
+again in every mirror that can see it. Half of those copies were going unedited.
+
+**Fixed.** Removal now covers mirrors explicitly. The old instruction said to
+rebuild "the floor, skirting and wall behind" each unit and never mentioned
+reflections, so the old chair was deleted from the room and left standing in the
+mirror. Stating that mirrors are part of the removal clears them.
+
+**Not fixed, and not fixable by prompting.** Getting the model to *draw* a
+reflection of the inserted piece does not work. Two instructions were tested
+live — "show that piece from the angle that mirror sees" and an explicit "a
+mirror shows the OPPOSITE side to the camera; reproducing the camera's view
+inside the mirror is a duplicate, not a reflection" — and both were ignored,
+leaving the mirrors simply empty. These models duplicate rather than reflect;
+there is no mirror geometry to instruct. The same fault is visible in generated
+*fixtures*: ask for a salon whose mirrors reflect the chairs and you get the
+chair's rear view in the mirror when the chair's back is to the camera, which is
+physically impossible.
+
+So the shipped behaviour is: **no stale product in a mirror, but no reflection of
+the new one either.** An empty mirror is wrong, just less wrong than a mirror
+reflecting a chair the customer no longer owns. Only the clause that measurably
+changes the output is kept — dead prompt text is a liability, not insurance.
+
+### Every copy is the same model
+
+Pinning count and facing said nothing about the copies matching *each other*, so
+each position became a fresh interpretation of the references and the chairs
+drifted apart. The prompt now states that all instances are one model, identical
+in silhouette, arms, base, seams and finish, differing **only** in size, angle
+and position.
+
+**Count is still not perfectly reliable.** Across three renders of the same
+three-station fixture, two kept three chairs and one produced four, despite the
+prompt pinning the count both in the install step and in the closing check.
+Treat exact count as likely, not guaranteed.
+
 ### The prompt budget
 
 `assemble()` in `visualize-prompt.ts` caps every prompt at `MAX_PROMPT_CHARS` and

@@ -171,6 +171,21 @@ const PLACEMENT: Record<string, string> = {
 };
 
 /**
+ * Mirrors are the single most-reported remaining fault, and the cause was an
+ * omission: the removal step told the model to rebuild "the floor, skirting and
+ * wall behind" each unit and never mentioned reflections, while the realism
+ * clause only asked it to ADD a reflection of the new piece. So the old chair
+ * was deleted from the room and left standing in every mirror.
+ *
+ * A salon is the worst case for this — a wall of mirrors means most of the
+ * furniture appears twice, and half of those copies were going unedited.
+ */
+const MIRROR_REMOVAL = (subject: string, all: boolean): string =>
+  all
+    ? `Mirrors are part of this removal. Every mirror in the room reflects the salon, so each ${subject} appears more than once — once as itself and again in every mirror that can see it. Remove ALL of those copies. A mirror still showing an old ${subject} is a failed render, even when the floor is correct.`
+    : `Mirrors are part of this removal. If any mirror reflects the ${subject} you are removing, clear it from that reflection too — deleting the chair from the floor but leaving it standing in the mirror is a failed render.`;
+
+/**
  * Removal is the instruction these models are most likely to soft-pedal: asked
  * to "replace" a chair they will often add the new one and leave the old one
  * standing next to it. So the removal is stated first, stated as its own step,
@@ -183,12 +198,14 @@ function removalClauses(subject: string, all: boolean): Clause[] {
       req(
         `Step 1 — REMOVE: delete every ${subject} in this salon; not one may remain. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind where each stood.`,
       ),
+      req(MIRROR_REMOVAL(subject, true)),
     ];
   }
   return [
     req(
       `Step 1 — REMOVE: delete the existing ${subject} from this salon; it must be gone from the final image. Erase it completely — base, hydraulic column, footrest and castors — and rebuild the floor, skirting and wall behind it.`,
     ),
+    req(MIRROR_REMOVAL(subject, false)),
     opt(
       `If more than one ${subject} is visible, remove only the one nearest the camera and leave the others untouched.`,
     ),
@@ -206,8 +223,19 @@ function realismClauses(): Clause[] {
       `Critical realism: match the salon's perspective, camera angle and floor plane exactly — every piece sits flat on the floor with correct foreshortening, never floating or tilted.`,
     ),
     req(`Match the salon's lighting direction, intensity and colour temperature.`),
+    // Clearing stale reflections works and is kept. Making the model DRAW a
+    // reflection of the inserted piece does not: two escalating instructions
+    // were tested live — "show that piece from the angle that mirror sees" and
+    // an explicit "a mirror shows the OPPOSITE side to the camera" geometry
+    // rule — and both were ignored, leaving the mirrors simply empty. These
+    // models duplicate rather than reflect; they have no mirror geometry to
+    // instruct. Prompt text that demonstrably does nothing is dead weight, so
+    // only the clause that measurably changes the output stays.
+    req(
+      `No mirror may still show anything that was removed. A mirror must not reflect a piece that is no longer in the room.`,
+    ),
     opt(
-      `Render a reflection of any placed piece a mirror can see, a soft floor reflection of each base, and contact shadows matching the room's existing ones.`,
+      `Add a soft floor reflection of each base and contact shadows consistent with the room's existing ones.`,
       DROP.polish,
     ),
     req(
@@ -349,6 +377,12 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
         req(
           `Keep each station's original position, spacing and FACING — one angled towards the camera stays so, one seen from behind stays so — drawing the product from whichever angle that station needs.`,
         ),
+        // Reported fault: the copies drifted. Pinning count and facing said
+        // nothing about the instances matching EACH OTHER, so the model treated
+        // each position as a fresh interpretation of the references.
+        req(
+          `Every ${product.name} you place is the same single model and must be identical to the others: same silhouette, same armrests, same base, same seams, same finish. Two chairs in this room differing in design is a failed render. Between positions they may differ ONLY in size, angle and position, as perspective requires.`,
+        ),
       );
     }
   } else {
@@ -381,6 +415,9 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     ),
     req(
       `Do not substitute a generic salon chair and do not borrow any part of the ${subject} you removed — that is a different model.`,
+    ),
+    req(
+      `Only the size, angle and position of the piece may differ from the reference images. Every other aspect of its design — proportions, armrests, base, seams, hardware and finish — must match them exactly.`,
     ),
   );
 
@@ -425,8 +462,8 @@ export function buildSalonPrompt(products: VisualizeProduct[], mode: VisualizeMo
     clauses.push(
       req(
         all
-          ? `Before you finish, check twice: no original ${subject} remains and the count is unchanged; and every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one.`
-          : `Before you finish, check: the original ${subject} appears nowhere in the frame, and the ${product.name} stands in its place — not beside it, not in addition to it.`,
+          ? `Before you finish, check three things. One: no original ${subject} remains anywhere in the frame INCLUDING inside every mirror, and the count is unchanged. Two: every one is unmistakably the ${product.name} — same arms, same base, same seams — not a recoloured version of the old one. Three: all of them are identical to each other, and each mirror reflects what is actually in front of it.`
+          : `Before you finish, check: the original ${subject} appears nowhere in the frame — not on the floor and not in any mirror — and the ${product.name} stands in its place, not beside it and not in addition to it.`,
       ),
     );
   }
