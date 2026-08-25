@@ -101,10 +101,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
           : DEFAULT_ASPECT_RATIO,
       // Free text, so it is length-capped: it lands inside the prompt, which has
       // a hard limit the assembler must still be able to honour.
-      scene:
-        typeof input.scene === "string" && input.scene.length <= 120
-          ? input.scene
-          : undefined,
+      scene: typeof input.scene === "string" && input.scene.length <= 120 ? input.scene : undefined,
     };
   })
   .handler(async ({ data }): Promise<{ taskId?: string; imageUrl?: string }> => {
