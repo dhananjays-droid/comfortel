@@ -10,9 +10,11 @@ import { EnquiryDialog, type EnquiryTarget } from "@/components/EnquiryDialog";
 import { Markdown } from "@/components/Markdown";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductSheet } from "@/components/ProductSheet";
+import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
+import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
@@ -179,7 +181,26 @@ function Index() {
   const [chatError, setChatError] = useState<string | null>(null);
 
   const [sheetProduct, setSheetProduct] = useState<FullProduct | null>(null);
-  const [photoProduct, setPhotoProduct] = useState<FullProduct | null>(null);
+  const [photoProducts, setPhotoProducts] = useState<FullProduct[]>([]);
+  /**
+   * The plan: ids the customer wants rendered together. Ids rather than
+   * products so it survives sessionStorage without duplicating the catalogue.
+   */
+  const [planIds, setPlanIds] = useState<string[]>([]);
+
+  const planProducts = planIds
+    .map((id) => getProduct(id))
+    .filter((p): p is FullProduct => Boolean(p));
+
+  const togglePlan = useCallback((product: FullProduct) => {
+    setPlanIds((prev) =>
+      prev.includes(product.id)
+        ? prev.filter((id) => id !== product.id)
+        : prev.length >= MAX_REFERENCES
+          ? prev
+          : [...prev, product.id],
+    );
+  }, []);
   const [enquiry, setEnquiry] = useState<EnquiryTarget | null>(null);
 
   // Attached in the composer but not yet sent.
@@ -411,7 +432,7 @@ function Index() {
   }, []);
 
   function acceptPhoto(request: VisualizeRequest) {
-    setPhotoProduct(null);
+    setPhotoProducts([]);
     const photo: RoomPhoto = { image: request.image, preview: request.preview };
     roomPhotoRef.current = photo;
 
@@ -422,7 +443,8 @@ function Index() {
           ? "throughout"
           : "in place of what's in";
 
-    const { message, entries } = buildRenderMessage(request.mode, [request.product.id], photo);
+    const ids = request.products.map((p) => p.id);
+    const { message, entries } = buildRenderMessage(request.mode, ids, photo);
 
     setMessages((prev) => [
       ...prev,
@@ -430,9 +452,12 @@ function Index() {
         id: nextId(),
         role: "user",
         kind: "photo",
-        content: `Show me the ${request.product.name} ${verb} my space.`,
+        content:
+          request.products.length > 1
+            ? `Fit my space out with these ${request.products.length} pieces.`
+            : `Show me the ${request.products[0]?.name ?? "this piece"} ${verb} my space.`,
         photo: request.preview,
-        productId: request.product.id,
+        productId: ids[0] as string,
       },
       message,
     ]);
@@ -458,6 +483,7 @@ function Index() {
     setMessages([]);
     setInput("");
     setPendingPhoto(null);
+    setPlanIds([]);
     roomPhotoRef.current = null;
     setChatError(null);
     setThinking(false);
@@ -505,14 +531,16 @@ function Index() {
                 key={message.id}
                 message={message}
                 onOpenProduct={setSheetProduct}
-                onVisualize={setPhotoProduct}
+                planIds={planIds}
+                onTogglePlan={togglePlan}
+                onVisualize={(product) => setPhotoProducts([product])}
                 onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
                 onRetryRender={(entry) => {
                   // Without the original photo — after a page reload — the only
                   // honest retry is to ask for a new one.
                   if (!entry.job.base64) {
                     const product = getProduct(entry.job.productIds[0] ?? "");
-                    if (product) setPhotoProduct(product);
+                    if (product) setPhotoProducts([product]);
                     return;
                   }
                   void runRender(entry);
@@ -554,7 +582,13 @@ function Index() {
       </main>
 
       <div className="sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3">
-        <div className="mx-auto w-full max-w-[820px] px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-[820px] space-y-2.5 px-4 sm:px-6">
+          <PlanTray
+            products={planProducts}
+            onRemove={togglePlan}
+            onClear={() => setPlanIds([])}
+            onVisualize={() => setPhotoProducts(planProducts)}
+          />
           <ChatComposer
             value={input}
             onChange={setInput}
@@ -577,7 +611,7 @@ function Index() {
         onClose={() => setSheetProduct(null)}
         onVisualize={(product) => {
           setSheetProduct(null);
-          setPhotoProduct(product);
+          setPhotoProducts([product]);
         }}
         onEnquire={(product) => {
           setSheetProduct(null);
@@ -586,9 +620,9 @@ function Index() {
       />
 
       <VisualizePhotoDialog
-        product={photoProduct}
-        open={photoProduct !== null}
-        onClose={() => setPhotoProduct(null)}
+        products={photoProducts}
+        open={photoProducts.length > 0}
+        onClose={() => setPhotoProducts([])}
         onSubmit={acceptPhoto}
       />
 
@@ -612,10 +646,14 @@ function MessageRow({
   onVisualize,
   onEnquire,
   onRetryRender,
+  planIds,
+  onTogglePlan,
 }: {
   message: Message;
   onOpenProduct: (product: FullProduct) => void;
   onVisualize: (product: FullProduct) => void;
+  planIds: string[];
+  onTogglePlan: (product: FullProduct) => void;
   onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
   onRetryRender: (entry: RenderEntry) => void;
 }) {
@@ -665,6 +703,9 @@ function MessageRow({
                       onOpen={onOpenProduct}
                       onVisualize={onVisualize}
                       onEnquire={(p) => onEnquire(p)}
+                      inPlan={planIds.includes(id)}
+                      planFull={planIds.length >= MAX_REFERENCES}
+                      onTogglePlan={onTogglePlan}
                     />
                   );
                 })}

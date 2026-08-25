@@ -15,8 +15,20 @@ export function isMultiReferenceMode(mode: VisualizeMode): boolean {
   return MULTI_REFERENCE_MODES.includes(mode);
 }
 
-/** refit_room and lineup render one image from several product references. */
-export const MAX_REFERENCES = 4;
+/**
+ * How many DIFFERENT products one render may contain.
+ *
+ * GPT Image 2 accepts 16 input images, and the room takes one, so the API
+ * allows 15. Ten is the product cap because the binding limit is not the API,
+ * it is fidelity: each additional product in a frame gets fewer pixels and the
+ * silhouettes start converging. Past roughly six the individual pieces stop
+ * being recognisable, so the UI warns beyond RECOMMENDED_REFERENCES and a
+ * zone-split is the better answer for a big plan.
+ */
+export const MAX_REFERENCES = 10;
+
+/** Above this, per-product fidelity is visibly worse. The UI says so. */
+export const RECOMMENDED_REFERENCES = 6;
 
 /**
  * Past its prompt limit kie rejects createTask outright with "The text length
