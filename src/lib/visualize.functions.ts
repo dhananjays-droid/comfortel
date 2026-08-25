@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import catalogFull from "@/data/catalog-full.json";
 import catalogSlim from "@/data/catalog-slim.json";
+import { viewsFor } from "@/lib/product-views";
 import {
   buildRenderRequest,
   isVisualizeMode,
@@ -102,7 +103,14 @@ export const visualizeStart = createServerFn({ method: "POST" })
         const product = catalog[id];
         if (!product) throw new Error("PRODUCT_NOT_FOUND");
         if (!product.images?.[0]) throw new Error("PRODUCT_HAS_NO_IMAGE");
-        return { ...product, col: slim.find((p) => p.id === id)?.col || null };
+        // Spread conditionally: exactOptionalPropertyTypes rejects an explicit
+        // undefined for an optional property.
+        const views = viewsFor(id);
+        return {
+          ...product,
+          col: slim.find((p) => p.id === id)?.col || null,
+          ...(views.length ? { views } : {}),
+        };
       });
 
       // prompt and reference list come from one call, so the prompt's
