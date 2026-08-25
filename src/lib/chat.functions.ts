@@ -253,7 +253,7 @@ export const chat = createServerFn({ method: "POST" })
           }
         }
 
-        const text = raw
+        const text = stripToolCallSyntax(raw)
           .replace(PRODUCTS_MARKER, "")
           .replace(RENDER_MARKER, "")
           // stripping a marker off its own line leaves a hole in the prose
