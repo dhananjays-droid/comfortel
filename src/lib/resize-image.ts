@@ -1,5 +1,26 @@
-/** Resize an image file so its longest edge is 1024px, encode as JPEG q0.85, return base64 (no prefix). */
-export async function resizeToBase64(file: File, maxEdge = 1024): Promise<string> {
+export type ResizedImage = {
+  /** base64 JPEG, no data: prefix */
+  base64: string;
+  width: number;
+  height: number;
+  /** nearest supported kie aspect ratio */
+  aspectRatio: "1:1" | "3:2" | "2:3";
+};
+
+function nearestAspect(width: number, height: number): "1:1" | "3:2" | "2:3" {
+  const ratio = width / height;
+  const options: Array<{ label: "1:1" | "3:2" | "2:3"; value: number }> = [
+    { label: "1:1", value: 1 },
+    { label: "3:2", value: 3 / 2 },
+    { label: "2:3", value: 2 / 3 },
+  ];
+  return options.reduce((best, o) =>
+    Math.abs(Math.log(o.value / ratio)) < Math.abs(Math.log(best.value / ratio)) ? o : best,
+  ).label;
+}
+
+/** Resize an image file so its longest edge is 1024px, encode as JPEG q0.85. */
+export async function resizeImage(file: File, maxEdge = 1024): Promise<ResizedImage> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -26,5 +47,10 @@ export async function resizeToBase64(file: File, maxEdge = 1024): Promise<string
   ctx.drawImage(img, 0, 0, width, height);
 
   const jpeg = canvas.toDataURL("image/jpeg", 0.85);
-  return jpeg.split(",")[1] ?? "";
+  return {
+    base64: jpeg.split(",")[1] ?? "",
+    width,
+    height,
+    aspectRatio: nearestAspect(width, height),
+  };
 }
