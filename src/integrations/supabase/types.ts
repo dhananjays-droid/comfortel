@@ -18,20 +18,26 @@ export type Database = {
         Row: {
           created_at: string
           hash: string
-          image_url: string
+          image_url: string | null
+          mode: string | null
           product_id: string
+          task_id: string | null
         }
         Insert: {
           created_at?: string
           hash: string
-          image_url: string
+          image_url?: string | null
+          mode?: string | null
           product_id: string
+          task_id?: string | null
         }
         Update: {
           created_at?: string
           hash?: string
-          image_url?: string
+          image_url?: string | null
+          mode?: string | null
           product_id?: string
+          task_id?: string | null
         }
         Relationships: []
       }
