@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/BrandMark";
 import { ChatComposer } from "@/components/ChatComposer";
+import { EmptyState } from "@/components/EmptyState";
 import { EnquiryDialog, type EnquiryTarget } from "@/components/EnquiryDialog";
 import { Markdown } from "@/components/Markdown";
 import { ProductCard } from "@/components/ProductCard";
@@ -88,13 +89,6 @@ type Message =
       reference: string;
       productId: string;
     };
-
-const SEED_PROMPTS = [
-  "I'm fitting out a four-chair salon from scratch",
-  "Black styling chairs under $500",
-  "Backwash units with an electric recline",
-  "A reception desk and waiting seating that go together",
-];
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -670,7 +664,7 @@ function Index() {
 
       <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
         {empty ? (
-          <EmptyState onPick={send} />
+          <EmptyState onPick={send} onPickPhoto={pickPhoto} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -884,36 +878,6 @@ function MessageRow({
             ) : null}
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
-  return (
-    <div className="flex min-h-[58vh] flex-col justify-center py-10">
-      <div className="max-w-[560px]">
-        <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-ink-1 sm:text-3xl">
-          What are you fitting out?
-        </h1>
-        <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-          Tell us about the space — the area, how many stations, the look you&apos;re after. We will
-          pull the right pieces from the Comfortel range, and you can see any of them rendered into
-          a photo of your own salon.
-        </p>
-      </div>
-
-      <div className="mt-7 flex flex-wrap gap-2">
-        {SEED_PROMPTS.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            onClick={() => onPick(prompt)}
-            className="rounded-full border border-border bg-surface2 px-3.5 py-2 text-sm text-ink-2 transition-colors hover:border-border-strong hover:bg-muted hover:text-ink-1"
-          >
-            {prompt}
-          </button>
-        ))}
       </div>
     </div>
   );
