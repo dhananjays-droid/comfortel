@@ -1,4 +1,7 @@
 import { Download, Expand, RefreshCw, Share2, Sparkles } from "lucide-react";
+
+/** Flip to true to bring the share link back — see the note at the button. */
+const SHARE_ENABLED = false;
 import { useEffect, useState } from "react";
 
 import { ProductStrip } from "@/components/ProductStrip";
@@ -236,7 +239,14 @@ function RenderCard({
             <Sparkles className="h-3.5 w-3.5" />
             Request a quote
           </Button>
-          {onShare ? (
+          {/*
+            Share is parked. The link path writes to Supabase and needs
+            SUPABASE_SERVICE_ROLE_KEY plus the shared_designs migration applied,
+            neither of which is in place — so the button offered something that
+            could only fail. shareDesign() and /d/$code are untouched behind it;
+            restore this block to bring it back.
+          */}
+          {SHARE_ENABLED && onShare ? (
             <Button
               size="sm"
               variant="outline"

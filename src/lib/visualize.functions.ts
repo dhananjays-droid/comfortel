@@ -20,6 +20,8 @@ type StartInput = {
   aspectRatio?: string;
   /** Which part of the salon this render covers, for a zone render. */
   scene?: string;
+  /** A fault the inspector found in a previous attempt at this same render. */
+  correction?: string;
 };
 
 /** ~1024px longest edge at JPEG q0.85 lands well under this; anything larger is a client bug. */
@@ -102,6 +104,10 @@ export const visualizeStart = createServerFn({ method: "POST" })
       // Free text, so it is length-capped: it lands inside the prompt, which has
       // a hard limit the assembler must still be able to honour.
       scene: typeof input.scene === "string" && input.scene.length <= 120 ? input.scene : undefined,
+      correction:
+        typeof input.correction === "string" && input.correction.length <= 400
+          ? input.correction
+          : undefined,
     };
   })
   .handler(async ({ data }): Promise<{ taskId?: string; imageUrl?: string }> => {
@@ -128,7 +134,12 @@ export const visualizeStart = createServerFn({ method: "POST" })
 
       // prompt and reference list come from one call, so the prompt's
       // positional references always match the array actually sent
-      const { prompt, imageUrls } = buildRenderRequest(products, data.mode, data.scene);
+      const { prompt, imageUrls } = buildRenderRequest(
+        products,
+        data.mode,
+        data.scene,
+        data.correction,
+      );
 
       const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
 
@@ -138,7 +149,14 @@ export const visualizeStart = createServerFn({ method: "POST" })
         // The scene is part of the key: without it, two zone renders of the same
         // photo and product set would collide and the second would serve the
         // first's image.
-        data.productIds.join(",") + data.mode + (data.scene ?? "") + data.roomImageBase64,
+        // The correction belongs in the key too. Without it a retry hashes
+        // identically to the attempt it is retrying, hits the cache, and serves
+        // back the very image the inspector just rejected.
+        data.productIds.join(",") +
+          data.mode +
+          (data.scene ?? "") +
+          (data.correction ?? "") +
+          data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);
       const hash = Array.from(new Uint8Array(digest))
