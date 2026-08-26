@@ -1,4 +1,4 @@
-# Comfortel chatbot.
+# Comfortel chatbot
 
 A product-discovery chatbot for Comfortel salon, barber and spa furniture. The
 customer describes the space they're fitting out, the assistant recommends real
