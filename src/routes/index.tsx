@@ -43,7 +43,7 @@ import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt
 
 const TITLE = "Comfortel — Salon Furniture Assistant";
 const DESCRIPTION =
-  "Chat with a Comfortel specialist to find salon, barber and spa furniture, see any piece rendered into a photo of your own space, and request a quote.";
+  "Plan a salon, barber or spa fit-out to your budget and your dimensions, then see the pieces rendered into a photo of your own room before you order.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -53,7 +53,11 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: TITLE },
       { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
+      // The card image is inherited from the root head; only the words differ
+      // here, so repeating the image tags would just be another place to drift.
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
     ],
   }),
   component: Index,

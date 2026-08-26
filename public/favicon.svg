@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Comfortel">
+  <!--
+    The same monogram BrandMark draws in the header: a lime C on near black, so
+    the browser tab and the page agree. Colours are the resolved sRGB of the ink
+    and primary tokens in styles.css, not lookalikes picked by eye.
+
+    A letterform rather than a picture of a chair. At 16px a chair silhouette
+    turns to mud; a tab is found by shape and colour, not by detail.
+
+    Note for editors: XML forbids a double hyphen inside a comment, so token
+    names are written without their leading dashes above. An SVG that fails to
+    parse shows no icon at all, and nothing warns you.
+  -->
+  <rect width="64" height="64" rx="15" fill="#0f0f0c" />
+  <path
+    d="M43.2 23.6a13.4 13.4 0 1 0 0 16.8"
+    fill="none"
+    stroke="#c6f25c"
+    stroke-width="7.5"
+    stroke-linecap="round"
+  />
+</svg>
