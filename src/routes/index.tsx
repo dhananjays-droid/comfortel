@@ -15,11 +15,14 @@ import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
 import { RoomSpecDialog } from "@/components/RoomSpecDialog";
+import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
+import { Switch } from "@/components/ui/switch";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
+import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
@@ -108,6 +111,8 @@ const POLL_INTERVAL_MS = 3000;
  */
 const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
+/** Survives reloads so a demo stays in the mode it was left in. */
+const WA_MODE_KEY = "comfortel.whatsapp.v1";
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 let seq = 0;
@@ -156,6 +161,60 @@ function buildZoneRenderMessage(
     message: { id: nextId(), role: "assistant", kind: "visualization", content: "", entries },
     entries,
   };
+}
+
+/**
+ * Re-express the transcript in WhatsApp's primitives.
+ *
+ * Product suggestions become a list message, renders become image messages, and
+ * everything else is a plain bubble. Kept as a pure function of the message list
+ * so the two views can never drift into telling different stories.
+ */
+function toWaItems(messages: Message[]): WaItem[] {
+  return messages.map((message): WaItem => {
+    if (message.role === "user") {
+      if (message.kind === "photo" && message.photo) {
+        return {
+          id: message.id,
+          from: "me",
+          kind: "image",
+          text: message.content,
+          src: message.photo,
+        };
+      }
+      return {
+        id: message.id,
+        from: "me",
+        kind: "text",
+        text: message.kind === "text" && message.display ? message.display : message.content,
+      };
+    }
+
+    if (message.kind === "visualization") {
+      return {
+        id: message.id,
+        from: "them",
+        kind: "renders",
+        text: message.content,
+        renders: message.entries.map((entry) => ({
+          label: entry.vis.label,
+          url: entry.vis.imageUrl,
+          loading: entry.vis.status === "loading",
+        })),
+      };
+    }
+
+    if (message.kind === "text" && message.productIds?.length) {
+      const products = message.productIds
+        .map((id) => getProduct(id))
+        .filter((p): p is FullProduct => Boolean(p));
+      if (products.length) {
+        return { id: message.id, from: "them", kind: "products", text: message.content, products };
+      }
+    }
+
+    return { id: message.id, from: "them", kind: "text", text: message.content };
+  });
 }
 
 function buildRenderMessage(
@@ -240,6 +299,29 @@ function Index() {
    */
   const [planCollapsed, setPlanCollapsed] = useState(false);
   const [roomSpecOpen, setRoomSpecOpen] = useState(false);
+  /**
+   * Renders the same conversation as WhatsApp would deliver it. Read from
+   * storage in an effect rather than in the initialiser: this route is server
+   * rendered, and touching localStorage during render would mismatch hydration.
+   */
+  const [whatsapp, setWhatsapp] = useState(false);
+
+  useEffect(() => {
+    try {
+      setWhatsapp(localStorage.getItem(WA_MODE_KEY) === "1");
+    } catch {
+      /* private mode and blocked storage both just mean the default */
+    }
+  }, []);
+
+  const toggleWhatsapp = useCallback((next: boolean) => {
+    setWhatsapp(next);
+    try {
+      localStorage.setItem(WA_MODE_KEY, next ? "1" : "0");
+    } catch {
+      /* the toggle still works for this session */
+    }
+  }, []);
 
   const togglePlan = useCallback((product: FullProduct) => {
     setPlanCollapsed(false);
@@ -258,6 +340,8 @@ function Index() {
   const [photoLoading, setPhotoLoading] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
+  /** WhatsApp mode replaces ChatComposer, so it needs its own file input. */
+  const waFileRef = useRef<HTMLInputElement>(null);
   const lastHistoryRef = useRef<{ history: Message[]; photoAttached: boolean } | null>(null);
   // A ref, not state: runChat reads it in the same tick that send() sets it.
   const roomPhotoRef = useRef<RoomPhoto | null>(null);
@@ -700,6 +784,16 @@ function Index() {
             </p>
             <p className="truncate text-xs text-ink-3">Salon, barber &amp; spa furniture</p>
           </div>
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-ink-3">
+            <span className="hidden sm:inline">WhatsApp Mode</span>
+            <span className="sm:hidden">WhatsApp</span>
+            <Switch
+              checked={whatsapp}
+              onCheckedChange={toggleWhatsapp}
+              aria-label="WhatsApp Mode"
+              className="data-[state=checked]:bg-[#25d366]"
+            />
+          </label>
           {!empty ? (
             <Button
               variant="ghost"
@@ -715,7 +809,30 @@ function Index() {
       </header>
 
       <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
-        {empty ? (
+        {whatsapp ? (
+          <div className="py-6">
+            <WhatsAppView
+              items={toWaItems(messages)}
+              value={input}
+              onChange={setInput}
+              onSend={() => send(input)}
+              onPickPhoto={() => waFileRef.current?.click()}
+              disabled={thinking}
+            />
+            <input
+              ref={waFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void pickPhoto(e.target.files?.[0])}
+            />
+            <p className="mx-auto mt-3 max-w-[820px] text-center text-[11px] leading-snug text-ink-4">
+              A preview of this assistant on WhatsApp, held to the real platform limits — three
+              reply buttons, ten list rows, thirty catalogue products. Dashed notes mark what
+              WhatsApp would cut.
+            </p>
+          </div>
+        ) : empty ? (
           <EmptyState
             onPick={send}
             onPickPhoto={pickPhoto}
@@ -779,7 +896,12 @@ function Index() {
         )}
       </main>
 
-      <div className="sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3">
+      <div
+        className={cn(
+          "sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3",
+          whatsapp && "hidden",
+        )}
+      >
         <div className="mx-auto w-full max-w-[820px] space-y-2.5 px-4 sm:px-6">
           <PlanTray
             products={planProducts}

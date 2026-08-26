@@ -1,4 +1,5 @@
 import { ChevronUp, ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice, type FullProduct } from "@/lib/catalog";
@@ -100,18 +101,7 @@ export function PlanTray({
             title={product.name}
           >
             <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted p-1">
-              {product.images?.[0] ? (
-                <img
-                  src={product.images[0]}
-                  alt=""
-                  loading="lazy"
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-ink-4">
-                  <ImageIcon className="h-4 w-4" />
-                </div>
-              )}
+              <Thumb src={product.images?.[0]} />
               <button
                 type="button"
                 onClick={() => onRemove(product)}
@@ -180,5 +170,35 @@ export function PlanTray({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A product thumbnail that fails quietly.
+ *
+ * The catalogue images are hosted on the Comfortel site, so a flaky network
+ * turns a card into the browser's broken-image glyph — which reads as broken
+ * software rather than a missed request. ProductCard already degrades to an
+ * icon; this is the same treatment for the tray.
+ */
+function Thumb({ src }: { src?: string | undefined }) {
+  const [broken, setBroken] = useState(false);
+
+  if (!src || broken) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-ink-4">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="h-full w-full object-contain"
+    />
   );
 }
