@@ -463,7 +463,51 @@ except `types.ts` when a table is added.
 
 ---
 
-## 11. The guided flows
+## 11. Render QA
+
+Every finished render is inspected before the customer sees it, and re-run once
+if something basic is broken. `render-qa.ts` holds the taxonomy and the retry
+decision; `render-qa.functions.ts` is the vision call.
+
+Haiku 4.5, not Sonnet: this runs per image rather than per session, and the job
+is narrow — "is anything unmistakably broken" against a fixed list. Measured at
+~2,400 input and ~120 output tokens, about $0.003 a check, a tenth of the render
+it is protecting.
+
+Six faults are worth a retry, all physical: `intersecting`, `floating`,
+`stale_mirror`, `duplicate_mismatch`, `leftover`, `deformed`. Taste is
+deliberately excluded — a taxonomy that included "the colour feels cold" would
+fire constantly and burn a $0.03 render each time.
+
+The bias is towards passing. A missed fault shows one imperfect image; a phantom
+fault costs a render and another 90 seconds to produce nothing better. The prompt
+says so explicitly, and calls out that partial occlusion is normal and is not
+intersecting.
+
+Three things that matter if you touch this:
+
+- **The correction is part of the render cache key.** Without it a retry hashes
+  identically to the attempt it is retrying, hits the cache, and serves back the
+  exact image the inspector just rejected.
+- **The correction is a required prompt clause, not a suffix.** Appending it
+  after assembly could push past `MAX_PROMPT_CHARS`, which is the limit that once
+  silently broke every render. Measured headroom with a correction attached:
+  4,412 of 6,000 on the longest mode.
+- **One retry, never more.** Each is real money and another 80-98 seconds of
+  waiting. A second failure usually means the room or the request is the problem.
+
+Failure to inspect is never failure to deliver: no key, an API error, a malformed
+reply, an unreachable image all return a pass. The customer sees a render that
+took slightly longer, never an error about our retry logic.
+
+The first line of defence is still the prompt. `realismClauses()` gained an
+explicit solidity rule after a chair was rendered half-buried in a timber wall
+panel — these models place plausibly but model no collision, so it has to be
+stated as a rule about solid objects rather than implied by "photorealistic".
+
+---
+
+## 12. The guided flows
 
 The three starters on the first screen do not send a sentence to the model any
 more. Each opens `PlanWizard`, which gathers the requirement first, shows what it
@@ -548,7 +592,7 @@ package. Renders still use one reference image per product.
 
 ---
 
-## 12. WhatsApp Mode
+## 13. WhatsApp Mode
 
 A toggle in the header re-renders the same transcript as WhatsApp would deliver
 it. It is a feasibility preview, not a theme: the point is to answer "does this

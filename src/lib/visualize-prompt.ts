@@ -277,10 +277,30 @@ function removalClauses(subject: string, product: string, all: boolean): Clause[
  * lighting, mirror reflections, contact shadows — so they live in one place
  * rather than being restated per branch and drifting apart.
  */
+/**
+ * The retry's correction, as a required clause.
+ *
+ * Last in the list on purpose: it describes a fault that the general rules above
+ * already failed to prevent once, so it needs to be the final instruction rather
+ * than one more rule competing with them.
+ */
+function correctionClauses(correction?: string): Clause[] {
+  const trimmed = correction?.trim();
+  return trimmed ? [req(trimmed)] : [];
+}
+
 function realismClauses(): Clause[] {
   return [
     req(
       `Critical realism: match the salon's perspective, camera angle and floor plane exactly — every piece sits flat on the floor with correct foreshortening, never floating or tilted.`,
+    ),
+    // Solidity. Observed failure: a styling chair rendered half-buried in a
+    // timber wall panel, its back passing through the surface as though the wall
+    // were a curtain. These models place plausibly but do not model collision,
+    // so the constraint has to be stated as a rule about solid objects rather
+    // than left implied by "realistic".
+    req(
+      `Nothing may pass through anything solid. Every piece stands wholly inside the room, in clear floor space, with its whole footprint on the floor — no part of any piece may intersect, embed into or disappear behind a wall, partition, counter, basin or another piece. If a position has too little clearance, move the piece into open floor rather than sinking it into the surface behind it.`,
     ),
     req(`Match the salon's lighting direction, intensity and colour temperature.`),
     // Clearing stale reflections works and is kept. Making the model DRAW a
@@ -322,7 +342,11 @@ function describe(product: VisualizeProduct): string {
  * asking "what would my salon look like kitted out in Comfortel", so the
  * architecture is preserved and the furniture is swapped wholesale.
  */
-function buildRefitPrompt(products: VisualizeProduct[], scene?: string): string {
+function buildRefitPrompt(
+  products: VisualizeProduct[],
+  scene?: string,
+  correction?: string,
+): string {
   const list = products.map((p, i) => `Image ${i + 2} is a ${describe(p)}`).join(". ");
 
   return assemble([
@@ -355,6 +379,7 @@ function buildRefitPrompt(products: VisualizeProduct[], scene?: string): string 
       `Keep the room itself untouched: walls, flooring, ceiling, windows, plumbing, wash basins, lighting, signage, plants and any people stay exactly as they are. Only the furniture changes.`,
     ),
     ...realismClauses(),
+    ...correctionClauses(correction),
     req(
       `Before you finish, check: none of the salon's original furniture is still present, and every visible piece is a Comfortel product from the references.`,
     ),
@@ -370,7 +395,7 @@ function buildRefitPrompt(products: VisualizeProduct[], scene?: string): string 
  * separate image every time. Here the customer sees every design in situ at
  * once, for a quarter of the cost, and gives up like-for-like positioning.
  */
-function buildLineupPrompt(products: VisualizeProduct[]): string {
+function buildLineupPrompt(products: VisualizeProduct[], correction?: string): string {
   const subject = products[0]?.replaces ?? "unit";
   const assignments = products
     .map((p, i) => `Image ${i + 2} is a ${describe(p)} — put this one at position ${i + 1}`)
@@ -399,6 +424,7 @@ function buildLineupPrompt(products: VisualizeProduct[]): string {
       `Keep the room itself untouched: walls, flooring, ceiling, windows, mirrors, wash basins, lighting, signage, plants and any people stay exactly as they are.`,
     ),
     ...realismClauses(),
+    ...correctionClauses(correction),
     req(
       `Before you finish, check: each position holds a visibly different product matching its own reference, and none of the salon's original ${subject}s remain.`,
     ),
@@ -414,9 +440,17 @@ export function buildSalonPrompt(
   products: VisualizeProduct[],
   mode: VisualizeMode,
   scene?: string,
+  /**
+   * A fault observed in a previous attempt at this exact render. Appended as a
+   * required clause so the budget guard accounts for it — bolting it on after
+   * assembly could push the prompt past MAX_PROMPT_CHARS, which is the limit
+   * that silently broke every render before it was found.
+   */
+  correction?: string,
 ): string {
-  if (mode === "refit_room") return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene);
-  if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES));
+  if (mode === "refit_room")
+    return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene, correction);
+  if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction);
 
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
@@ -525,6 +559,7 @@ export function buildSalonPrompt(
   }
 
   clauses.push(...realismClauses());
+  clauses.push(...correctionClauses(correction));
   clauses.push(
     opt(
       `Preserve everything else exactly: walls, flooring, mirrors, wash basins, lighting, signage, shelves, other furniture and any people.`,
@@ -556,8 +591,9 @@ export function buildRenderRequest(
   products: VisualizeProduct[],
   mode: VisualizeMode,
   scene?: string,
+  correction?: string,
 ): { prompt: string; imageUrls: string[] } {
-  const prompt = buildSalonPrompt(products, mode, scene);
+  const prompt = buildSalonPrompt(products, mode, scene, correction);
 
   const imageUrls = isMultiReferenceMode(mode)
     ? // one hero shot per DIFFERENT product

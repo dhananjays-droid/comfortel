@@ -37,6 +37,8 @@ import { TIER_LABEL, idsOf } from "@/lib/packages";
 import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
+import { inspectRender } from "@/lib/render-qa.functions";
+import { correctionFor, shouldRetry } from "@/lib/render-qa";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 const TITLE = "Comfortel — Salon Furniture Assistant";
@@ -72,6 +74,8 @@ type VisualizeJob = {
   aspectRatio: string;
   /** Which part of the salon this render covers, on a zone render. */
   scene?: string | undefined;
+  /** Set only on a retry: the fault the inspector found last time. */
+  correction?: string | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -479,8 +483,47 @@ function Index() {
   }, []);
 
   // ---- render -------------------------------------------------------------
+  const runInspect = useServerFn(inspectRender);
+
+  /**
+   * Check a finished render, and re-run it once if something basic is broken.
+   *
+   * The generator places furniture plausibly but models no collision, so it will
+   * happily bury a styling chair in a wall panel and call it done. The prompt
+   * now forbids that explicitly, which is the real fix; this is the net under it.
+   *
+   * Deliberately silent to the customer: a caught fault shows as the render
+   * simply taking longer, not as an error. They asked for a picture of their
+   * salon, not a report on our retry logic.
+   */
+  const finish = useCallback(
+    async (entry: RenderEntry, imageUrl: string, attempt: number) => {
+      try {
+        const verdict = await runInspect({ data: { imageUrl } });
+        if (shouldRetry(verdict, attempt)) {
+          patchRender(entry.id, { status: "loading", progress: 0 });
+          void runRenderRef.current?.(
+            { ...entry, job: { ...entry.job, correction: correctionFor(verdict) } },
+            attempt + 1,
+          );
+          return;
+        }
+      } catch {
+        // An inspection we could not run is not a reason to withhold the image.
+      }
+      patchRender(entry.id, { status: "done", imageUrl });
+    },
+    [patchRender, runInspect],
+  );
+
+  // runRender and finish call each other, so one of them has to be reached
+  // through a ref rather than a closure captured before the other exists.
+  const runRenderRef = useRef<((entry: RenderEntry, attempt?: number) => Promise<void>) | null>(
+    null,
+  );
+
   const runRender = useCallback(
-    async (entry: RenderEntry) => {
+    async (entry: RenderEntry, attempt = 0) => {
       const { id, job } = entry;
       patchRender(id, { status: "loading", progress: 0, error: undefined });
       try {
@@ -491,11 +534,12 @@ function Index() {
             mode: job.mode,
             aspectRatio: job.aspectRatio,
             ...(job.scene ? { scene: job.scene } : {}),
+            ...(job.correction ? { correction: job.correction } : {}),
           },
         });
 
         if (started.imageUrl) {
-          patchRender(id, { status: "done", imageUrl: started.imageUrl });
+          await finish(entry, started.imageUrl, attempt);
           return;
         }
         if (!started.taskId) throw new Error("no task id");
@@ -504,7 +548,7 @@ function Index() {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
           const res = await pollVisualize({ data: { taskId: started.taskId } });
           if (res.done && res.imageUrl) {
-            patchRender(id, { status: "done", imageUrl: res.imageUrl });
+            await finish(entry, res.imageUrl, attempt);
             return;
           }
           patchRender(id, { progress: res.progress ?? 0 });
@@ -520,8 +564,13 @@ function Index() {
         });
       }
     },
-    [patchRender, pollVisualize, startVisualize],
+    [patchRender, pollVisualize, startVisualize, finish],
   );
+
+  // Closes the loop between runRender and finish, which call each other.
+  useEffect(() => {
+    runRenderRef.current = runRender;
+  }, [runRender]);
 
   // ---- chat ---------------------------------------------------------------
   const runChat = useCallback(
