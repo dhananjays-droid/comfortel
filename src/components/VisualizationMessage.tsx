@@ -1,4 +1,4 @@
-import { Download, Expand, RefreshCw, Share2, Sparkles } from "lucide-react";
+import { Download, Expand, Info, RefreshCw, Share2, Sparkles } from "lucide-react";
 
 /** Flip to true to bring the share link back — see the note at the button. */
 const SHARE_ENABLED = false;
@@ -21,6 +21,16 @@ export type VisualizationState = {
   imageUrl?: string | undefined;
   progress?: number | undefined;
   error?: string | undefined;
+  /**
+   * What the picture could not show, and where those pieces would go instead.
+   *
+   * A four-station plan photographed from a doorway that sees two stations is a
+   * correct render of an incomplete view, not a failure — but a customer
+   * counting chairs against their own quote has no way to know that. Saying it
+   * outright, next to the image, is the difference between a render that looks
+   * wrong and one that tells them something about their floor.
+   */
+  note?: string | undefined;
 };
 
 const STATUS_MESSAGES = [
@@ -206,6 +216,13 @@ function RenderCard({
           </div>
         ) : null}
       </div>
+
+      {state.note ? (
+        <p className="flex items-start gap-1.5 rounded-lg bg-muted px-2.5 py-2 text-[11px] leading-snug text-ink-3">
+          <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>{state.note}</span>
+        </p>
+      ) : null}
 
       {compact ? (
         <>

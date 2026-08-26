@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice, type FullProduct } from "@/lib/catalog";
-import { MAX_REFERENCES, RECOMMENDED_REFERENCES } from "@/lib/visualize-prompt";
+import { RECOMMENDED_REFERENCES } from "@/lib/visualize-prompt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -88,8 +88,16 @@ export function PlanTray({
       <div className="mb-2.5 flex items-baseline justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-wide text-ink-3">
           Your plan
+          {/*
+            Products and pieces are different numbers and the tray shows both,
+            because it shows ×N badges. "4 of 10" beside four ×4 badges read as
+            four pieces out of ten; it was four products against the reference
+            cap, with ten pieces in the subtotal. Naming each number is shorter
+            than explaining it.
+          */}
           <span className="ml-1.5 normal-case tracking-normal text-ink-4">
-            {products.length} of {MAX_REFERENCES}
+            {products.length} {products.length === 1 ? "product" : "products"}
+            {pieces === products.length ? "" : ` · ${pieces} pieces`}
           </span>
         </p>
         <button
@@ -133,8 +141,8 @@ export function PlanTray({
         <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-muted px-2.5 py-2 text-[11px] leading-snug text-ink-3">
           <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>
-            Past {RECOMMENDED_REFERENCES} pieces in one image, each one gets less detail. Still
-            worth seeing — just expect the individual products to read less sharply.
+            Past {RECOMMENDED_REFERENCES} different products in one image, each one gets less
+            detail. Still worth seeing — just expect the individual pieces to read less sharply.
           </span>
         </p>
       ) : null}
