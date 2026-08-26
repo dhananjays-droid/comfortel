@@ -1,4 +1,4 @@
-import { ArrowRight, Camera, Layers, Ruler, Sparkles, Wallet } from "lucide-react";
+import { ArrowRight, Camera, Layers, Ruler, Wallet } from "lucide-react";
 import { useRef } from "react";
 
 import { cn } from "@/lib/utils";
@@ -58,12 +58,6 @@ const STARTERS: Starter[] = [
     hint: "What fits, then furnished",
     Icon: Ruler,
     opens: "dimensions",
-  },
-  {
-    prompt: "A reception desk and waiting seating that go together",
-    label: "Pieces that match",
-    hint: "Reception and waiting area",
-    Icon: Sparkles,
   },
 ];
 
@@ -146,7 +140,9 @@ export function EmptyState({
         >
           Or start by telling us
         </p>
-        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+        {/* Three across on desktop: the fourth starter is gone, and a 2-column
+            grid would strand one card alone on a second row. */}
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
           {STARTERS.map((starter, i) => (
             <button
               key={starter.prompt}
