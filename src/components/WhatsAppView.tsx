@@ -1,6 +1,8 @@
 import { CheckCheck, List, Lock, MessageSquare, Mic, Paperclip, Send, Smile } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { categoryLabel, formatPrice, type FullProduct } from "@/lib/catalog";
+import type { WaAction } from "@/lib/wa-flow";
 import { CARRIER_LABEL, WA, carrierFor, clock, fit, timeOf, truncate } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +35,14 @@ const WALLPAPER =
 
 /** What one turn becomes on WhatsApp. */
 export type WaItem =
-  | { id: string; from: "me" | "them"; kind: "text"; text: string }
+  | {
+      id: string;
+      from: "me" | "them";
+      kind: "text";
+      text: string;
+      /** Reply buttons or a list, when this turn is a scripted menu. */
+      action?: WaAction | undefined;
+    }
   | { id: string; from: "me"; kind: "image"; text: string; src: string }
   | { id: string; from: "them"; kind: "products"; text: string; products: FullProduct[] }
   | {
@@ -50,6 +59,7 @@ export function WhatsAppView({
   onChange,
   onSend,
   onPickPhoto,
+  onTap,
   disabled = false,
 }: {
   items: WaItem[];
@@ -57,14 +67,27 @@ export function WhatsAppView({
   onChange: (value: string) => void;
   onSend: () => void;
   onPickPhoto: () => void;
+  /** A tapped reply button or list row, as its option id. */
+  onTap: (id: string) => void;
   disabled?: boolean;
 }) {
+  // This transcript scrolls inside its own frame rather than with the page, so
+  // it needs its own stick-to-bottom. Without it a reply lands below the fold
+  // and the bot looks like it said nothing.
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [items]);
+
   return (
-    <div className="mx-auto w-full max-w-[820px] overflow-hidden rounded-2xl border border-border shadow-sm">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border shadow-sm">
       <Header />
 
       <div
-        className="min-h-[420px] space-y-2 px-3 py-4 sm:px-6"
+        ref={scrollRef}
+        className="flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6"
         style={{ backgroundColor: "#efeae2", backgroundImage: `url("${WALLPAPER}")` }}
       >
         <SystemChip>
@@ -73,7 +96,11 @@ export function WhatsAppView({
         </SystemChip>
         <SystemChip>Today</SystemChip>
 
-        {items.length ? items.map((item) => <Turn key={item.id} item={item} />) : <WhatsAppEmpty />}
+        {items.length ? (
+          items.map((item) => <Turn key={item.id} item={item} onTap={onTap} />)
+        ) : (
+          <WhatsAppEmpty />
+        )}
       </div>
 
       <Composer
@@ -120,7 +147,7 @@ function SystemChip({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Turn({ item }: { item: WaItem }) {
+function Turn({ item, onTap }: { item: WaItem; onTap: (id: string) => void }) {
   const time = clock(timeOf(item.id));
   const mine = item.from === "me";
 
@@ -145,6 +172,10 @@ function Turn({ item }: { item: WaItem }) {
           </div>
 
           {item.kind === "products" ? <ProductList products={item.products} /> : null}
+
+          {item.kind === "text" && item.action ? (
+            <Interactive action={item.action} onTap={onTap} />
+          ) : null}
         </Bubble>
 
         {item.kind === "products" ? <Constraint products={item.products} /> : null}
@@ -206,6 +237,88 @@ function Renders({
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Reply buttons and list messages, as WhatsApp draws them.
+ *
+ * Buttons sit stacked under the body, separated by hairlines, in WhatsApp's
+ * link blue. A list shows one button that opens a sheet — here the sheet opens
+ * inline, since a modal would hide the conversation the preview exists to show.
+ */
+function Interactive({ action, onTap }: { action: WaAction; onTap: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  // Opening the sheet adds height below the fold, and the transcript's
+  // stick-to-bottom only fires on new messages — so bring it into view here.
+  useEffect(() => {
+    if (open) sheetRef.current?.scrollIntoView({ block: "nearest" });
+  }, [open]);
+
+  if (action.kind === "buttons") {
+    return (
+      <div className="-mx-2 mt-1.5">
+        {action.buttons.map((button) => (
+          <button
+            key={button.id}
+            type="button"
+            onClick={() => onTap(button.id)}
+            className="block w-full border-t py-2 text-center text-[14px] font-medium transition-colors hover:bg-black/[0.03]"
+            style={{ borderColor: "#e9edef", color: "#027eb5" }}
+          >
+            {button.title}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="-mx-2 mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-center gap-1.5 border-t py-2 text-[14px] font-medium transition-colors hover:bg-black/[0.03]"
+        style={{ borderColor: "#e9edef", color: "#027eb5" }}
+      >
+        <List className="h-4 w-4" />
+        {action.button}
+      </button>
+
+      {open ? (
+        <div ref={sheetRef} className="divide-y border-t" style={{ borderColor: "#e9edef" }}>
+          {action.rows.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onTap(row.id);
+              }}
+              className="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-black/[0.03]"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13.5px] font-medium" style={{ color: "#111b21" }}>
+                  {row.title}
+                </span>
+                {row.description ? (
+                  <span className="block text-[12px]" style={{ color: "#667781" }}>
+                    {row.description}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className="mt-0.5 h-4 w-4 shrink-0 rounded-full border"
+                style={{ borderColor: "#8696a0" }}
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

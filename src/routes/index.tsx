@@ -16,16 +16,18 @@ import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
 import { RoomSpecDialog } from "@/components/RoomSpecDialog";
 import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
+import type { WaAction } from "@/lib/wa-flow";
 import { Switch } from "@/components/ui/switch";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
-import { getProduct, type FullProduct } from "@/lib/catalog";
+import { CATALOG_SLIM, categoryLabel, getProduct, type FullProduct } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
+import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
@@ -84,7 +86,15 @@ type Message =
       photo: string;
       productId: string;
     }
-  | { id: string; role: "assistant"; kind: "text"; content: string; productIds?: string[] }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "text";
+      content: string;
+      productIds?: string[];
+      /** Reply buttons or a list, when this turn came from the WhatsApp menu. */
+      action?: WaAction | undefined;
+    }
   | {
       id: string;
       role: "assistant";
@@ -213,7 +223,13 @@ function toWaItems(messages: Message[]): WaItem[] {
       }
     }
 
-    return { id: message.id, from: "them", kind: "text", text: message.content };
+    return {
+      id: message.id,
+      from: "them",
+      kind: "text",
+      text: message.content,
+      ...(message.kind === "text" && message.action ? { action: message.action } : {}),
+    };
   });
 }
 
@@ -305,6 +321,8 @@ function Index() {
    * rendered, and touching localStorage during render would mismatch hydration.
    */
   const [whatsapp, setWhatsapp] = useState(false);
+  /** Where the scripted WhatsApp menu is up to. Reset with the thread. */
+  const [flow, setFlow] = useState<FlowState>(INITIAL);
 
   useEffect(() => {
     try {
@@ -740,6 +758,89 @@ function Index() {
     send(summary, `Plan my space — ${bubble}.`);
   }
 
+  /**
+   * Send, the WhatsApp way.
+   *
+   * A business number answers "Hi" from a script, instantly and for free — only
+   * a sentence the menu cannot serve is worth a model call. So the scripted flow
+   * gets first refusal, and `send` is the fallback rather than the default.
+   *
+   * @param tapped An option id from a reply button or list row, when the
+   *   customer tapped rather than typed.
+   */
+  function sendWhatsApp(raw: string, tapped?: string) {
+    const text = tapped ? `wa:${tapped}` : raw.trim();
+    if (!text || thinking) return;
+
+    const shown = tapped ? labelFor(tapped, raw) : text;
+    const outgoing: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: text,
+      display: shown,
+    };
+
+    const step = advance(flow, text);
+
+    // Nothing scripted fits — hand the turn to the model, but keep the room
+    // measurement in the words the model needs if that is what this was.
+    if (!step) {
+      const metres = flow.awaiting === "wall" ? parseWall(text) : null;
+      setFlow(INITIAL);
+      setInput("");
+      if (metres !== null) {
+        const spec: RoomSpec = { wallCm: metres * 100, unit: "m" };
+        const next = [
+          ...messages,
+          { ...outgoing, content: planSummary(spec), display: shown } as Message,
+        ];
+        setMessages(next);
+        void runChat(next, roomPhotoRef.current !== null);
+        return;
+      }
+      const next = [...messages, outgoing];
+      setMessages(next);
+      void runChat(next, roomPhotoRef.current !== null);
+      return;
+    }
+
+    const { reply } = step;
+    setFlow(step.state);
+    setInput("");
+
+    // A category pick is answered from the catalogue, not the model.
+    const productIds = reply.category
+      ? CATALOG_SLIM.filter((p) => p.c === reply.category)
+          .slice(0, MAX_REFERENCES)
+          .map((p) => p.id)
+      : [];
+
+    const answer: Message = {
+      id: nextId(),
+      role: "assistant",
+      kind: "text",
+      content: reply.category
+        ? `Here is what we have in ${categoryLabel(reply.category).toLowerCase()}s. Tap a piece for details, or send me a photo of your room and I'll put one in it.`
+        : reply.text,
+      ...(productIds.length ? { productIds } : {}),
+      ...(reply.action ? { action: reply.action } : {}),
+    };
+
+    setMessages([...messages, outgoing, answer]);
+  }
+
+  /** What the customer sees when they tap, rather than the raw option id. */
+  function labelFor(id: string, fallback: string): string {
+    const menu = welcome().action;
+    if (menu?.kind === "buttons") {
+      const hit = menu.buttons.find((b) => b.id === id);
+      if (hit) return hit.title;
+    }
+    const label = categoryLabel(id);
+    return label === "Salon furniture" ? fallback || id : label;
+  }
+
   function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
     setEnquiry(null);
     setMessages((prev) => [
@@ -764,6 +865,8 @@ function Index() {
     setHasRoomPhoto(false);
     setChatError(null);
     setThinking(false);
+    setFlow(INITIAL);
+    setPlanCollapsed(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -808,14 +911,22 @@ function Index() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
+      <main
+        className={cn(
+          "w-full flex-1 px-4 sm:px-6",
+          whatsapp ? "min-h-0 py-4" : "mx-auto max-w-[820px]",
+        )}
+      >
         {whatsapp ? (
-          <div className="py-6">
+          // Fills the viewport rather than sitting in the 820px reading column:
+          // a phone conversation is tall, and the transcript is the whole point.
+          <div className="mx-auto flex h-[calc(100dvh-8.5rem)] min-h-[420px] w-full max-w-[1040px] flex-col">
             <WhatsAppView
               items={toWaItems(messages)}
               value={input}
               onChange={setInput}
-              onSend={() => send(input)}
+              onSend={() => sendWhatsApp(input)}
+              onTap={(id) => sendWhatsApp("", id)}
               onPickPhoto={() => waFileRef.current?.click()}
               disabled={thinking}
             />
@@ -826,7 +937,7 @@ function Index() {
               className="hidden"
               onChange={(e) => void pickPhoto(e.target.files?.[0])}
             />
-            <p className="mx-auto mt-3 max-w-[820px] text-center text-[11px] leading-snug text-ink-4">
+            <p className="mx-auto mt-2.5 max-w-[820px] shrink-0 text-center text-[11px] leading-snug text-ink-4">
               A preview of this assistant on WhatsApp, held to the real platform limits — three
               reply buttons, ten list rows, thirty catalogue products. Dashed notes mark what
               WhatsApp would cut.

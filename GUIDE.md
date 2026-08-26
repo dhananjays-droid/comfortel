@@ -482,6 +482,27 @@ Limits encoded in `src/lib/whatsapp.ts`, from Meta's Cloud API docs (Aug 2026):
 `carrierFor(n)` picks the primitive a set of products actually needs, so the
 annotation cannot claim a list holds 30 or that a catalogue message cuts rows.
 
+### The scripted menu
+
+`src/lib/wa-flow.ts` is the deterministic front half, and it answers first. A
+business number does not send every "Hi" to a language model: it replies from a
+script, instantly, for free, and still works when the API is down or out of
+credit. Only a sentence the menu cannot serve falls through to `runChat`.
+
+    Hi              -> welcome + 3 reply buttons
+    Browse the range-> list message, 10 categories
+    <category>      -> that category's products, straight from the catalogue
+    Plan my space   -> asks for the wall, then hands the measurement to layout.ts
+    Talk to a person-> handoff notice
+
+`advance()` returns `null` to mean "the menu has nothing to add" — that is the
+signal to call the model. It is pure, so the whole tree is testable without a
+network.
+
+Menus are tappable, not "reply 1 for styling chairs". Numbered text menus are
+the legacy pattern and interactive buttons measurably outperform them, but typed
+digits are still accepted because people type at menus regardless.
+
 What maps cleanly: the 3-mode picker onto 3 reply buttons; a 10-piece plan onto
 exactly one list message (`MAX_REFERENCES` is 10, which is also the list cap —
 raising it silently forces the heavier catalogue path); the 80-98s render onto a
@@ -524,9 +545,12 @@ palette (`#dcf8c6`, `#ece5dd`) that colour-listing sites still publish.
   `ERR_NETWORK_CHANGED` in the console, so the cause looks like the network
   rather than the data. Both `ProductCard` and `PlanTray` now degrade to an icon
   instead of a broken-image glyph, but the underlying flakiness is unexplained.
-- WhatsApp Mode renders the transcript, not the interaction: reply buttons and
-  list rows are shown but are not clickable, and there is no session store, so
-  it previews the shape of a WhatsApp build without being one.
+- WhatsApp Mode has no session store. The scripted menu is real and tappable,
+  but its state lives in React like everything else, so a real build still needs
+  a server-side session keyed by phone number.
+- The scripted menu covers browse, plan and handoff. Anything else falls through
+  to the model, so an API outage degrades to "menu works, conversation doesn't"
+  rather than failing outright.
 - 92 of the 126 renderable products have only one product photograph, so their
   renders can't be held to the reference the way a multi-view product can.
 - `catalog-full.json` ships to the browser whole, including shipping-carton
