@@ -14,7 +14,7 @@ import { ProductSheet } from "@/components/ProductSheet";
 import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
-import { RoomSpecDialog } from "@/components/RoomSpecDialog";
+import { PlanWizard, type WizardMode, type WizardResult } from "@/components/PlanWizard";
 import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
 import type { WaAction } from "@/lib/wa-flow";
 import { Switch } from "@/components/ui/switch";
@@ -22,11 +22,18 @@ import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/Visual
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
-import { CATALOG_SLIM, categoryLabel, getProduct, type FullProduct } from "@/lib/catalog";
+import {
+  CATALOG_SLIM,
+  categoryLabel,
+  formatPrice,
+  getProduct,
+  type FullProduct,
+} from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
+import { TIER_LABEL, idsOf } from "@/lib/packages";
 import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
@@ -313,6 +320,16 @@ function Index() {
    */
   const [planIds, setPlanIds] = useState<string[]>([]);
 
+  /**
+   * How many of each piece the plan covers.
+   *
+   * The plan itself stays a list of ids because that is what a render needs —
+   * one reference image per product, not four. But a package says "4 styling
+   * chairs", and a tray that totalled one of each showed $5,962 under a message
+   * promising $14,788. Two prices for the same plan reads as a lie.
+   */
+  const [planQty, setPlanQty] = useState<Record<string, number>>({});
+
   const planProducts = planIds
     .map((id) => getProduct(id))
     .filter((p): p is FullProduct => Boolean(p));
@@ -324,7 +341,12 @@ function Index() {
    * changes, since changing it is the only reason to want it back.
    */
   const [planCollapsed, setPlanCollapsed] = useState(false);
-  const [roomSpecOpen, setRoomSpecOpen] = useState(false);
+  const [wizard, setWizard] = useState<WizardMode | null>(null);
+  /**
+   * A dimensions run promised one image per zone. The photo usually arrives
+   * after the package, so the intent is held here and spent when it does.
+   */
+  const [pendingZoneRender, setPendingZoneRender] = useState(false);
   /**
    * Renders the same conversation as WhatsApp would deliver it. Read from
    * storage in an effect rather than in the initialiser: this route is server
@@ -356,6 +378,10 @@ function Index() {
 
   const togglePlan = useCallback((product: FullProduct) => {
     setPlanCollapsed(false);
+    setPlanQty((prev) => {
+      const { [product.id]: _dropped, ...rest } = prev;
+      return rest;
+    });
     setPlanIds((prev) =>
       prev.includes(product.id)
         ? prev.filter((id) => id !== product.id)
@@ -593,6 +619,15 @@ function Index() {
     setMessages(next);
     setInput("");
     setPendingPhoto(null);
+
+    // A dimensions run was promised zone renders and was only ever waiting on a
+    // photo. Honour that instead of asking the model what to do with it.
+    if (attached && pendingZoneRender && planIds.length) {
+      setPendingZoneRender(false);
+      renderPlanByZone(next);
+      return;
+    }
+
     void runChat(next, roomPhotoRef.current !== null);
   }
 
@@ -711,7 +746,7 @@ function Index() {
    * something that happens automatically — the customer decides when a cluttered
    * single frame is worth splitting.
    */
-  function renderPlanByZone() {
+  function renderPlanByZone(history?: Message[]) {
     if (!planProducts.length) return;
     const photo = roomPhotoRef.current;
     if (!photo) {
@@ -723,18 +758,24 @@ function Index() {
     const { message, entries } = buildZoneRenderMessage(groups, photo);
     setPlanCollapsed(true);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        role: "user",
-        kind: "photo",
-        content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
-        photo: photo.preview,
-        productId: planProducts[0]?.id ?? "",
-      },
-      message,
-    ]);
+    // When the photo message is already in `history` the room shot is on screen,
+    // so this only adds the render itself rather than a duplicate photo bubble.
+    if (history) {
+      setMessages([...history, message]);
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "user",
+          kind: "photo",
+          content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
+          photo: photo.preview,
+          productId: planProducts[0]?.id ?? "",
+        },
+        message,
+      ]);
+    }
     entries.forEach((entry) => void runRender(entry));
   }
 
@@ -753,22 +794,60 @@ function Index() {
   }
 
   /**
-   * Turn a typed room into a chat turn.
+   * A chosen package becomes the plan, and then a render.
    *
-   * The arithmetic is done here, in code, and travels in the message the model
-   * reads — so the reply is about which pieces suit the room, not about how many
-   * fit, which is a sum language models get wrong confidently.
+   * The package is already decided in code — real products, real prices — so
+   * this does not ask the model what to buy. It states the outcome, fills the
+   * plan, and lets the customer edit it or render it straight away. The room
+   * photo is optional: without one we still show the list and offer the upload.
    */
-  function planByDimensions(spec: RoomSpec) {
-    const summary = planSummary(spec);
-    const bubble = [
-      `A ${formatLength(spec.wallCm, spec.unit)} styling wall`,
-      spec.depthCm ? `${formatLength(spec.depthCm, spec.unit)} deep` : null,
-      spec.stations ? `${spec.stations} stations` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    send(summary, `Plan my space — ${bubble}.`);
+  function acceptPackage(result: WizardResult) {
+    const ids = idsOf(result.pkg).slice(0, MAX_REFERENCES);
+    const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+    if (!products.length) return;
+
+    setWizard(null);
+    setPlanIds(ids);
+    setPlanQty(Object.fromEntries(result.pkg.lines.map((line) => [line.product.id, line.qty])));
+    setPlanCollapsed(false);
+
+    const summary = [
+      `${result.stations} station${result.stations === 1 ? "" : "s"}`,
+      formatPrice(result.pkg.total),
+    ].join(" · ");
+
+    const said: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: [
+        result.note,
+        `Build me a ${result.stations}-station salon for about ${formatPrice(result.budget)}.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      display: result.note || `A ${result.stations}-station salon — ${summary}`,
+    };
+
+    const answer: Message = {
+      id: nextId(),
+      role: "assistant",
+      kind: "text",
+      content: [
+        `Here is the ${TIER_LABEL[result.pkg.tier].toLowerCase()} package — ${summary}.`,
+        ...result.pkg.reasons,
+        result.byZone
+          ? "Add a photo of your room and I'll render it zone by zone."
+          : "Add a photo of your room and I'll render these into it.",
+      ].join(" "),
+      productIds: ids,
+    };
+
+    setMessages((prev) => [...prev, said, answer]);
+
+    // Dimensions runs end in one image per zone, which is the whole point of
+    // giving us the room rather than a sentence.
+    if (result.byZone) setPendingZoneRender(true);
   }
 
   /**
@@ -874,12 +953,14 @@ function Index() {
     setInput("");
     setPendingPhoto(null);
     setPlanIds([]);
+    setPlanQty({});
     roomPhotoRef.current = null;
     setHasRoomPhoto(false);
     setChatError(null);
     setThinking(false);
     setFlow(INITIAL);
     setPlanCollapsed(false);
+    setPendingZoneRender(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -959,11 +1040,7 @@ function Index() {
             </p>
           </div>
         ) : empty ? (
-          <EmptyState
-            onPick={send}
-            onPickPhoto={pickPhoto}
-            onPlanByDimensions={() => setRoomSpecOpen(true)}
-          />
+          <EmptyState onPick={send} onPickPhoto={pickPhoto} onOpenWizard={setWizard} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -1032,12 +1109,16 @@ function Index() {
           <PlanTray
             products={planProducts}
             onRemove={togglePlan}
-            onClear={() => setPlanIds([])}
+            onClear={() => {
+              setPlanIds([]);
+              setPlanQty({});
+            }}
             onVisualize={renderPlan}
             hasPhoto={hasRoomPhoto}
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
             zoneCount={groupByZone(planProducts).length}
             onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
+            quantities={planQty}
             collapsed={planCollapsed}
             onExpand={() => setPlanCollapsed(false)}
           />
@@ -1057,10 +1138,11 @@ function Index() {
         </div>
       </div>
 
-      <RoomSpecDialog
-        open={roomSpecOpen}
-        onClose={() => setRoomSpecOpen(false)}
-        onSubmit={planByDimensions}
+      <PlanWizard
+        mode={wizard}
+        open={wizard !== null}
+        onClose={() => setWizard(null)}
+        onChoose={acceptPackage}
       />
 
       <ProductSheet

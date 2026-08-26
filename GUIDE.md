@@ -463,7 +463,54 @@ except `types.ts` when a table is added.
 
 ---
 
-## 11. WhatsApp Mode
+## 11. The guided flows
+
+The three starters on the first screen do not send a sentence to the model any
+more. Each opens `PlanWizard`, which gathers the requirement first, shows what it
+understood, and only then recommends — the order guided selling works in.
+
+All three converge on `src/lib/packages.ts`, because "describe my salon", "here
+is my budget" and "here are my dimensions" are the same question underneath:
+which pieces, how many, what total. Computing it here rather than asking the
+model means real prices, correct arithmetic, and the same answer every time.
+
+| Starter            | Asks for                          | Ends with                    |
+| ------------------ | --------------------------------- | ---------------------------- |
+| A whole salon      | free text; count and budget parsed | three packages               |
+| To a budget        | budget + station count            | three packages               |
+| Plan by dimensions | wall, depth, budget               | three packages, then zone renders |
+
+### Packages
+
+`needsFor(stations)` is the fit-out: a chair, mirror and stool per station, a
+backwash per three chairs, a trolley per two, one reception desk, one waiting
+piece. `buildPackages(budget, needs)` returns three — 0.85x, 1.0x and 1.25x the
+budget — each the best buildable at its number.
+
+Two things the allocator learned the hard way:
+
+- **Allocate by share, not by cheapest upgrade.** Upgrading a $159 stool is
+  cheap, so a naive greedy loop climbed stools, trolleys and mirrors to the top
+  of their ranges before the chairs moved at all, and recommended $5,908 of
+  mirrors against $2,396 of chairs. `SHARE` fixes the proportions; `OVERRUN`
+  stops leftover money funnelling into one role.
+- **Price floors are not enough to tell furniture from hardware.** `shampoo_unit`
+  holds a $12 shower hose, `mirror_unit` holds a $749 joiner frame. The floor
+  catches the cheap end, the `ACCESSORY` pattern catches the rest.
+
+Reasons are derived, never written. People judge options against each other far
+better than in isolation, so each tier names the single biggest concrete
+difference from the middle one — this chair rather than that chair — plus what
+does not change. No tier is a decoy: every one is genuinely the most the
+catalogue gives at its price, which is the failure mode tiered pricing usually
+falls into.
+
+The plan carries quantities (`planQty`) purely so the tray's subtotal matches the
+package. Renders still use one reference image per product.
+
+---
+
+## 12. WhatsApp Mode
 
 A toggle in the header re-renders the same transcript as WhatsApp would deliver
 it. It is a feasibility preview, not a theme: the point is to answer "does this

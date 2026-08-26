@@ -23,12 +23,13 @@ type Starter = {
   hint: string;
   Icon: typeof Layers;
   /**
-   * A starter that cannot be a plain sentence. Dimensions need three numbers and
-   * a unit, so it opens a form — this used to send "backwash units with an
-   * electric recline" under a "By specification" label, which read as "specify
-   * my room" and delivered a product filter instead.
+   * Which guided flow this starter opens.
+   *
+   * Every starter that needs more than a sentence now opens one. Sending the
+   * label straight to the chat looked like it worked and quietly skipped the
+   * part that makes the answer good — how big, how much, what matters.
    */
-  opens?: "dimensions";
+  opens?: "brief" | "budget" | "dimensions";
 };
 
 /**
@@ -38,21 +39,23 @@ type Starter = {
  */
 const STARTERS: Starter[] = [
   {
-    prompt: "I'm fitting out a four-chair salon from scratch",
+    prompt: "",
     label: "A whole salon",
-    hint: "Four stations, from scratch",
+    hint: "Describe it, we'll spec it",
     Icon: Layers,
+    opens: "brief",
   },
   {
-    prompt: "Black styling chairs under $500",
+    prompt: "",
     label: "To a budget",
-    hint: "Styling chairs under $500",
+    hint: "Three ways to spend it",
     Icon: Wallet,
+    opens: "budget",
   },
   {
     prompt: "",
     label: "Plan by dimensions",
-    hint: "We'll work out what fits",
+    hint: "What fits, then furnished",
     Icon: Ruler,
     opens: "dimensions",
   },
@@ -73,12 +76,12 @@ const STEPS = [
 export function EmptyState({
   onPick,
   onPickPhoto,
-  onPlanByDimensions,
+  onOpenWizard,
 }: {
   onPick: (prompt: string) => void;
   /** Same handler the composer uses, so a photo picked here behaves identically. */
   onPickPhoto: (file: File | undefined) => void;
-  onPlanByDimensions: () => void;
+  onOpenWizard: (mode: "brief" | "budget" | "dimensions") => void;
 }) {
   // Its own input rather than reaching for the composer's: this button exists
   // before the composer matters, and sharing a DOM node across two components
@@ -148,9 +151,7 @@ export function EmptyState({
             <button
               key={starter.prompt}
               type="button"
-              onClick={() =>
-                starter.opens === "dimensions" ? onPlanByDimensions() : onPick(starter.prompt)
-              }
+              onClick={() => (starter.opens ? onOpenWizard(starter.opens) : onPick(starter.prompt))}
               className={cn(
                 "group flex animate-in items-start gap-3 rounded-xl border border-border bg-surface2/60 px-3.5 py-3 text-left fade-in slide-in-from-bottom-2 duration-500",
                 "transition-colors hover:border-border-strong hover:bg-surface2",

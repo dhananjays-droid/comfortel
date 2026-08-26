@@ -25,6 +25,7 @@ export function PlanTray({
   onRenderByZone,
   collapsed = false,
   onExpand,
+  quantities,
 }: {
   products: FullProduct[];
   onRemove: (product: FullProduct) => void;
@@ -44,10 +45,17 @@ export function PlanTray({
    */
   collapsed?: boolean;
   onExpand?: (() => void) | undefined;
+  /**
+   * How many of each piece, when the plan came from a package. Absent means one
+   * of each, which is what an ad-hoc plan is.
+   */
+  quantities?: Record<string, number> | undefined;
 }) {
   if (!products.length) return null;
 
-  const subtotal = products.reduce((sum, p) => sum + (p.price ?? 0), 0);
+  const qtyOf = (id: string) => quantities?.[id] ?? 1;
+  const subtotal = products.reduce((sum, p) => sum + (p.price ?? 0) * qtyOf(p.id), 0);
+  const pieces = products.reduce((sum, p) => sum + qtyOf(p.id), 0);
   const crowded = products.length > RECOMMENDED_REFERENCES;
 
   if (collapsed) {
@@ -63,7 +71,7 @@ export function PlanTray({
       >
         <span className="text-xs font-medium uppercase tracking-wide text-ink-3">Your plan</span>
         <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
-          {products.length} {products.length === 1 ? "piece" : "pieces"}
+          {pieces} {pieces === 1 ? "piece" : "pieces"}
           <span className="mx-1.5 text-ink-4">·</span>
           <span className="font-semibold text-ink-1">{formatPrice(subtotal)}</span>
         </span>
@@ -102,6 +110,11 @@ export function PlanTray({
           >
             <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted p-1">
               <Thumb src={product.images?.[0]} />
+              {qtyOf(product.id) > 1 ? (
+                <span className="absolute bottom-1 left-1 rounded-md bg-ink-1/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-surface2">
+                  ×{qtyOf(product.id)}
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onRemove(product)}
