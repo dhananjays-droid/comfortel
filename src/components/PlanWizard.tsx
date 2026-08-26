@@ -1,5 +1,6 @@
-import { ArrowLeft, Check, Ruler, Sparkles, Wallet } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Ruler, Sparkles, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +17,7 @@ import { formatPrice } from "@/lib/catalog";
 import { BRIEF_PLACEHOLDER, BRIEF_PROMPTS, readBrief } from "@/lib/brief";
 import { ASSUMED, CLEARANCE } from "@/lib/layout";
 import { TIER_LABEL, buildPackages, needsFor, type Package } from "@/lib/packages";
+import { curatePackages } from "@/lib/curate.functions";
 import { formatLength, genericCapacity, toCm, type Unit } from "@/lib/room";
 import { cn } from "@/lib/utils";
 
@@ -124,11 +126,37 @@ export function PlanWizard({
     Number.parseFloat(budget.replace(/[^\d.]/g, "")) || DEFAULT_BUDGET,
   );
 
-  const packages = useMemo(
-    () =>
-      effectiveStations > 0 ? buildPackages(effectiveBudget, needsFor(effectiveStations)) : [],
-    [effectiveBudget, effectiveStations],
-  );
+  /**
+   * Packages come from the model where possible and from the deterministic
+   * packer otherwise. Held in state rather than derived, because the good
+   * version is a round trip — and the fallback is computed locally so the step
+   * is never empty even with no network.
+   */
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [curated, setCurated] = useState(true);
+  const curate = useServerFn(curatePackages);
+
+  async function showOptions() {
+    if (effectiveStations < 1) return;
+    setStep("choose");
+    setLoading(true);
+    // Seed with the local packer so there is something real on screen while the
+    // request is out, and something correct if it never comes back.
+    setPackages(buildPackages(effectiveBudget, needsFor(effectiveStations)));
+    setCurated(true);
+    try {
+      const result = await curate({
+        data: { brief: note.trim(), stations: effectiveStations, budget: effectiveBudget },
+      });
+      setPackages(result.packages);
+      setCurated(result.curated);
+    } catch {
+      setCurated(false);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!mode) return null;
   const Icon = ICON[mode];
@@ -314,7 +342,7 @@ export function PlanWizard({
                 Cancel
               </Button>
               <Button
-                onClick={() => setStep("choose")}
+                onClick={() => void showOptions()}
                 disabled={!canContinue}
                 className="bg-primary text-primary-foreground hover:bg-primary-strong"
               >
@@ -324,6 +352,12 @@ export function PlanWizard({
           </div>
         ) : (
           <div className="space-y-2.5">
+            {loading ? (
+              <p className="flex items-center gap-2 text-xs text-ink-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Choosing pieces that go together…
+              </p>
+            ) : null}
             {packages.map((pkg) => (
               <PackageCard
                 key={pkg.tier}
@@ -335,6 +369,9 @@ export function PlanWizard({
             <p className="pt-1 text-[11px] leading-snug text-ink-4">
               Furniture only — delivery, installation and plumbing aren&apos;t included. Prices are
               current catalogue prices.
+              {!loading && !curated
+                ? " Matched on catalogue rules this time — the assistant wasn't reachable, so these are picked by price band rather than by look."
+                : null}
             </p>
           </div>
         )}

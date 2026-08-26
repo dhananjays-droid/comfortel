@@ -480,6 +480,44 @@ model means real prices, correct arithmetic, and the same answer every time.
 | To a budget        | budget + station count            | three packages               |
 | Plan by dimensions | wall, depth, budget               | three packages, then zone renders |
 
+### Curation: the model picks, code counts
+
+`curate.functions.ts` asks Sonnet 5 to choose the pieces; `curate.ts` verifies
+and prices them. Sonnet rather than Haiku because this reads ~80 candidates
+across seven roles, holds a budget and keeps a look coherent — a different order
+of task from picking four chairs for a chat reply. It runs once or twice a
+session, so the tier costs pennies.
+
+The model chooses roles, quantities and specific products, and writes the
+rationale. It never writes a number: totals are computed from the catalogue
+afterwards, so the sentence carrying a price is always true because nothing
+generated it. `adopt()` rejects invented ids, products placed in roles they
+cannot fill, absurd quantities, and any package without styling chairs.
+
+Four things this cost to get right, all worth knowing before touching it:
+
+- **`strict: true` is not optional.** Without it the model returned `packages` as
+  a JSON *string* containing another `{"packages": [...]}` object, and
+  `Array.isArray` quietly failed. `readPackages()` still tolerates that shape.
+- **Strict accepts a narrow JSON Schema subset.** `minItems` above 1 and
+  `minimum`/`maximum` on numbers are both rejected with a 400. Bounds live in
+  `adopt()` instead.
+- **A model that cannot see prices cannot hit a budget.** Prices were withheld at
+  first so no figure could be misquoted; every tier came back at a third of the
+  budget. It sees prices now and is told never to write one.
+- **It still under-spends, so `fitToBand()` finishes the job.** Hitting a total is
+  arithmetic across seven roles and quantities, which is the thing models are
+  worst at. The model's composition and style stay fixed; only the product within
+  each role climbs, preferring the package's dominant collection.
+
+Tier labels are assigned from the final sorted totals, not from what the model
+called them — band-fitting moves each package by a different amount, which once
+produced a "Stretch" that was the cheapest of the three.
+
+Everything falls back to the deterministic packer: no key, rate limit, malformed
+proposal, or fewer than three surviving packages. The wizard seeds with it
+immediately, so the step is never empty while the request is out.
+
 ### Packages
 
 `needsFor(stations)` is the fit-out: a chair, mirror and stool per station, a
