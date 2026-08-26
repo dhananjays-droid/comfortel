@@ -17,10 +17,18 @@ import { cn } from "@/lib/utils";
  */
 
 type Starter = {
+  /** Sent as a chat turn, unless `opens` says this starter needs input first. */
   prompt: string;
   label: string;
   hint: string;
   Icon: typeof Layers;
+  /**
+   * A starter that cannot be a plain sentence. Dimensions need three numbers and
+   * a unit, so it opens a form — this used to send "backwash units with an
+   * electric recline" under a "By specification" label, which read as "specify
+   * my room" and delivered a product filter instead.
+   */
+  opens?: "dimensions";
 };
 
 /**
@@ -42,10 +50,11 @@ const STARTERS: Starter[] = [
     Icon: Wallet,
   },
   {
-    prompt: "Backwash units with an electric recline",
-    label: "By specification",
-    hint: "Backwash, electric recline",
+    prompt: "",
+    label: "Plan by dimensions",
+    hint: "We'll work out what fits",
     Icon: Ruler,
+    opens: "dimensions",
   },
   {
     prompt: "A reception desk and waiting seating that go together",
@@ -64,10 +73,12 @@ const STEPS = [
 export function EmptyState({
   onPick,
   onPickPhoto,
+  onPlanByDimensions,
 }: {
   onPick: (prompt: string) => void;
   /** Same handler the composer uses, so a photo picked here behaves identically. */
   onPickPhoto: (file: File | undefined) => void;
+  onPlanByDimensions: () => void;
 }) {
   // Its own input rather than reaching for the composer's: this button exists
   // before the composer matters, and sharing a DOM node across two components
@@ -137,7 +148,9 @@ export function EmptyState({
             <button
               key={starter.prompt}
               type="button"
-              onClick={() => onPick(starter.prompt)}
+              onClick={() =>
+                starter.opens === "dimensions" ? onPlanByDimensions() : onPick(starter.prompt)
+              }
               className={cn(
                 "group flex animate-in items-start gap-3 rounded-xl border border-border bg-surface2/60 px-3.5 py-3 text-left fade-in slide-in-from-bottom-2 duration-500",
                 "transition-colors hover:border-border-strong hover:bg-surface2",

@@ -14,6 +14,7 @@ import { ProductSheet } from "@/components/ProductSheet";
 import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
+import { RoomSpecDialog } from "@/components/RoomSpecDialog";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { groupByZone, isSplittable } from "@/lib/zones";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
+import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
@@ -64,7 +66,13 @@ type VisualizeJob = {
 type RenderEntry = { id: string; vis: VisualizationState; job: VisualizeJob };
 
 type Message =
-  | { id: string; role: "user"; kind: "text"; content: string }
+  /**
+   * `display` overrides what the customer sees without changing what the model
+   * reads. Used by the dimensions planner, whose message carries worked-out
+   * numbers and an instruction not to redo them — useful to the model, noise in
+   * a chat bubble.
+   */
+  | { id: string; role: "user"; kind: "text"; content: string; display?: string | undefined }
   | {
       id: string;
       role: "user";
@@ -224,7 +232,17 @@ function Index() {
     .map((id) => getProduct(id))
     .filter((p): p is FullProduct => Boolean(p));
 
+  /**
+   * The plan survives rendering — you should be able to add a piece and go
+   * again without rebuilding it — so the tray needs its own notion of being out
+   * of the way. Collapsed while a render runs, reopened the moment the plan
+   * changes, since changing it is the only reason to want it back.
+   */
+  const [planCollapsed, setPlanCollapsed] = useState(false);
+  const [roomSpecOpen, setRoomSpecOpen] = useState(false);
+
   const togglePlan = useCallback((product: FullProduct) => {
+    setPlanCollapsed(false);
     setPlanIds((prev) =>
       prev.includes(product.id)
         ? prev.filter((id) => id !== product.id)
@@ -418,7 +436,11 @@ function Index() {
     [sendChat, runRender],
   );
 
-  function send(text: string) {
+  /**
+   * @param display What to show in the bubble, when that differs from the text
+   *   the model should receive.
+   */
+  function send(text: string, display?: string) {
     const trimmed = text.trim();
     if (thinking) return;
     // A photo on its own is a valid message, and so is text on its own.
@@ -445,7 +467,13 @@ function Index() {
             photo: attached.preview,
             productId: "",
           }
-        : { id: nextId(), role: "user", kind: "text", content },
+        : {
+            id: nextId(),
+            role: "user",
+            kind: "text",
+            content,
+            ...(display ? { display } : {}),
+          },
     ];
     setMessages(next);
     setInput("");
@@ -488,6 +516,10 @@ function Index() {
 
     const ids = products.map((p) => p.id);
     const { message, entries } = buildRenderMessage(mode, ids, photo);
+
+    // The render is the thing they just asked to look at; the tray must not sit
+    // on top of it.
+    setPlanCollapsed(true);
 
     setMessages((prev) => [
       ...prev,
@@ -574,6 +606,7 @@ function Index() {
 
     const groups = groupByZone(planProducts);
     const { message, entries } = buildZoneRenderMessage(groups, photo);
+    setPlanCollapsed(true);
 
     setMessages((prev) => [
       ...prev,
@@ -602,6 +635,25 @@ function Index() {
       return;
     }
     startRender(planProducts, planProducts.length > 1 ? "refit_room" : "replace_all", photo);
+  }
+
+  /**
+   * Turn a typed room into a chat turn.
+   *
+   * The arithmetic is done here, in code, and travels in the message the model
+   * reads — so the reply is about which pieces suit the room, not about how many
+   * fit, which is a sum language models get wrong confidently.
+   */
+  function planByDimensions(spec: RoomSpec) {
+    const summary = planSummary(spec);
+    const bubble = [
+      `A ${formatLength(spec.wallCm, spec.unit)} styling wall`,
+      spec.depthCm ? `${formatLength(spec.depthCm, spec.unit)} deep` : null,
+      spec.stations ? `${spec.stations} stations` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    send(summary, `Plan my space — ${bubble}.`);
   }
 
   function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
@@ -664,7 +716,11 @@ function Index() {
 
       <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
         {empty ? (
-          <EmptyState onPick={send} onPickPhoto={pickPhoto} />
+          <EmptyState
+            onPick={send}
+            onPickPhoto={pickPhoto}
+            onPlanByDimensions={() => setRoomSpecOpen(true)}
+          />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -734,6 +790,8 @@ function Index() {
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
             zoneCount={groupByZone(planProducts).length}
             onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
+            collapsed={planCollapsed}
+            onExpand={() => setPlanCollapsed(false)}
           />
           <ChatComposer
             value={input}
@@ -750,6 +808,12 @@ function Index() {
           </p>
         </div>
       </div>
+
+      <RoomSpecDialog
+        open={roomSpecOpen}
+        onClose={() => setRoomSpecOpen(false)}
+        onSubmit={planByDimensions}
+      />
 
       <ProductSheet
         product={sheetProduct}
@@ -817,7 +881,7 @@ function MessageRow({
             />
           ) : null}
           <p className="ml-auto w-fit rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-sm leading-relaxed text-ink-1">
-            {message.content}
+            {message.kind === "text" && message.display ? message.display : message.content}
           </p>
         </div>
       </div>

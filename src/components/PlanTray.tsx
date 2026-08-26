@@ -1,4 +1,4 @@
-import { ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ChevronUp, ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice, type FullProduct } from "@/lib/catalog";
@@ -22,6 +22,8 @@ export function PlanTray({
   onUseAnotherPhoto,
   zoneCount = 1,
   onRenderByZone,
+  collapsed = false,
+  onExpand,
 }: {
   products: FullProduct[];
   onRemove: (product: FullProduct) => void;
@@ -34,11 +36,43 @@ export function PlanTray({
   zoneCount?: number;
   /** Only supplied when a split would actually produce more than one image. */
   onRenderByZone?: (() => void) | undefined;
+  /**
+   * Shrinks the tray to a single bar. Set once a render is underway: the plan
+   * deliberately survives rendering so you can tweak it and go again, but at
+   * full height it covers the very image you just asked for.
+   */
+  collapsed?: boolean;
+  onExpand?: (() => void) | undefined;
 }) {
   if (!products.length) return null;
 
   const subtotal = products.reduce((sum, p) => sum + (p.price ?? 0), 0);
   const crowded = products.length > RECOMMENDED_REFERENCES;
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-expanded={false}
+        className={cn(
+          "flex w-full animate-in items-center gap-2.5 rounded-2xl border border-border bg-surface2 px-3.5 py-2.5 text-left fade-in slide-in-from-bottom-1 duration-300",
+          "shadow-[0_-2px_16px_-8px_rgba(15,15,12,0.15)] transition-colors hover:bg-muted",
+        )}
+      >
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-3">Your plan</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
+          {products.length} {products.length === 1 ? "piece" : "pieces"}
+          <span className="mx-1.5 text-ink-4">·</span>
+          <span className="font-semibold text-ink-1">{formatPrice(subtotal)}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink-4">
+          Show
+          <ChevronUp className="h-3.5 w-3.5" />
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-surface2 p-3 shadow-[0_-2px_16px_-8px_rgba(15,15,12,0.15)]">

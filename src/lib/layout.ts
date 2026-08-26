@@ -121,12 +121,22 @@ export type Capacity = {
  * why. When the room came from a photo estimate the language stays hedged, never
  * a flat refusal, because the estimate carries real error.
  */
-export function capacity(room: Room, chair: Dims, requested?: number): Capacity {
+export function capacity(
+  room: Room,
+  chair: Dims,
+  requested?: number,
+  /**
+   * How to render a length. Defaults to metres; callers who know the customer
+   * typed feet pass a foot formatter, so the warning answers in the unit the
+   * question was asked in rather than silently switching.
+   */
+  format: (cm: number) => string = (cm) => `${(cm / 100).toFixed(1)}m`,
+): Capacity {
   const fit = stationsAlongWall(room.wallCm, chair.w ?? 0);
   const hedged = room.confidence === "estimated";
   const warnings: string[] = [];
 
-  const m = (cm: number) => `${(cm / 100).toFixed(1)}m`;
+  const m = format;
 
   if (fit.count === 0) {
     warnings.push(
