@@ -7,6 +7,8 @@ import {
   correctionFor,
   isFaultKind,
   readVerdict,
+  shortfallFrom,
+  shortfallNote,
   shouldRetry,
 } from "@/lib/render-qa";
 
@@ -114,5 +116,135 @@ describe("the fault taxonomy", () => {
   it("rejects anything outside the taxonomy", () => {
     expect(isFaultKind("looks_cheap")).toBe(false);
     expect(isFaultKind("")).toBe(false);
+  });
+});
+
+describe("counting what the render actually delivered", () => {
+  const asked = [
+    { name: "Panther Barbers Chair", qty: 4 },
+    { name: "Villa II Mirror", qty: 4 },
+  ];
+
+  it("reads counts and the placement hint off the reply", () => {
+    const verdict = readVerdict({
+      faults: [],
+      counts: [{ item: "Panther Barbers Chair", seen: 2 }],
+      elsewhere: "along the empty wall opposite the entrance",
+    });
+    expect(verdict.counts).toEqual([{ item: "Panther Barbers Chair", seen: 2 }]);
+    expect(verdict.elsewhere).toBe("along the empty wall opposite the entrance");
+  });
+
+  it("does not treat a short count as a fault", () => {
+    // A room that holds two stations holds two however many times we re-render.
+    const verdict = readVerdict({
+      faults: [],
+      counts: [{ item: "Panther Barbers Chair", seen: 1 }],
+    });
+    expect(verdict.ok).toBe(true);
+    expect(shouldRetry(verdict, 0)).toBe(false);
+  });
+
+  it("finds the shortfall", () => {
+    const verdict = readVerdict({
+      faults: [],
+      counts: [
+        { item: "Panther Barbers Chair", seen: 2 },
+        { item: "Villa II Mirror", seen: 4 },
+      ],
+    });
+    expect(shortfallFrom(asked, verdict)).toEqual([
+      { name: "Panther Barbers Chair", asked: 4, seen: 2 },
+    ]);
+  });
+
+  it("matches names regardless of case", () => {
+    const verdict = readVerdict({
+      faults: [],
+      counts: [{ item: "panther barbers CHAIR", seen: 1 }],
+    });
+    expect(shortfallFrom(asked, verdict)).toHaveLength(1);
+  });
+
+  it("ignores a line the inspector never reported", () => {
+    // Far likelier that it skipped a line than that a whole product vanished,
+    // and inventing a shortfall puts a wrong sentence under a correct picture.
+    const verdict = readVerdict({ faults: [], counts: [{ item: "Villa II Mirror", seen: 4 }] });
+    expect(shortfallFrom(asked, verdict)).toEqual([]);
+  });
+
+  it("says nothing when the render delivered everything", () => {
+    const verdict = readVerdict({
+      faults: [],
+      counts: [
+        { item: "Panther Barbers Chair", seen: 4 },
+        { item: "Villa II Mirror", seen: 5 },
+      ],
+    });
+    expect(shortfallFrom(asked, verdict)).toEqual([]);
+  });
+
+  it("never claims a shortfall on a plan with nothing repeated", () => {
+    const verdict = readVerdict({ faults: [], counts: [{ item: "Walker Desk", seen: 0 }] });
+    expect(shortfallFrom([{ name: "Walker Desk", qty: 1 }], verdict)).toEqual([]);
+  });
+
+  it("says nothing at all when no counting was asked for", () => {
+    expect(shortfallFrom(asked, readVerdict({ faults: [] }))).toEqual([]);
+  });
+
+  it("drops malformed count rows rather than reading NaN", () => {
+    const verdict = readVerdict({
+      faults: [],
+      counts: [{ item: "Chair" }, { seen: 2 }, "nope", { item: "Villa II Mirror", seen: "3" }],
+    });
+    expect(verdict.counts).toEqual([{ item: "Villa II Mirror", seen: 3 }]);
+  });
+});
+
+describe("shortfallNote", () => {
+  it("is empty when nothing is short", () => {
+    expect(shortfallNote([])).toBe("");
+  });
+
+  it("tells the customer what fitted and where the rest goes", () => {
+    const text = shortfallNote(
+      [{ name: "Panther Barbers Chair", asked: 4, seen: 2 }],
+      "along the empty wall opposite the entrance",
+    );
+    expect(text).toContain("4 × Panther Barbers Chair");
+    expect(text).toContain("this view holds 2");
+    expect(text).toContain("The remaining 2 pieces would go along the empty wall");
+  });
+
+  it("still explains itself without a placement hint", () => {
+    const text = shortfallNote([{ name: "Backwash Unit", asked: 2, seen: 1 }]);
+    expect(text).toContain("The remaining 1 piece sit");
+    expect(text).toContain("still in your plan and your quote");
+  });
+
+  it("reads as English when none of them fitted", () => {
+    expect(shortfallNote([{ name: "Backwash Unit", asked: 2, seen: 0 }])).toContain(
+      "this view holds none",
+    );
+  });
+
+  it("covers several short lines in one sentence", () => {
+    const text = shortfallNote([
+      { name: "Chair", asked: 4, seen: 2 },
+      { name: "Mirror", asked: 4, seen: 3 },
+    ]);
+    expect(text).toContain("4 × Chair");
+    expect(text).toContain("4 × Mirror");
+    expect(text).toContain("remaining 3 pieces");
+  });
+
+  it("does not stutter when the hint already starts with 'they could go'", () => {
+    const text = shortfallNote(
+      [{ name: "Chair", asked: 2, seen: 1 }],
+      "they could go against the far wall",
+    );
+    expect(text).toContain("would go against the far wall");
+    expect(text).not.toMatch(/go they could go/);
   });
 });

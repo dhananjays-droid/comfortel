@@ -22,6 +22,14 @@ type StartInput = {
   scene?: string;
   /** A fault the inspector found in a previous attempt at this same render. */
   correction?: string;
+  /**
+   * How many of each product to install, by id. Absent entries mean one.
+   *
+   * Kept separate from productIds rather than folded into it: one reference
+   * image covers any number of the same piece, so repeating an id would send
+   * the same photograph four times and spend fidelity on nothing.
+   */
+  quantities?: Record<string, number>;
 };
 
 /** ~1024px longest edge at JPEG q0.85 lands well under this; anything larger is a client bug. */
@@ -40,6 +48,35 @@ const ASPECT_RATIOS = new Set(["1:1", "3:2", "2:3"]);
 
 /** gpt-image's own default, and the closest match to a landscape room photo. */
 const DEFAULT_ASPECT_RATIO = "3:2";
+
+/**
+ * A plausible ceiling on one product's count in one render, and on how many
+ * entries the map may carry. Both come from the browser, so both are bounded:
+ * a count of 900 would reach the prompt verbatim.
+ */
+const MAX_QTY = 20;
+
+function readQuantities(input: unknown): Record<string, number> {
+  if (!input || typeof input !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [id, value] of Object.entries(input as Record<string, unknown>).slice(
+    0,
+    MAX_REFERENCES,
+  )) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 1) continue;
+    out[id] = Math.min(MAX_QTY, Math.round(n));
+  }
+  return out;
+}
+
+/** Stable regardless of key order, so the same plan always hashes the same. */
+function quantityKey(quantities: Record<string, number>): string {
+  return Object.keys(quantities)
+    .sort()
+    .map((id) => `${id}:${quantities[id]}`)
+    .join(",");
+}
 
 async function readCache(hash: string): Promise<string | null> {
   try {
@@ -108,6 +145,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
         typeof input.correction === "string" && input.correction.length <= 400
           ? input.correction
           : undefined,
+      quantities: readQuantities(input.quantities),
     };
   })
   .handler(async ({ data }): Promise<{ taskId?: string; imageUrl?: string }> => {
@@ -122,6 +160,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
         // Spread conditionally: exactOptionalPropertyTypes rejects an explicit
         // undefined for an optional property.
         const views = viewsFor(id);
+        const qty = data.quantities[id];
         return {
           ...product,
           col: slim.find((p) => p.id === id)?.col || null,
@@ -129,6 +168,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
           // is 31 more products getting an accurate scale clause in the prompt.
           dims_cm: resolveDims(product),
           ...(views.length ? { views } : {}),
+          ...(qty && qty > 1 ? { qty } : {}),
         };
       });
 
@@ -156,6 +196,10 @@ export const visualizeStart = createServerFn({ method: "POST" })
           data.mode +
           (data.scene ?? "") +
           (data.correction ?? "") +
+          // Quantities change the prompt, so they change the image. Left out of
+          // the key, a four-chair render would collide with the one-chair render
+          // of the same plan and serve back the wrong picture.
+          quantityKey(data.quantities) +
           data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);

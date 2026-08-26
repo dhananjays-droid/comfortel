@@ -33,12 +33,19 @@ import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
+import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { TIER_LABEL, idsOf } from "@/lib/packages";
 import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { inspectRender } from "@/lib/render-qa.functions";
-import { correctionFor, shouldRetry } from "@/lib/render-qa";
+import {
+  correctionFor,
+  shortfallFrom,
+  shortfallNote,
+  shouldRetry,
+  type Expected,
+} from "@/lib/render-qa";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 const TITLE = "Comfortel — Salon Furniture Assistant";
@@ -80,6 +87,11 @@ type VisualizeJob = {
   scene?: string | undefined;
   /** Set only on a retry: the fault the inspector found last time. */
   correction?: string | undefined;
+  /**
+   * How many of each piece, when this render came from a plan with quantities.
+   * Drives both the prompt and the count the finished image is checked against.
+   */
+  quantities?: Record<string, number> | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -136,6 +148,16 @@ const POLL_INTERVAL_MS = 3000;
  */
 const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
+/**
+ * The plan is stored beside the thread, not inside it.
+ *
+ * The transcript survived a reload and the plan did not, so a refreshed page
+ * showed a message promising a $14,788 package above an empty tray — and, now
+ * that the model is told the plan every turn, it would have been told the
+ * customer owns nothing while the conversation above it says otherwise. Ids and
+ * counts only: the catalogue is already in the bundle.
+ */
+const PLAN_KEY = "comfortel.plan.v1";
 /** Survives reloads so a demo stays in the mode it was left in. */
 const WA_MODE_KEY = "comfortel.whatsapp.v1";
 
@@ -156,6 +178,23 @@ const nextId = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`;
 /** The customer's salon photo, held for the session so later turns can reuse it. */
 type RoomPhoto = { image: ResizedImage; preview: string };
 
+/** How many individual pieces a render covers, as opposed to how many products. */
+function pieceCount(
+  products: FullProduct[],
+  quantities: Record<string, number> | undefined,
+): number {
+  return planPieces(linesFrom(products, quantities));
+}
+
+/** What the finished image will be counted against. Empty when nothing repeats. */
+function expectedFor(job: VisualizeJob): Expected[] {
+  if (!job.quantities) return [];
+  const products = job.productIds
+    .map((id) => getProduct(id))
+    .filter((p): p is FullProduct => Boolean(p));
+  return expectedFrom(linesFrom(products, job.quantities));
+}
+
 /**
  * Turns a render request into one assistant message.
  *
@@ -174,23 +213,29 @@ type RoomPhoto = { image: ResizedImage; preview: string };
 function buildZoneRenderMessage(
   groups: Array<{ zone: string; label: string; scene: string; products: FullProduct[] }>,
   photo: RoomPhoto,
+  quantities?: Record<string, number> | undefined,
 ): { message: Message; entries: RenderEntry[] } {
-  const entries: RenderEntry[] = groups.map((group) => ({
-    id: nextId(),
-    job: {
-      productIds: group.products.map((p) => p.id),
-      base64: photo.image.base64,
-      mode: "refit_room" as VisualizeMode,
-      aspectRatio: photo.image.aspectRatio,
-      scene: group.scene,
-    },
-    vis: {
-      productIds: group.products.map((p) => p.id),
-      label: group.label,
-      before: photo.preview,
-      status: "loading",
-    },
-  }));
+  const entries: RenderEntry[] = groups.map((group) => {
+    const ids = group.products.map((p) => p.id);
+    const qty = quantitiesFor("refit_room", ids, quantities);
+    return {
+      id: nextId(),
+      job: {
+        productIds: ids,
+        base64: photo.image.base64,
+        mode: "refit_room" as VisualizeMode,
+        aspectRatio: photo.image.aspectRatio,
+        scene: group.scene,
+        ...(qty ? { quantities: qty } : {}),
+      },
+      vis: {
+        productIds: ids,
+        label: group.label,
+        before: photo.preview,
+        status: "loading",
+      },
+    };
+  });
 
   return {
     message: { id: nextId(), role: "assistant", kind: "visualization", content: "", entries },
@@ -262,6 +307,7 @@ function buildRenderMessage(
   mode: VisualizeMode,
   productIds: string[],
   photo: RoomPhoto,
+  quantities?: Record<string, number> | undefined,
 ): { message: Message; entries: RenderEntry[] } {
   const base = {
     base64: photo.image.base64,
@@ -276,21 +322,24 @@ function buildRenderMessage(
     ? [productIds]
     : productIds.map((id) => [id]);
 
-  const entries: RenderEntry[] = groups.map((ids) => ({
-    id: nextId(),
-    job: { ...base, productIds: ids },
-    vis: {
-      productIds: ids,
-      label:
-        mode === "refit_room"
-          ? "Your salon, refitted"
-          : mode === "lineup"
-            ? `${ids.length} options in your space`
-            : (getProduct(ids[0]!)?.name ?? "Your render"),
-      before: photo.preview,
-      status: "loading",
-    },
-  }));
+  const entries: RenderEntry[] = groups.map((ids) => {
+    const qty = quantitiesFor(mode, ids, quantities);
+    return {
+      id: nextId(),
+      job: { ...base, productIds: ids, ...(qty ? { quantities: qty } : {}) },
+      vis: {
+        productIds: ids,
+        label:
+          mode === "refit_room"
+            ? "Your salon, refitted"
+            : mode === "lineup"
+              ? `${ids.length} options in your space`
+              : (getProduct(ids[0]!)?.name ?? "Your render"),
+        before: photo.preview,
+        status: "loading",
+      },
+    };
+  });
 
   const names = productIds.map((id) => getProduct(id)?.name).filter(Boolean);
   const content =
@@ -348,6 +397,20 @@ function Index() {
    * of the way. Collapsed while a render runs, reopened the moment the plan
    * changes, since changing it is the only reason to want it back.
    */
+  /**
+   * The plan, readable from a callback without making that callback depend on
+   * it. runChat is memoised and is also re-invoked by the retry button from a
+   * history captured earlier; closing over the plan directly would send a stale
+   * one, and adding it to the deps would rebuild the callback on every tap of
+   * the tray.
+   */
+  const planIdsRef = useRef<string[]>(planIds);
+  const planQtyRef = useRef<Record<string, number>>(planQty);
+  useEffect(() => {
+    planIdsRef.current = planIds;
+    planQtyRef.current = planQty;
+  }, [planIds, planQty]);
+
   const [planCollapsed, setPlanCollapsed] = useState(false);
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   /**
@@ -429,7 +492,44 @@ function Index() {
     } catch {
       /* a corrupt or unavailable store just means an empty thread */
     }
+    try {
+      const raw = sessionStorage.getItem(PLAN_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { ids?: unknown; qty?: unknown };
+      // Filtered against the catalogue on the way back in: a stored id that no
+      // longer resolves would sit in the plan as an invisible line, counted in
+      // the subtotal and sent to the model, with no card to remove it by.
+      const ids = Array.isArray(saved.ids)
+        ? saved.ids.filter((id): id is string => typeof id === "string" && Boolean(getProduct(id)))
+        : [];
+      if (!ids.length) return;
+      setPlanIds(ids.slice(0, MAX_REFERENCES));
+      const qty = saved.qty;
+      if (qty && typeof qty === "object") {
+        setPlanQty(
+          Object.fromEntries(
+            Object.entries(qty as Record<string, unknown>)
+              .filter(([id, n]) => ids.includes(id) && Number.isFinite(Number(n)) && Number(n) > 1)
+              .map(([id, n]) => [id, Math.round(Number(n))]),
+          ),
+        );
+      }
+    } catch {
+      /* same again — an unreadable plan is an empty one */
+    }
   }, []);
+
+  useEffect(() => {
+    try {
+      if (planIds.length) {
+        sessionStorage.setItem(PLAN_KEY, JSON.stringify({ ids: planIds, qty: planQty }));
+      } else {
+        sessionStorage.removeItem(PLAN_KEY);
+      }
+    } catch {
+      /* over quota or storage disabled — the plan still works in memory */
+    }
+  }, [planIds, planQty]);
 
   useEffect(() => {
     try {
@@ -503,7 +603,9 @@ function Index() {
   const finish = useCallback(
     async (entry: RenderEntry, imageUrl: string, attempt: number) => {
       try {
-        const verdict = await runInspect({ data: { imageUrl } });
+        const expected = expectedFor(entry.job);
+        const verdict = await runInspect({ data: { imageUrl, expected } });
+
         if (shouldRetry(verdict, attempt)) {
           patchRender(entry.id, { status: "loading", progress: 0 });
           void runRenderRef.current?.(
@@ -512,6 +614,14 @@ function Index() {
           );
           return;
         }
+
+        // A room that holds two stations holds two however many times we pay
+        // for the picture, so a shortfall is explained rather than re-rendered.
+        // Saying where the rest would go is the useful half: it turns a missing
+        // chair into a fact about their floor plan.
+        const note = shortfallNote(shortfallFrom(expected, verdict), verdict.elsewhere);
+        patchRender(entry.id, { status: "done", imageUrl, ...(note ? { note } : {}) });
+        return;
       } catch {
         // An inspection we could not run is not a reason to withhold the image.
       }
@@ -539,6 +649,7 @@ function Index() {
             aspectRatio: job.aspectRatio,
             ...(job.scene ? { scene: job.scene } : {}),
             ...(job.correction ? { correction: job.correction } : {}),
+            ...(job.quantities ? { quantities: job.quantities } : {}),
           },
         });
 
@@ -548,7 +659,11 @@ function Index() {
         }
         if (!started.taskId) throw new Error("no task id");
 
-        for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+        // `poll`, not `attempt`: this loop used to shadow the retry counter, so
+        // finish() was handed the poll index — around 28 on a normal render —
+        // and shouldRetry compared that against MAX_RETRIES of 1. The check ran
+        // on every image and the retry could never once fire.
+        for (let poll = 0; poll < MAX_POLLS; poll++) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
           const res = await pollVisualize({ data: { taskId: started.taskId } });
           if (res.done && res.imageUrl) {
@@ -588,8 +703,20 @@ function Index() {
           .slice(-12)
           .map((m) => ({ role: m.role, content: m.content }));
 
+        // The plan goes with every turn, not just the turn it changed on. The
+        // transcript still contains whatever package was proposed earlier, in
+        // full, and the model has no other way to know two pieces have since
+        // been taken out of it. Read from state here rather than from the
+        // message history for exactly that reason.
+        const plan = linesFrom(
+          planIdsRef.current
+            .map((id) => getProduct(id))
+            .filter((p): p is FullProduct => Boolean(p)),
+          planQtyRef.current,
+        );
+
         const res = await sendChat({
-          data: { messages: payload, hasRoomPhoto: photoAttached },
+          data: { messages: payload, hasRoomPhoto: photoAttached, plan },
         });
 
         const next: Message[] = [
@@ -607,10 +734,14 @@ function Index() {
         // a photo is attached — the server refuses to parse the marker otherwise.
         const photo = roomPhotoRef.current;
         if (res.render && photo) {
+          // The plan's quantities travel with it: when the model renders the
+          // plan — which is what it is told to do for "show me these" — the
+          // picture has to hold the number the tray and the quote say.
           const { message, entries } = buildRenderMessage(
             res.render.mode,
             res.render.productIds,
             photo,
+            planQtyRef.current,
           );
           if (entries.length) {
             next.push(message);
@@ -713,12 +844,17 @@ function Index() {
    * server, already uploaded to kie. Re-asking for it was the main reason
    * comparing options felt like starting over.
    */
-  function startRender(products: FullProduct[], mode: VisualizeMode, photo: RoomPhoto) {
+  function startRender(
+    products: FullProduct[],
+    mode: VisualizeMode,
+    photo: RoomPhoto,
+    quantities?: Record<string, number> | undefined,
+  ) {
     const verb =
       mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
 
     const ids = products.map((p) => p.id);
-    const { message, entries } = buildRenderMessage(mode, ids, photo);
+    const { message, entries } = buildRenderMessage(mode, ids, photo, quantities);
 
     // The render is the thing they just asked to look at; the tray must not sit
     // on top of it.
@@ -732,7 +868,7 @@ function Index() {
         kind: "photo",
         content:
           products.length > 1
-            ? `Fit my space out with these ${products.length} pieces.`
+            ? `Fit my space out with these ${pieceCount(products, quantities)} pieces.`
             : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`,
         photo: photo.preview,
         productId: ids[0] as string,
@@ -808,7 +944,7 @@ function Index() {
     }
 
     const groups = groupByZone(planProducts);
-    const { message, entries } = buildZoneRenderMessage(groups, photo);
+    const { message, entries } = buildZoneRenderMessage(groups, photo, planQty);
     setPlanCollapsed(true);
 
     // When the photo message is already in `history` the room shot is on screen,
@@ -843,7 +979,12 @@ function Index() {
       setPhotoProducts(planProducts);
       return;
     }
-    startRender(planProducts, planProducts.length > 1 ? "refit_room" : "replace_all", photo);
+    startRender(
+      planProducts,
+      planProducts.length > 1 ? "refit_room" : "replace_all",
+      photo,
+      planQty,
+    );
   }
 
   /**
@@ -1016,6 +1157,7 @@ function Index() {
     setPendingZoneRender(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(PLAN_KEY);
     } catch {
       /* nothing to clear */
     }

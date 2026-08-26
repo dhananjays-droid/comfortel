@@ -168,3 +168,68 @@ describe("zone renders", () => {
     expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
   });
 });
+
+describe("quantities in a refit", () => {
+  const plan = [
+    product({ id: "c", name: "Panther Barbers Chair", qty: 4 }),
+    product({ id: "m", name: "Villa II Mirror", qty: 4 }),
+    product({ id: "d", name: "Walker Reception Desk" }),
+  ];
+
+  const refit = (products: VisualizeProduct[]) => buildRenderRequest(products, "refit_room").prompt;
+
+  it("says how many of each to install", () => {
+    // Without this a four-chair package rendered as one chair, under a subtotal
+    // that had charged for four.
+    const prompt = refit(plan);
+    expect(prompt).toContain("install 4 of this one");
+    expect(prompt).toContain("4 × Panther Barbers Chair, 4 × Villa II Mirror");
+  });
+
+  it("counts a product with no quantity as one", () => {
+    expect(refit(plan)).toContain("1 × Walker Reception Desk");
+    expect(refit([product({ name: "Solo" })])).toContain("install 1 of this one");
+  });
+
+  it("lets the render come up short rather than cheat the room", () => {
+    // The count must never be met by shrinking, overlapping or burying pieces —
+    // that produces the exact fault the inspector is there to catch.
+    const prompt = refit(plan);
+    expect(prompt).toMatch(/install as many as properly fit and leave the rest out/);
+    expect(prompt).toMatch(/Never shrink a piece, overlap two, sink one into a wall/);
+  });
+
+  it("does not offer that licence when nothing repeats", () => {
+    // With one of each there is no number to fall short of, and the clause would
+    // read as permission to skip pieces.
+    expect(refit([product({ name: "Solo" })])).not.toMatch(/leave the rest out/);
+  });
+
+  it("asks for the repeats to match each other", () => {
+    expect(refit(plan)).toMatch(/Keep every repeat of one product identical/);
+  });
+
+  it("checks the count before it finishes", () => {
+    expect(refit(plan)).toMatch(/as many of each as the quantities above ask for/);
+  });
+
+  it("still sends one reference image per product, not per piece", () => {
+    // Four copies of the same photograph would spend fidelity on nothing.
+    expect(buildRenderRequest(plan, "refit_room").imageUrls).toHaveLength(3);
+  });
+
+  it("stays inside the prompt budget with quantities and a correction", () => {
+    const prompt = buildRenderRequest(
+      plan,
+      "refit_room",
+      "the styling floor at the mirror stations",
+      "The previous attempt came back broken — a piece passing through a wall.",
+    ).prompt;
+    expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
+  });
+
+  it("ignores a nonsense quantity", () => {
+    expect(refit([product({ name: "Solo", qty: Number.NaN })])).toContain("install 1 of this one");
+    expect(refit([product({ name: "Solo", qty: 0 })])).toContain("1 × Solo");
+  });
+});

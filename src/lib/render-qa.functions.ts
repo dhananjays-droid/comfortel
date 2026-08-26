@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { FAULTS, FAULT_KINDS, readVerdict, type Verdict } from "@/lib/render-qa";
+import { FAULTS, FAULT_KINDS, readVerdict, type Expected, type Verdict } from "@/lib/render-qa";
 
 /**
  * The vision pass over a finished render.
@@ -36,6 +36,15 @@ How to judge:
 - Partial occlusion is normal and is NOT "intersecting": furniture legitimately passes behind other furniture, and pieces at the frame edge are legitimately cut off by it. Only report intersecting when a piece is clearly embedded IN a solid surface, as though the surface were not there.
 - If you are unsure, it is not a fault.
 
+Counting
+You are also given the pieces the customer's plan asks for, with quantities. Count how many of each you can actually see in the image and report the number — including when it matches, and including zero.
+- Count physical pieces standing in the room. A piece seen in a mirror is a reflection of one you have already counted, not another one.
+- Count by kind, not by brand: if you are asked for 4 of a named styling chair, count the styling chairs.
+- Partly visible at the edge of the frame still counts.
+- If the image holds fewer than the plan asks for, use "elsewhere" to say — in one short phrase — where the remaining pieces could sensibly go, based on what you can actually see in this room: an empty wall, the space opposite the entrance, the far end past the basins. Name something real in the picture. Leave it empty when the counts are all met.
+
+A room that cannot fit everything is not a fault. Do not report a fault because something is missing; just report the count.
+
 Return your answer with the record_check tool. An empty fault list means the render is fine, which is the normal answer.`;
 
 const TOOL = {
@@ -55,21 +64,58 @@ const TOOL = {
         description:
           "Where the worst fault is, in a few words, e.g. 'chair second from left is inside the timber panel'. Empty when there are no faults.",
       },
+      counts: {
+        type: "array",
+        description:
+          "One entry per piece you were asked to count, using the exact name you were given. Empty when you were not given any.",
+        items: {
+          type: "object",
+          properties: {
+            item: { type: "string", description: "The product name, exactly as given to you." },
+            seen: { type: "integer", description: "How many are physically in the room." },
+          },
+          required: ["item", "seen"],
+          additionalProperties: false,
+        },
+      },
+      elsewhere: {
+        type: "string",
+        description:
+          "Where the pieces that did not fit could go, as a short phrase naming something visible in this room, e.g. 'along the empty wall opposite the entrance'. Empty when every count is met.",
+      },
     },
-    required: ["faults", "note"],
+    required: ["faults", "note", "counts", "elsewhere"],
     additionalProperties: false,
   },
 };
 
 const PASS: Verdict = { ok: true, faults: [] };
 
+function askFor(expected: Expected[]): string {
+  if (!expected.length) return "Check this render. There is nothing to count.";
+  const list = expected.map((e) => `- ${e.qty} × ${e.name}`).join("\n");
+  return `Check this render. The customer's plan asks for:\n${list}\n\nReport a count for every line above, using those exact names.`;
+}
+
+/** The plan can hold ten lines, so the count list cannot be longer. */
+const MAX_EXPECTED = 10;
+
 export const inspectRender = createServerFn({ method: "POST" })
-  .validator((input: { imageUrl: string }) => {
+  .validator((input: { imageUrl: string; expected?: Expected[] }) => {
     const url = String(input?.imageUrl ?? "");
     // Only ever fetch renders from where our generator puts them.
     const allowed = /^https:\/\/[\w.-]*(aiquickdraw\.com|redpandaai\.co)\//i.test(url);
     if (!allowed) throw new Error("unexpected render host");
-    return { imageUrl: url };
+
+    const expected: Expected[] = (Array.isArray(input?.expected) ? input.expected : [])
+      .filter((e) => typeof e?.name === "string" && e.name.trim().length > 0)
+      .map((e) => ({
+        name: e.name.trim().slice(0, 120),
+        qty: Math.min(20, Math.max(1, Math.round(Number(e.qty) || 1))),
+      }))
+      .slice(0, MAX_EXPECTED);
+
+    return { imageUrl: url, expected };
   })
   .handler(async ({ data }): Promise<Verdict> => {
     const apiKey = process.env["ANTHROPIC_API_KEY"];
@@ -96,7 +142,7 @@ export const inspectRender = createServerFn({ method: "POST" })
                 // A URL source keeps the image off our server entirely; kie's
                 // CDN is already public for the lifetime of the render.
                 { type: "image", source: { type: "url", url: data.imageUrl } },
-                { type: "text", text: "Check this render." },
+                { type: "text", text: askFor(data.expected) },
               ],
             },
           ],

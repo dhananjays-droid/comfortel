@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { CATALOG_FULL, CATALOG_SLIM } from "@/lib/catalog";
+import { describePlan, type PlanLine } from "@/lib/plan";
 import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 export type ChatMessageInput = { role: "user" | "assistant"; content: string };
@@ -89,6 +90,12 @@ Style
 - Only recommend components (bases, hydraulics, basins, footrests, trolley accessories) when the customer is clearly shopping for a part or an upgrade to something they already own.
 - If nothing in the catalog fits, say so plainly and show the closest category instead.
 
+The customer's plan
+The customer builds a plan — the pieces they actually want, with quantities — by tapping "Add to plan" on a card or by accepting a package. It sits above the message box as a tray they can edit at any time, and its current contents are stated at the end of these instructions.
+- The plan is the conversation's subject once it has anything in it. Answer against what is in it now, not against what was discussed earlier.
+- When you suggest something that belongs in their plan, say so plainly ("add the trolley and you're covered") rather than re-listing what they already have.
+- Never claim a piece is in their plan when it is not, and never quote a total you worked out yourself — the tray shows the real one.
+
 What the customer can do with a card
 - Tap a card to open the full product, with more photos and specifications.
 - On pieces where v is 1, "See it in my space" lets them upload a photo of their own salon and get that product rendered into it.
@@ -129,6 +136,9 @@ function stripToolCallSyntax(text: string): string {
   return out.replace(TOOL_CALL_TAGS, "");
 }
 
+/** The plan cannot hold more than the tray allows, so neither can the prompt. */
+const MAX_PLAN_LINES = 10;
+
 /** Hard ceiling on renders per reply, since each one bills. */
 const MAX_RENDERS = 4;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -141,20 +151,45 @@ const MODEL = "claude-haiku-4-5-20251001";
 const CATALOG_BLOCK = JSON.stringify(CATALOG_SLIM);
 
 export const chat = createServerFn({ method: "POST" })
-  .validator((input: { messages: ChatMessageInput[]; hasRoomPhoto?: boolean }) => {
-    if (!input || !Array.isArray(input.messages)) throw new Error("messages required");
-    const messages = input.messages
-      .filter(
-        (m) =>
-          (m.role === "user" || m.role === "assistant") &&
-          typeof m.content === "string" &&
-          m.content.trim().length > 0,
-      )
-      .slice(-12)
-      .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
-    if (!messages.length) throw new Error("messages required");
-    return { messages, hasRoomPhoto: input.hasRoomPhoto === true };
-  })
+  .validator(
+    (input: { messages: ChatMessageInput[]; hasRoomPhoto?: boolean; plan?: PlanLine[] }) => {
+      if (!input || !Array.isArray(input.messages)) throw new Error("messages required");
+      const messages = input.messages
+        .filter(
+          (m) =>
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" &&
+            m.content.trim().length > 0,
+        )
+        .slice(-12)
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
+      if (!messages.length) throw new Error("messages required");
+
+      // The plan arrives from the browser, so it is rebuilt from the catalogue
+      // rather than trusted: only ids that resolve survive, and the name and
+      // price come from our own data. A plan line the client invented cannot
+      // put a product that does not exist in front of the model.
+      const plan: PlanLine[] = (Array.isArray(input.plan) ? input.plan : [])
+        .map((line) => {
+          const id = typeof line?.id === "string" ? line.id : "";
+          const product = Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)
+            ? (CATALOG_FULL as Record<string, { name?: string; price?: number | null }>)[id]
+            : undefined;
+          if (!product) return null;
+          const qty = Number(line?.qty);
+          return {
+            id,
+            name: product.name ?? id,
+            qty: Number.isFinite(qty) ? Math.min(99, Math.max(1, Math.round(qty))) : 1,
+            price: product.price ?? null,
+          };
+        })
+        .filter((line): line is PlanLine => line !== null)
+        .slice(0, MAX_PLAN_LINES);
+
+      return { messages, hasRoomPhoto: input.hasRoomPhoto === true, plan };
+    },
+  )
   .handler(
     async ({
       data,
@@ -187,14 +222,18 @@ export const chat = createServerFn({ method: "POST" })
                 cache_control: { type: "ephemeral" },
               },
               {
-                // ORDER MATTERS: caching is a prefix match, so this volatile flag
+                // ORDER MATTERS: caching is a prefix match, so everything volatile
                 // has to sit AFTER the cache_control breakpoint. Above the catalog
-                // block it would invalidate the whole cached prefix the first time
-                // the customer attaches a photo.
+                // block the photo flag would invalidate the whole cached prefix the
+                // first time the customer attached a photo, and the plan — which
+                // changes on almost every turn — would invalidate it constantly.
                 type: "text",
-                text: data.hasRoomPhoto
-                  ? "A photo of the customer's salon IS attached to this conversation. You may emit a RENDER line."
-                  : "No photo of the customer's salon is attached yet. Do not emit a RENDER line.",
+                text: [
+                  data.hasRoomPhoto
+                    ? "A photo of the customer's salon IS attached to this conversation. You may emit a RENDER line."
+                    : "No photo of the customer's salon is attached yet. Do not emit a RENDER line.",
+                  describePlan(data.plan),
+                ].join("\n\n"),
               },
             ],
             messages,

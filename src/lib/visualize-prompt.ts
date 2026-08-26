@@ -204,6 +204,16 @@ export type VisualizeProduct = {
    * the client bundle.
    */
   views?: Array<{ url: string; angle: ViewAngleName }> | undefined;
+  /**
+   * How many of this piece the customer's plan holds.
+   *
+   * One reference image still covers any number of them — the model needs to
+   * know what the chair looks like once, not four times — but the prompt has to
+   * say how many to install. Without it a four-chair package rendered as one
+   * chair, and the customer was looking at a picture that did not match the
+   * quote underneath it.
+   */
+  qty?: number | undefined;
 };
 
 const PLACEMENT: Record<string, string> = {
@@ -324,6 +334,12 @@ function realismClauses(): Clause[] {
   ];
 }
 
+/** How many of this piece to install. Absent means one. */
+function qtyOf(product: VisualizeProduct): number {
+  const n = product.qty;
+  return typeof n === "number" && Number.isFinite(n) && n > 1 ? Math.round(n) : 1;
+}
+
 function describe(product: VisualizeProduct): string {
   const specs = product.specs ?? {};
   const material =
@@ -347,7 +363,12 @@ function buildRefitPrompt(
   scene?: string,
   correction?: string,
 ): string {
-  const list = products.map((p, i) => `Image ${i + 2} is a ${describe(p)}`).join(". ");
+  const list = products
+    .map((p, i) => `Image ${i + 2} is a ${describe(p)} — install ${qtyOf(p)} of this one`)
+    .join(". ");
+
+  const tally = products.map((p) => `${qtyOf(p)} × ${p.name}`).join(", ");
+  const multiples = products.some((p) => qtyOf(p) > 1);
 
   return assemble([
     req(
@@ -369,9 +390,30 @@ function buildRefitPrompt(
     req(
       `Step 2 — INSTALL: fit the Comfortel pieces into the room, each where its type belongs — styling chairs at the mirror stations, mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
     ),
-    opt(
-      `Where the salon had several of one type, repeat the matching Comfortel piece across all of those positions so the room reads as one coordinated fit-out, keeping the original spacing and orientation.`,
+    // The counts, as their own required clause. The customer is buying a
+    // quantity, not a product: a package of four chairs rendered as one chair
+    // contradicts the total sitting directly underneath it.
+    req(
+      `QUANTITIES — install exactly this many of each: ${tally}. These are the pieces the customer is buying, so the number in the picture must be the number on their list.`,
     ),
+    // Permission to under-deliver, stated explicitly. Without it the model
+    // satisfies the count by cheating physics — shrinking chairs, overlapping
+    // them, pushing them into walls. A short honest room beats a crowded
+    // impossible one, and the shortfall is explained to the customer instead.
+    ...(multiples
+      ? [
+          req(
+            `If the floor visible in this photograph genuinely cannot hold that many at a workable spacing, install as many as properly fit and leave the rest out. Never shrink a piece, overlap two, sink one into a wall or block a walkway to make the number work — a room shown holding four chairs when it can only hold two is a failed render.`,
+          ),
+          opt(
+            `Keep every repeat of one product identical to the others — same silhouette, same base, same finish — differing only in size, angle and position as perspective requires.`,
+          ),
+        ]
+      : [
+          opt(
+            `Where the salon had several of one type, repeat the matching Comfortel piece across all of those positions so the room reads as one coordinated fit-out, keeping the original spacing and orientation.`,
+          ),
+        ]),
     req(
       `Reproduce each product exactly as its reference shows it: shape, proportions, upholstery, stitching, base design and hardware finish. Do not invent pieces that are not in the references, and do not restyle the ones that are.`,
     ),
@@ -381,7 +423,7 @@ function buildRefitPrompt(
     ...realismClauses(),
     ...correctionClauses(correction),
     req(
-      `Before you finish, check: none of the salon's original furniture is still present, and every visible piece is a Comfortel product from the references.`,
+      `Before you finish, check: none of the salon's original furniture is still present, every visible piece is a Comfortel product from the references, and you have installed as many of each as the quantities above ask for — or, where the room could not take them, fewer, properly spaced, rather than crammed.`,
     ),
   ]);
 }
