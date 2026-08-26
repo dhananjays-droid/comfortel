@@ -1,4 +1,5 @@
-import { ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ChevronUp, ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { formatPrice, type FullProduct } from "@/lib/catalog";
@@ -22,6 +23,9 @@ export function PlanTray({
   onUseAnotherPhoto,
   zoneCount = 1,
   onRenderByZone,
+  collapsed = false,
+  onExpand,
+  quantities,
 }: {
   products: FullProduct[];
   onRemove: (product: FullProduct) => void;
@@ -34,11 +38,50 @@ export function PlanTray({
   zoneCount?: number;
   /** Only supplied when a split would actually produce more than one image. */
   onRenderByZone?: (() => void) | undefined;
+  /**
+   * Shrinks the tray to a single bar. Set once a render is underway: the plan
+   * deliberately survives rendering so you can tweak it and go again, but at
+   * full height it covers the very image you just asked for.
+   */
+  collapsed?: boolean;
+  onExpand?: (() => void) | undefined;
+  /**
+   * How many of each piece, when the plan came from a package. Absent means one
+   * of each, which is what an ad-hoc plan is.
+   */
+  quantities?: Record<string, number> | undefined;
 }) {
   if (!products.length) return null;
 
-  const subtotal = products.reduce((sum, p) => sum + (p.price ?? 0), 0);
+  const qtyOf = (id: string) => quantities?.[id] ?? 1;
+  const subtotal = products.reduce((sum, p) => sum + (p.price ?? 0) * qtyOf(p.id), 0);
+  const pieces = products.reduce((sum, p) => sum + qtyOf(p.id), 0);
   const crowded = products.length > RECOMMENDED_REFERENCES;
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-expanded={false}
+        className={cn(
+          "flex w-full animate-in items-center gap-2.5 rounded-2xl border border-border bg-surface2 px-3.5 py-2.5 text-left fade-in slide-in-from-bottom-1 duration-300",
+          "shadow-[0_-2px_16px_-8px_rgba(15,15,12,0.15)] transition-colors hover:bg-muted",
+        )}
+      >
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-3">Your plan</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
+          {pieces} {pieces === 1 ? "piece" : "pieces"}
+          <span className="mx-1.5 text-ink-4">·</span>
+          <span className="font-semibold text-ink-1">{formatPrice(subtotal)}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink-4">
+          Show
+          <ChevronUp className="h-3.5 w-3.5" />
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-surface2 p-3 shadow-[0_-2px_16px_-8px_rgba(15,15,12,0.15)]">
@@ -66,18 +109,12 @@ export function PlanTray({
             title={product.name}
           >
             <div className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted p-1">
-              {product.images?.[0] ? (
-                <img
-                  src={product.images[0]}
-                  alt=""
-                  loading="lazy"
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-ink-4">
-                  <ImageIcon className="h-4 w-4" />
-                </div>
-              )}
+              <Thumb src={product.images?.[0]} />
+              {qtyOf(product.id) > 1 ? (
+                <span className="absolute bottom-1 left-1 rounded-md bg-ink-1/85 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-surface2">
+                  ×{qtyOf(product.id)}
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onRemove(product)}
@@ -146,5 +183,35 @@ export function PlanTray({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A product thumbnail that fails quietly.
+ *
+ * The catalogue images are hosted on the Comfortel site, so a flaky network
+ * turns a card into the browser's broken-image glyph — which reads as broken
+ * software rather than a missed request. ProductCard already degrades to an
+ * icon; this is the same treatment for the tray.
+ */
+function Thumb({ src }: { src?: string | undefined }) {
+  const [broken, setBroken] = useState(false);
+
+  if (!src || broken) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-ink-4">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="h-full w-full object-contain"
+    />
   );
 }

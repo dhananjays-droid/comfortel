@@ -14,13 +14,27 @@ import { ProductSheet } from "@/components/ProductSheet";
 import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
+import { PlanWizard, type WizardMode, type WizardResult } from "@/components/PlanWizard";
+import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
+import type { WaAction } from "@/lib/wa-flow";
+import { Switch } from "@/components/ui/switch";
 import { VisualizePhotoDialog, type VisualizeRequest } from "@/components/VisualizePhotoDialog";
 import { MAX_REFERENCES } from "@/lib/visualize-prompt";
 import { groupByZone, isSplittable } from "@/lib/zones";
 import { Button } from "@/components/ui/button";
-import { getProduct, type FullProduct } from "@/lib/catalog";
+import {
+  CATALOG_SLIM,
+  categoryLabel,
+  formatPrice,
+  getProduct,
+  type FullProduct,
+} from "@/lib/catalog";
+import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
+import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
+import { TIER_LABEL, idsOf } from "@/lib/packages";
+import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
@@ -64,7 +78,13 @@ type VisualizeJob = {
 type RenderEntry = { id: string; vis: VisualizationState; job: VisualizeJob };
 
 type Message =
-  | { id: string; role: "user"; kind: "text"; content: string }
+  /**
+   * `display` overrides what the customer sees without changing what the model
+   * reads. Used by the dimensions planner, whose message carries worked-out
+   * numbers and an instruction not to redo them — useful to the model, noise in
+   * a chat bubble.
+   */
+  | { id: string; role: "user"; kind: "text"; content: string; display?: string | undefined }
   | {
       id: string;
       role: "user";
@@ -73,7 +93,15 @@ type Message =
       photo: string;
       productId: string;
     }
-  | { id: string; role: "assistant"; kind: "text"; content: string; productIds?: string[] }
+  | {
+      id: string;
+      role: "assistant";
+      kind: "text";
+      content: string;
+      productIds?: string[];
+      /** Reply buttons or a list, when this turn came from the WhatsApp menu. */
+      action?: WaAction | undefined;
+    }
   | {
       id: string;
       role: "assistant";
@@ -100,6 +128,18 @@ const POLL_INTERVAL_MS = 3000;
  */
 const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
+/** Survives reloads so a demo stays in the mode it was left in. */
+const WA_MODE_KEY = "comfortel.whatsapp.v1";
+
+/**
+ * WhatsApp Mode is parked.
+ *
+ * Everything behind it still builds and is still covered by tests
+ * (`wa-flow.test.ts`, `whatsapp.test.ts`) — this flag only removes the header
+ * toggle and the alternate surface, so nothing half-finished reaches anyone.
+ * Flip to true to bring it back; no other change is needed.
+ */
+const WHATSAPP_MODE_ENABLED = false;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 let seq = 0;
@@ -148,6 +188,66 @@ function buildZoneRenderMessage(
     message: { id: nextId(), role: "assistant", kind: "visualization", content: "", entries },
     entries,
   };
+}
+
+/**
+ * Re-express the transcript in WhatsApp's primitives.
+ *
+ * Product suggestions become a list message, renders become image messages, and
+ * everything else is a plain bubble. Kept as a pure function of the message list
+ * so the two views can never drift into telling different stories.
+ */
+function toWaItems(messages: Message[]): WaItem[] {
+  return messages.map((message): WaItem => {
+    if (message.role === "user") {
+      if (message.kind === "photo" && message.photo) {
+        return {
+          id: message.id,
+          from: "me",
+          kind: "image",
+          text: message.content,
+          src: message.photo,
+        };
+      }
+      return {
+        id: message.id,
+        from: "me",
+        kind: "text",
+        text: message.kind === "text" && message.display ? message.display : message.content,
+      };
+    }
+
+    if (message.kind === "visualization") {
+      return {
+        id: message.id,
+        from: "them",
+        kind: "renders",
+        text: message.content,
+        renders: message.entries.map((entry) => ({
+          label: entry.vis.label,
+          url: entry.vis.imageUrl,
+          loading: entry.vis.status === "loading",
+        })),
+      };
+    }
+
+    if (message.kind === "text" && message.productIds?.length) {
+      const products = message.productIds
+        .map((id) => getProduct(id))
+        .filter((p): p is FullProduct => Boolean(p));
+      if (products.length) {
+        return { id: message.id, from: "them", kind: "products", text: message.content, products };
+      }
+    }
+
+    return {
+      id: message.id,
+      from: "them",
+      kind: "text",
+      text: message.content,
+      ...(message.kind === "text" && message.action ? { action: message.action } : {}),
+    };
+  });
 }
 
 function buildRenderMessage(
@@ -220,11 +320,68 @@ function Index() {
    */
   const [planIds, setPlanIds] = useState<string[]>([]);
 
+  /**
+   * How many of each piece the plan covers.
+   *
+   * The plan itself stays a list of ids because that is what a render needs —
+   * one reference image per product, not four. But a package says "4 styling
+   * chairs", and a tray that totalled one of each showed $5,962 under a message
+   * promising $14,788. Two prices for the same plan reads as a lie.
+   */
+  const [planQty, setPlanQty] = useState<Record<string, number>>({});
+
   const planProducts = planIds
     .map((id) => getProduct(id))
     .filter((p): p is FullProduct => Boolean(p));
 
+  /**
+   * The plan survives rendering — you should be able to add a piece and go
+   * again without rebuilding it — so the tray needs its own notion of being out
+   * of the way. Collapsed while a render runs, reopened the moment the plan
+   * changes, since changing it is the only reason to want it back.
+   */
+  const [planCollapsed, setPlanCollapsed] = useState(false);
+  const [wizard, setWizard] = useState<WizardMode | null>(null);
+  /**
+   * A dimensions run promised one image per zone. The photo usually arrives
+   * after the package, so the intent is held here and spent when it does.
+   */
+  const [pendingZoneRender, setPendingZoneRender] = useState(false);
+  /**
+   * Renders the same conversation as WhatsApp would deliver it. Read from
+   * storage in an effect rather than in the initialiser: this route is server
+   * rendered, and touching localStorage during render would mismatch hydration.
+   */
+  const [whatsapp, setWhatsapp] = useState(false);
+  /** The only thing the UI should branch on — the flag can't be missed here. */
+  const waMode = WHATSAPP_MODE_ENABLED && whatsapp;
+  /** Where the scripted WhatsApp menu is up to. Reset with the thread. */
+  const [flow, setFlow] = useState<FlowState>(INITIAL);
+
+  useEffect(() => {
+    if (!WHATSAPP_MODE_ENABLED) return;
+    try {
+      setWhatsapp(localStorage.getItem(WA_MODE_KEY) === "1");
+    } catch {
+      /* private mode and blocked storage both just mean the default */
+    }
+  }, []);
+
+  const toggleWhatsapp = useCallback((next: boolean) => {
+    setWhatsapp(next);
+    try {
+      localStorage.setItem(WA_MODE_KEY, next ? "1" : "0");
+    } catch {
+      /* the toggle still works for this session */
+    }
+  }, []);
+
   const togglePlan = useCallback((product: FullProduct) => {
+    setPlanCollapsed(false);
+    setPlanQty((prev) => {
+      const { [product.id]: _dropped, ...rest } = prev;
+      return rest;
+    });
     setPlanIds((prev) =>
       prev.includes(product.id)
         ? prev.filter((id) => id !== product.id)
@@ -240,6 +397,8 @@ function Index() {
   const [photoLoading, setPhotoLoading] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
+  /** WhatsApp mode replaces ChatComposer, so it needs its own file input. */
+  const waFileRef = useRef<HTMLInputElement>(null);
   const lastHistoryRef = useRef<{ history: Message[]; photoAttached: boolean } | null>(null);
   // A ref, not state: runChat reads it in the same tick that send() sets it.
   const roomPhotoRef = useRef<RoomPhoto | null>(null);
@@ -418,7 +577,11 @@ function Index() {
     [sendChat, runRender],
   );
 
-  function send(text: string) {
+  /**
+   * @param display What to show in the bubble, when that differs from the text
+   *   the model should receive.
+   */
+  function send(text: string, display?: string) {
     const trimmed = text.trim();
     if (thinking) return;
     // A photo on its own is a valid message, and so is text on its own.
@@ -445,11 +608,26 @@ function Index() {
             photo: attached.preview,
             productId: "",
           }
-        : { id: nextId(), role: "user", kind: "text", content },
+        : {
+            id: nextId(),
+            role: "user",
+            kind: "text",
+            content,
+            ...(display ? { display } : {}),
+          },
     ];
     setMessages(next);
     setInput("");
     setPendingPhoto(null);
+
+    // A dimensions run was promised zone renders and was only ever waiting on a
+    // photo. Honour that instead of asking the model what to do with it.
+    if (attached && pendingZoneRender && planIds.length) {
+      setPendingZoneRender(false);
+      renderPlanByZone(next);
+      return;
+    }
+
     void runChat(next, roomPhotoRef.current !== null);
   }
 
@@ -488,6 +666,10 @@ function Index() {
 
     const ids = products.map((p) => p.id);
     const { message, entries } = buildRenderMessage(mode, ids, photo);
+
+    // The render is the thing they just asked to look at; the tray must not sit
+    // on top of it.
+    setPlanCollapsed(true);
 
     setMessages((prev) => [
       ...prev,
@@ -564,7 +746,7 @@ function Index() {
    * something that happens automatically — the customer decides when a cluttered
    * single frame is worth splitting.
    */
-  function renderPlanByZone() {
+  function renderPlanByZone(history?: Message[]) {
     if (!planProducts.length) return;
     const photo = roomPhotoRef.current;
     if (!photo) {
@@ -574,19 +756,26 @@ function Index() {
 
     const groups = groupByZone(planProducts);
     const { message, entries } = buildZoneRenderMessage(groups, photo);
+    setPlanCollapsed(true);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        role: "user",
-        kind: "photo",
-        content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
-        photo: photo.preview,
-        productId: planProducts[0]?.id ?? "",
-      },
-      message,
-    ]);
+    // When the photo message is already in `history` the room shot is on screen,
+    // so this only adds the render itself rather than a duplicate photo bubble.
+    if (history) {
+      setMessages([...history, message]);
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "user",
+          kind: "photo",
+          content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
+          photo: photo.preview,
+          productId: planProducts[0]?.id ?? "",
+        },
+        message,
+      ]);
+    }
     entries.forEach((entry) => void runRender(entry));
   }
 
@@ -602,6 +791,146 @@ function Index() {
       return;
     }
     startRender(planProducts, planProducts.length > 1 ? "refit_room" : "replace_all", photo);
+  }
+
+  /**
+   * A chosen package becomes the plan, and then a render.
+   *
+   * The package is already decided in code — real products, real prices — so
+   * this does not ask the model what to buy. It states the outcome, fills the
+   * plan, and lets the customer edit it or render it straight away. The room
+   * photo is optional: without one we still show the list and offer the upload.
+   */
+  function acceptPackage(result: WizardResult) {
+    const ids = idsOf(result.pkg).slice(0, MAX_REFERENCES);
+    const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+    if (!products.length) return;
+
+    setWizard(null);
+    setPlanIds(ids);
+    setPlanQty(Object.fromEntries(result.pkg.lines.map((line) => [line.product.id, line.qty])));
+    setPlanCollapsed(false);
+
+    const summary = [
+      `${result.stations} station${result.stations === 1 ? "" : "s"}`,
+      formatPrice(result.pkg.total),
+    ].join(" · ");
+
+    const said: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: [
+        result.note,
+        `Build me a ${result.stations}-station salon for about ${formatPrice(result.budget)}.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      display: result.note || `A ${result.stations}-station salon — ${summary}`,
+    };
+
+    const answer: Message = {
+      id: nextId(),
+      role: "assistant",
+      kind: "text",
+      content: [
+        `Here is the ${TIER_LABEL[result.pkg.tier].toLowerCase()} package — ${summary}.`,
+        ...result.pkg.reasons,
+        result.byZone
+          ? "Add a photo of your room and I'll render it zone by zone."
+          : "Add a photo of your room and I'll render these into it.",
+      ].join(" "),
+      productIds: ids,
+    };
+
+    setMessages((prev) => [...prev, said, answer]);
+
+    // Dimensions runs end in one image per zone, which is the whole point of
+    // giving us the room rather than a sentence.
+    if (result.byZone) setPendingZoneRender(true);
+  }
+
+  /**
+   * Send, the WhatsApp way.
+   *
+   * A business number answers "Hi" from a script, instantly and for free — only
+   * a sentence the menu cannot serve is worth a model call. So the scripted flow
+   * gets first refusal, and `send` is the fallback rather than the default.
+   *
+   * @param tapped An option id from a reply button or list row, when the
+   *   customer tapped rather than typed.
+   */
+  function sendWhatsApp(raw: string, tapped?: string) {
+    const text = tapped ? `wa:${tapped}` : raw.trim();
+    if (!text || thinking) return;
+
+    const shown = tapped ? labelFor(tapped, raw) : text;
+    const outgoing: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: text,
+      display: shown,
+    };
+
+    const step = advance(flow, text);
+
+    // Nothing scripted fits — hand the turn to the model, but keep the room
+    // measurement in the words the model needs if that is what this was.
+    if (!step) {
+      const metres = flow.awaiting === "wall" ? parseWall(text) : null;
+      setFlow(INITIAL);
+      setInput("");
+      if (metres !== null) {
+        const spec: RoomSpec = { wallCm: metres * 100, unit: "m" };
+        const next = [
+          ...messages,
+          { ...outgoing, content: planSummary(spec), display: shown } as Message,
+        ];
+        setMessages(next);
+        void runChat(next, roomPhotoRef.current !== null);
+        return;
+      }
+      const next = [...messages, outgoing];
+      setMessages(next);
+      void runChat(next, roomPhotoRef.current !== null);
+      return;
+    }
+
+    const { reply } = step;
+    setFlow(step.state);
+    setInput("");
+
+    // A category pick is answered from the catalogue, not the model.
+    const productIds = reply.category
+      ? CATALOG_SLIM.filter((p) => p.c === reply.category)
+          .slice(0, MAX_REFERENCES)
+          .map((p) => p.id)
+      : [];
+
+    const answer: Message = {
+      id: nextId(),
+      role: "assistant",
+      kind: "text",
+      content: reply.category
+        ? `Here is what we have in ${categoryLabel(reply.category).toLowerCase()}s. Tap a piece for details, or send me a photo of your room and I'll put one in it.`
+        : reply.text,
+      ...(productIds.length ? { productIds } : {}),
+      ...(reply.action ? { action: reply.action } : {}),
+    };
+
+    setMessages([...messages, outgoing, answer]);
+  }
+
+  /** What the customer sees when they tap, rather than the raw option id. */
+  function labelFor(id: string, fallback: string): string {
+    const menu = welcome().action;
+    if (menu?.kind === "buttons") {
+      const hit = menu.buttons.find((b) => b.id === id);
+      if (hit) return hit.title;
+    }
+    const label = categoryLabel(id);
+    return label === "Salon furniture" ? fallback || id : label;
   }
 
   function onEnquirySubmitted({ reference, product }: { reference: string; product: FullProduct }) {
@@ -624,10 +953,14 @@ function Index() {
     setInput("");
     setPendingPhoto(null);
     setPlanIds([]);
+    setPlanQty({});
     roomPhotoRef.current = null;
     setHasRoomPhoto(false);
     setChatError(null);
     setThinking(false);
+    setFlow(INITIAL);
+    setPlanCollapsed(false);
+    setPendingZoneRender(false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -648,6 +981,18 @@ function Index() {
             </p>
             <p className="truncate text-xs text-ink-3">Salon, barber &amp; spa furniture</p>
           </div>
+          {WHATSAPP_MODE_ENABLED ? (
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-ink-3">
+              <span className="hidden sm:inline">WhatsApp Mode</span>
+              <span className="sm:hidden">WhatsApp</span>
+              <Switch
+                checked={whatsapp}
+                onCheckedChange={toggleWhatsapp}
+                aria-label="WhatsApp Mode"
+                className="data-[state=checked]:bg-[#25d366]"
+              />
+            </label>
+          ) : null}
           {!empty ? (
             <Button
               variant="ghost"
@@ -662,9 +1007,40 @@ function Index() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[820px] flex-1 px-4 sm:px-6">
-        {empty ? (
-          <EmptyState onPick={send} onPickPhoto={pickPhoto} />
+      <main
+        className={cn(
+          "w-full flex-1 px-4 sm:px-6",
+          waMode ? "min-h-0 py-4" : "mx-auto max-w-[820px]",
+        )}
+      >
+        {waMode ? (
+          // Fills the viewport rather than sitting in the 820px reading column:
+          // a phone conversation is tall, and the transcript is the whole point.
+          <div className="mx-auto flex h-[calc(100dvh-8.5rem)] min-h-[420px] w-full max-w-[1040px] flex-col">
+            <WhatsAppView
+              items={toWaItems(messages)}
+              value={input}
+              onChange={setInput}
+              onSend={() => sendWhatsApp(input)}
+              onTap={(id) => sendWhatsApp("", id)}
+              onPickPhoto={() => waFileRef.current?.click()}
+              disabled={thinking}
+            />
+            <input
+              ref={waFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void pickPhoto(e.target.files?.[0])}
+            />
+            <p className="mx-auto mt-2.5 max-w-[820px] shrink-0 text-center text-[11px] leading-snug text-ink-4">
+              A preview of this assistant on WhatsApp, held to the real platform limits — three
+              reply buttons, ten list rows, thirty catalogue products. Dashed notes mark what
+              WhatsApp would cut.
+            </p>
+          </div>
+        ) : empty ? (
+          <EmptyState onPick={send} onPickPhoto={pickPhoto} onOpenWizard={setWizard} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -723,17 +1099,28 @@ function Index() {
         )}
       </main>
 
-      <div className="sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3">
+      <div
+        className={cn(
+          "sticky bottom-0 z-20 bg-gradient-to-t from-background via-background to-transparent pb-4 pt-3",
+          whatsapp && "hidden",
+        )}
+      >
         <div className="mx-auto w-full max-w-[820px] space-y-2.5 px-4 sm:px-6">
           <PlanTray
             products={planProducts}
             onRemove={togglePlan}
-            onClear={() => setPlanIds([])}
+            onClear={() => {
+              setPlanIds([]);
+              setPlanQty({});
+            }}
             onVisualize={renderPlan}
             hasPhoto={hasRoomPhoto}
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
             zoneCount={groupByZone(planProducts).length}
             onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
+            quantities={planQty}
+            collapsed={planCollapsed}
+            onExpand={() => setPlanCollapsed(false)}
           />
           <ChatComposer
             value={input}
@@ -750,6 +1137,13 @@ function Index() {
           </p>
         </div>
       </div>
+
+      <PlanWizard
+        mode={wizard}
+        open={wizard !== null}
+        onClose={() => setWizard(null)}
+        onChoose={acceptPackage}
+      />
 
       <ProductSheet
         product={sheetProduct}
@@ -817,7 +1211,7 @@ function MessageRow({
             />
           ) : null}
           <p className="ml-auto w-fit rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-sm leading-relaxed text-ink-1">
-            {message.content}
+            {message.kind === "text" && message.display ? message.display : message.content}
           </p>
         </div>
       </div>

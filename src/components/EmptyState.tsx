@@ -17,10 +17,19 @@ import { cn } from "@/lib/utils";
  */
 
 type Starter = {
+  /** Sent as a chat turn, unless `opens` says this starter needs input first. */
   prompt: string;
   label: string;
   hint: string;
   Icon: typeof Layers;
+  /**
+   * Which guided flow this starter opens.
+   *
+   * Every starter that needs more than a sentence now opens one. Sending the
+   * label straight to the chat looked like it worked and quietly skipped the
+   * part that makes the answer good — how big, how much, what matters.
+   */
+  opens?: "brief" | "budget" | "dimensions";
 };
 
 /**
@@ -30,22 +39,25 @@ type Starter = {
  */
 const STARTERS: Starter[] = [
   {
-    prompt: "I'm fitting out a four-chair salon from scratch",
+    prompt: "",
     label: "A whole salon",
-    hint: "Four stations, from scratch",
+    hint: "Describe it, we'll spec it",
     Icon: Layers,
+    opens: "brief",
   },
   {
-    prompt: "Black styling chairs under $500",
+    prompt: "",
     label: "To a budget",
-    hint: "Styling chairs under $500",
+    hint: "Three ways to spend it",
     Icon: Wallet,
+    opens: "budget",
   },
   {
-    prompt: "Backwash units with an electric recline",
-    label: "By specification",
-    hint: "Backwash, electric recline",
+    prompt: "",
+    label: "Plan by dimensions",
+    hint: "What fits, then furnished",
     Icon: Ruler,
+    opens: "dimensions",
   },
   {
     prompt: "A reception desk and waiting seating that go together",
@@ -64,10 +76,12 @@ const STEPS = [
 export function EmptyState({
   onPick,
   onPickPhoto,
+  onOpenWizard,
 }: {
   onPick: (prompt: string) => void;
   /** Same handler the composer uses, so a photo picked here behaves identically. */
   onPickPhoto: (file: File | undefined) => void;
+  onOpenWizard: (mode: "brief" | "budget" | "dimensions") => void;
 }) {
   // Its own input rather than reaching for the composer's: this button exists
   // before the composer matters, and sharing a DOM node across two components
@@ -137,7 +151,7 @@ export function EmptyState({
             <button
               key={starter.prompt}
               type="button"
-              onClick={() => onPick(starter.prompt)}
+              onClick={() => (starter.opens ? onOpenWizard(starter.opens) : onPick(starter.prompt))}
               className={cn(
                 "group flex animate-in items-start gap-3 rounded-xl border border-border bg-surface2/60 px-3.5 py-3 text-left fade-in slide-in-from-bottom-2 duration-500",
                 "transition-colors hover:border-border-strong hover:bg-surface2",
