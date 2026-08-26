@@ -123,6 +123,16 @@ const MAX_POLLS = 100;
 const STORAGE_KEY = "comfortel.chat.v1";
 /** Survives reloads so a demo stays in the mode it was left in. */
 const WA_MODE_KEY = "comfortel.whatsapp.v1";
+
+/**
+ * WhatsApp Mode is parked.
+ *
+ * Everything behind it still builds and is still covered by tests
+ * (`wa-flow.test.ts`, `whatsapp.test.ts`) — this flag only removes the header
+ * toggle and the alternate surface, so nothing half-finished reaches anyone.
+ * Flip to true to bring it back; no other change is needed.
+ */
+const WHATSAPP_MODE_ENABLED = false;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 let seq = 0;
@@ -321,10 +331,13 @@ function Index() {
    * rendered, and touching localStorage during render would mismatch hydration.
    */
   const [whatsapp, setWhatsapp] = useState(false);
+  /** The only thing the UI should branch on — the flag can't be missed here. */
+  const waMode = WHATSAPP_MODE_ENABLED && whatsapp;
   /** Where the scripted WhatsApp menu is up to. Reset with the thread. */
   const [flow, setFlow] = useState<FlowState>(INITIAL);
 
   useEffect(() => {
+    if (!WHATSAPP_MODE_ENABLED) return;
     try {
       setWhatsapp(localStorage.getItem(WA_MODE_KEY) === "1");
     } catch {
@@ -887,16 +900,18 @@ function Index() {
             </p>
             <p className="truncate text-xs text-ink-3">Salon, barber &amp; spa furniture</p>
           </div>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-ink-3">
-            <span className="hidden sm:inline">WhatsApp Mode</span>
-            <span className="sm:hidden">WhatsApp</span>
-            <Switch
-              checked={whatsapp}
-              onCheckedChange={toggleWhatsapp}
-              aria-label="WhatsApp Mode"
-              className="data-[state=checked]:bg-[#25d366]"
-            />
-          </label>
+          {WHATSAPP_MODE_ENABLED ? (
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-ink-3">
+              <span className="hidden sm:inline">WhatsApp Mode</span>
+              <span className="sm:hidden">WhatsApp</span>
+              <Switch
+                checked={whatsapp}
+                onCheckedChange={toggleWhatsapp}
+                aria-label="WhatsApp Mode"
+                className="data-[state=checked]:bg-[#25d366]"
+              />
+            </label>
+          ) : null}
           {!empty ? (
             <Button
               variant="ghost"
@@ -914,10 +929,10 @@ function Index() {
       <main
         className={cn(
           "w-full flex-1 px-4 sm:px-6",
-          whatsapp ? "min-h-0 py-4" : "mx-auto max-w-[820px]",
+          waMode ? "min-h-0 py-4" : "mx-auto max-w-[820px]",
         )}
       >
-        {whatsapp ? (
+        {waMode ? (
           // Fills the viewport rather than sitting in the 820px reading column:
           // a phone conversation is tall, and the transcript is the whole point.
           <div className="mx-auto flex h-[calc(100dvh-8.5rem)] min-h-[420px] w-full max-w-[1040px] flex-col">
