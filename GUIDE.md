@@ -305,6 +305,48 @@ three-station fixture, two kept three chairs and one produced four, despite the
 prompt pinning the count both in the install step and in the closing check.
 Treat exact count as likely, not guaranteed.
 
+### What the reference change actually did — measured
+
+Six renders against a real salon photo, three per arm, same plan (4 × Harper
+Styling Chair, 4 × Sienna Black Salon Mirror, 2 × Mova Trolley Bronze). OLD =
+one hero photograph per product, which is what `refit_room` sent before. NEW =
+the fifteen slots shared out, several views per product, grouped in the prompt.
+
+| | inspector faults | quantities | Harper armrest correct |
+| --- | --- | --- | --- |
+| OLD ×3 | 1 (`stale_mirror`) | 4/4/2 every time | 3 of 3 |
+| NEW ×3 | 0 | 4/4/2 every time | 2 of 3 |
+
+**Two things are settled.** Quantities land: every one of the six renders held
+exactly four chairs, four mirrors and two trolleys. Before, `refit_room` sent
+one photograph per product and said nothing about counts, so a four-chair
+package rendered as one chair under a subtotal charging for four. And the
+inspector earns its keep — it caught a genuine stale mirror (a white chair and
+basin reflected that were not in the room) which, now the shadowed retry counter
+is fixed, triggers a re-render instead of shipping.
+
+**One thing is not.** Multi-view is a wash. The inspector prefers NEW (0 faults
+to 1); looking at the chairs myself prefers OLD (3 of 3 reproduce Harper's open
+square-tube armrest with its padded bar; NEW 1 made a solid upholstered block).
+Neither gap is meaningful at three samples. It is kept because there is no
+evidence against it either, and because the products it should help most are the
+ones whose hero shot is weakest — but do not describe it as an improvement
+without more renders. `MAX_REFERENCE_SLOTS` and `MAX_VIEWS` are the two numbers
+to turn.
+
+Worth knowing before re-running this: an eleven-reference render pays eleven
+mirror-uploads on a cold cache against three, so first-render latency is not
+free even where quality is level.
+
+**The data fix is separately confirmed.** Walker Reception Desk led with a
+styled lifestyle photograph, which is what the old "hero must be image 1" rule
+forced. Rendered with the studio shot substituted, the desk comes back correct —
+rounded oak carcass, three curved open shelves, plinth base. Its A/B partner
+never returned (the task sat in `generating` for over ten minutes and was
+abandoned), so this is one render, not a comparison; but a lifestyle hero
+competing with "the first image is the salon" was always a defect by inspection,
+not something needing a render to prove.
+
 ### The prompt budget
 
 `assemble()` in `visualize-prompt.ts` caps every prompt at `MAX_PROMPT_CHARS` and
