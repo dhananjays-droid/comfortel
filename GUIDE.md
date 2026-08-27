@@ -319,10 +319,41 @@ length. `replace` is the default mode, which is why it looked like "everything i
 broken". Nothing enforced the limit, so a wording change could silently break
 rendering — now it cannot.
 
-**Coverage is the remaining limit.** Of the 126 renderable products, only **34**
-have more than one usable view; the other **92** ship a single photograph, and
-for those this fix changes nothing. Scraping additional angles into
-`catalog-full.json` is the highest-value data work left.
+**Coverage — and where it actually stopped.** Two separate limits were confused
+here for a long time.
+
+The first was a cap in the classifier: `MAX_IMAGES` was **6**, so any listing
+with more photos than that had its tail ignored. Harper Styling Chair carries 14
+images and its clean front, side and back shots sit at positions 12, 14 and 10 —
+behind six base-and-hydraulic variants and two lifestyle features. The classifier
+saw six, correctly rejected all six, returned nothing, and the best angle set in
+the catalogue went unused. Across 64 products, **289 photographs had never once
+been looked at**. The cap is now 14 (`CLASSIFY_MAX_IMAGES` overrides it).
+
+The second was assumed and is **false**: scraping the vendor site for more photos
+gains nothing. Checked by curl and by rendering the pages in a browser —
+`data-large_image` is the gallery's only real source, the thumbnails are
+client-side Underscore templates, and there is no variation-gallery JSON. Blake
+Merlot, Oakley and Cloud Waiting Sofa show **one** photograph on the page, which
+is the one we already hold; Harper shows 14, which are the 14 we already hold.
+`catalog-full.json` is already complete against the vendor. Don't re-run a
+scraper expecting more.
+
+What the photography genuinely cannot give: **Archie Styling Chair** has 8
+photos, all the same 3/4 angle in different base finishes. **Hazel** and **Zippy**
+are sold with a black basin but every extra angle in their listings shows the
+white-basin variant, so they are hero-only on purpose. Twenty-three renderable
+products have exactly one photograph on file and always will.
+
+Two rules the automated pass got wrong, both fixed by hand:
+
+- **The hero need not be image 1.** Walker, Taylor, Maverick and Willow reception
+  desks all lead with a lifestyle shot, so the "hero must be image 1" rule binned
+  four complete studio sets. Anchor on the first clean single-unit studio shot
+  instead.
+- **Filenames lie about variants.** Harper `#11` and `#13` are both named
+  `Black-Pump`; `#11` has a chrome column and `#13` a black one. Only `#13`
+  matches the anchor. Judge the pixels.
 
 Three kie traps, all commented in `kie.server.ts`:
 

@@ -16,7 +16,20 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "src/data/product-views.json");
 const MODEL = "claude-sonnet-5";
-const MAX_IMAGES = 6;
+/**
+ * How many of a listing's photos to examine.
+ *
+ * Was 6, which silently capped the best-photographed products in the catalogue.
+ * Harper Styling Chair carries 14 images and its clean front, side and back
+ * shots sit at positions 12, 14 and 10 — behind six base-and-hydraulic variants
+ * and two lifestyle features. The classifier saw the first six, correctly
+ * rejected every one, and returned nothing, so the single best angle set we own
+ * was never used. 289 photographs across 64 products were never looked at.
+ *
+ * 14 covers the longest listing. The cost is per image, so this is not free —
+ * but it is a few dollars once, against a permanent fidelity ceiling.
+ */
+const MAX_IMAGES = Number(process.env.CLASSIFY_MAX_IMAGES ?? 14);
 const CONCURRENCY = 4;
 
 const KEY = process.env.ANTHROPIC_API_KEY;
@@ -27,6 +40,11 @@ if (!KEY) {
 
 const limitArg = process.argv.indexOf("--limit");
 const LIMIT = limitArg > -1 ? Number(process.argv[limitArg + 1]) : Infinity;
+
+/** Try a handful of ids without touching the stored set. */
+const onlyArg = process.argv.indexOf("--only");
+const ONLY = onlyArg > -1 ? new Set(process.argv[onlyArg + 1].split(",")) : null;
+const DRY = process.argv.includes("--dry");
 
 const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, "src/data/catalog-full.json"), "utf8"));
 
@@ -175,9 +193,13 @@ async function classify(id, product) {
   return views.length > 1 ? views : null;
 }
 
-const ids = Object.keys(catalog).filter((id) => (catalog[id].images ?? []).length > 1);
+const ids = Object.keys(catalog)
+  .filter((id) => (catalog[id].images ?? []).length > 1)
+  .filter((id) => !ONLY || ONLY.has(id));
 const todo = ids.slice(0, LIMIT);
-console.log(`classifying ${todo.length} products with >1 photo (of ${ids.length})`);
+console.log(
+  `classifying ${todo.length} products with >1 photo (of ${ids.length}), up to ${MAX_IMAGES} images each${DRY ? " — DRY RUN" : ""}`,
+);
 
 const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, "utf8")) : {};
 let done = 0;
@@ -189,8 +211,16 @@ async function worker(queue) {
     try {
       const views = await classify(id, catalog[id]);
       if (views) {
-        out[id] = views;
+        if (DRY) {
+          console.log(
+            `  ${catalog[id].name}\n${views.map((v) => `      ${v.angle.padEnd(6)} ${v.url.split("/").pop()}`).join("\n")}`,
+          );
+        } else {
+          out[id] = views;
+        }
         kept++;
+      } else if (DRY) {
+        console.log(`  ${catalog[id].name} — no usable set`);
       }
     } catch (err) {
       console.error(`  ${id} failed: ${err.message}`);
@@ -201,6 +231,11 @@ async function worker(queue) {
 
 const queue = [...todo];
 await Promise.all(Array.from({ length: CONCURRENCY }, () => worker(queue)));
+
+if (DRY) {
+  console.log(`\n${kept}/${todo.length} produced a usable set. Nothing written.`);
+  process.exit(0);
+}
 
 fs.writeFileSync(OUT, `${JSON.stringify(out, null, 1)}\n`);
 console.log(`\nwrote ${OUT}`);

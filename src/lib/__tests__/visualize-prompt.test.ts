@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allocateReferences,
   buildRenderRequest,
   MAX_PROMPT_CHARS,
+  MAX_REFERENCE_SLOTS,
   referenceViews,
   type VisualizeProduct,
 } from "@/lib/visualize-prompt";
@@ -171,9 +173,9 @@ describe("zone renders", () => {
 
 describe("quantities in a refit", () => {
   const plan = [
-    product({ id: "c", name: "Panther Barbers Chair", qty: 4 }),
-    product({ id: "m", name: "Villa II Mirror", qty: 4 }),
-    product({ id: "d", name: "Walker Reception Desk" }),
+    product({ id: "c", name: "Panther Barbers Chair", qty: 4, images: ["https://x/chair.jpg"] }),
+    product({ id: "m", name: "Villa II Mirror", qty: 4, images: ["https://x/mirror.jpg"] }),
+    product({ id: "d", name: "Walker Reception Desk", images: ["https://x/desk.jpg"] }),
   ];
 
   const refit = (products: VisualizeProduct[]) => buildRenderRequest(products, "refit_room").prompt;
@@ -213,9 +215,12 @@ describe("quantities in a refit", () => {
     expect(refit(plan)).toMatch(/as many of each as the quantities above ask for/);
   });
 
-  it("still sends one reference image per product, not per piece", () => {
-    // Four copies of the same photograph would spend fidelity on nothing.
-    expect(buildRenderRequest(plan, "refit_room").imageUrls).toHaveLength(3);
+  it("never repeats a photograph once per piece", () => {
+    // Quantity is carried by the prompt, not by the image array: four copies of
+    // the same photograph would spend four slots and teach the model nothing.
+    const urls = buildRenderRequest(plan, "refit_room").imageUrls;
+    expect(new Set(urls).size).toBe(urls.length);
+    expect(urls).toHaveLength(3);
   });
 
   it("stays inside the prompt budget with quantities and a correction", () => {
@@ -231,5 +236,162 @@ describe("quantities in a refit", () => {
   it("ignores a nonsense quantity", () => {
     expect(refit([product({ name: "Solo", qty: Number.NaN })])).toContain("install 1 of this one");
     expect(refit([product({ name: "Solo", qty: 0 })])).toContain("1 × Solo");
+  });
+});
+
+describe("referenceViews prefers distinct angles", () => {
+  const withViews = (angles: Array<"hero" | "front" | "side" | "back" | "detail">) =>
+    product({
+      views: angles.map((angle, i) => ({ url: `https://x/${angle}${i}.jpg`, angle })),
+    });
+
+  it("drops a duplicate angle before a distinct one", () => {
+    // Harper's real set. Taking the first four in order spent a slot on the
+    // second side shot and lost the back view entirely.
+    const views = referenceViews(withViews(["hero", "front", "side", "side", "back"]), 4);
+    expect(views.map((v) => v.angle)).toEqual([
+      "as the catalogue shows it",
+      "from the front",
+      "from the side",
+      "from the back",
+    ]);
+  });
+
+  it("keeps a duplicate when there is a slot going spare", () => {
+    const views = referenceViews(withViews(["hero", "side", "side"]), 4);
+    expect(views).toHaveLength(3);
+    expect(views.map((v) => v.url)).toEqual([
+      "https://x/hero0.jpg",
+      "https://x/side1.jpg",
+      "https://x/side2.jpg",
+    ]);
+  });
+
+  it("still leads with the hero", () => {
+    expect(referenceViews(withViews(["hero", "back", "front"]), 4)[0]?.angle).toBe(
+      "as the catalogue shows it",
+    );
+  });
+
+  it("honours the cap", () => {
+    expect(referenceViews(withViews(["hero", "front", "side", "back", "detail"]), 2)).toHaveLength(
+      2,
+    );
+  });
+});
+
+describe("allocateReferences", () => {
+  const withViews = (id: string, name: string, n: number): VisualizeProduct =>
+    product({
+      id,
+      name,
+      views: (["hero", "front", "side", "back"] as const)
+        .slice(0, n)
+        .map((angle) => ({ url: `https://x/${id}-${angle}.jpg`, angle })),
+    });
+
+  it("gives every product its hero before anyone gets a second view", () => {
+    // A plan is unusable if a piece is missing entirely, however well
+    // photographed its neighbour is.
+    const blocks = allocateReferences([
+      withViews("a", "Chair", 4),
+      withViews("b", "Mirror", 4),
+      withViews("c", "Trolley", 1),
+    ]);
+    expect(blocks.map((b) => b.product.id)).toEqual(["a", "b", "c"]);
+    expect(blocks.every((b) => b.views[0]?.angle === "as the catalogue shows it")).toBe(true);
+  });
+
+  it("numbers the blocks contiguously, starting after the room photo", () => {
+    const blocks = allocateReferences([withViews("a", "Chair", 3), withViews("b", "Mirror", 2)]);
+    expect(blocks[0]?.start).toBe(2);
+    expect(blocks[1]?.start).toBe(2 + (blocks[0]?.views.length ?? 0));
+  });
+
+  it("never exceeds the slots the API leaves free", () => {
+    const many = Array.from({ length: 10 }, (_, i) => withViews(`p${i}`, `P${i}`, 4));
+    const total = allocateReferences(many).reduce((n, b) => n + b.views.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_REFERENCE_SLOTS);
+  });
+
+  it("spreads the spare slots rather than spending them all on one product", () => {
+    // Twelve slots left over must not become twelve photos of the chair.
+    const blocks = allocateReferences([
+      withViews("a", "Chair", 4),
+      withViews("b", "Mirror", 4),
+      withViews("c", "Trolley", 4),
+    ]);
+    const counts = blocks.map((b) => b.views.length);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+  });
+
+  it("does not invent views a product does not have", () => {
+    const blocks = allocateReferences([withViews("a", "Chair", 1), withViews("b", "Mirror", 4)]);
+    expect(blocks[0]?.views).toHaveLength(1);
+  });
+
+  it("skips a product with no usable image at all", () => {
+    const blocks = allocateReferences([
+      product({ id: "none", images: [] }),
+      withViews("b", "M", 2),
+    ]);
+    expect(blocks.map((b) => b.product.id)).toEqual(["b"]);
+    expect(blocks[0]?.start).toBe(2);
+  });
+});
+
+describe("a refit that groups several views per product", () => {
+  const rich = (id: string, name: string, qty?: number): VisualizeProduct =>
+    product({
+      id,
+      name,
+      ...(qty ? { qty } : {}),
+      views: (["hero", "front", "side", "back"] as const).map((angle) => ({
+        url: `https://x/${id}-${angle}.jpg`,
+        angle,
+      })),
+    });
+
+  const plan = [rich("a", "Panther Barbers Chair", 4), rich("b", "Villa II Mirror", 4)];
+
+  it("sends more than one image per product now the slots exist", () => {
+    const { imageUrls } = buildRenderRequest(plan, "refit_room");
+    expect(imageUrls.length).toBeGreaterThan(plan.length);
+    expect(imageUrls.length).toBeLessThanOrEqual(MAX_REFERENCE_SLOTS);
+  });
+
+  it("tells the model those images are ONE product, not several", () => {
+    // The fault this guards: six photos of three products furnished as six.
+    const { prompt } = buildRenderRequest(plan, "refit_room");
+    expect(prompt).toMatch(/ALL THE SAME single product/);
+    expect(prompt).toMatch(/exactly 2 DIFFERENT products in these references/);
+  });
+
+  it("names the image range each product occupies", () => {
+    const { prompt } = buildRenderRequest(plan, "refit_room");
+    expect(prompt).toMatch(/Images 2 to \d/);
+  });
+
+  it("keeps the prompt's image numbering in step with the array it sends", () => {
+    // The bug this prevents: a prompt describing an image the request never sent.
+    const { prompt, imageUrls } = buildRenderRequest(plan, "refit_room");
+    const last = Math.max(
+      ...[...prompt.matchAll(/Images? (?:\d+ to )?(\d+)/g)].map((m) => Number(m[1])),
+    );
+    expect(last).toBe(imageUrls.length + 1);
+  });
+
+  it("says nothing about grouping when every product has one photo", () => {
+    const flat = [product({ id: "a", name: "Solo" }), product({ id: "b", name: "Duo" })];
+    const { prompt } = buildRenderRequest(flat, "refit_room");
+    expect(prompt).not.toMatch(/ALL THE SAME single product/);
+    expect(prompt).toMatch(/Image 2 is a Solo/);
+  });
+
+  it("still fits the prompt budget at full width", () => {
+    const wide = Array.from({ length: 8 }, (_, i) => rich(`p${i}`, `Product Number ${i}`, 4));
+    expect(buildRenderRequest(wide, "refit_room").prompt.length).toBeLessThanOrEqual(
+      MAX_PROMPT_CHARS,
+    );
   });
 });
