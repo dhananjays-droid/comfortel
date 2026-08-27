@@ -408,6 +408,15 @@ function buildRefitPrompt(
           req(
             `There are exactly ${blocks.length} DIFFERENT products in these references, no more. Where several images show one product, they are the same physical piece from different sides — study them together to get its shape right, and do not treat them as separate products to add to the room.`,
           ),
+          // Comfortel sells the seat shell and the base as separate SKUs — a
+          // Capital Base is $70, a hydraulic $98 — so a chair is photographed on
+          // four to eight different bases and the reference set legitimately
+          // contains more than one. The shell is the product; the base is a
+          // choice. Left unsaid, the model reads the mismatch as licence to give
+          // each chair in the room a different base.
+          req(
+            `Where one product's images show it on more than one style of base or column, the seat and its upholstery are the product and the base is an option. Pick ONE base from those shown and give every copy of that product the same one.`,
+          ),
         ]
       : []),
     req(`Refit this salon with the Comfortel products shown.`),

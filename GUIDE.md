@@ -345,6 +345,34 @@ are sold with a black basin but every extra angle in their listings shows the
 white-basin variant, so they are hero-only on purpose. Twenty-three renderable
 products have exactly one photograph on file and always will.
 
+**The base is a separate SKU.** This is the fact that unlocks most of the
+coverage. A styling-chair listing has no base in its specs and ships at ~33 lbs
+— it is the seat shell. `Capital Base Aluminum` is $70, `Omega Round Base –
+Brushed Brass` $70, `Hydraulic Standard Height 165mm Chrome` $98, all separate
+products. That is why every chair is photographed on four to eight bases, and it
+means **the shell identifies the product, the base does not**. Classify on the
+shell; prefer one base family across a set so the render draws consistent
+chairs; never mix a black base with a gold one when a consistent run exists. The
+refit prompt now says so directly — pick one base and give every copy the same.
+
+Where a variant genuinely IS the product, it is unforgiving: **Hazel** and
+**Zippy** and **Hazel Sage Green** and **Hazel Tan II** are sold with a black
+basin and their extra angles show the white one. Those stay hero-only.
+
+Six sets the automated pass got wrong, found by looking:
+
+| Product | What was wrong |
+| --- | --- |
+| Hazel Sage Green | "front" and "side" were the white-basin variant |
+| Hazel Tan II | "front" was the white-basin variant |
+| Harriet Connect Tan II | "back" was the black-basin variant |
+| Verona Grande – Double | "side" was the **Single** mirror (one shelf, not two) |
+| Onyx Oval | "side" was the mirror **without its shelf** |
+| Arch LED | "front" was a **square-topped** mirror, not the arch |
+
+Plus three chairs whose "front" was actually a three-quarter shot on another
+base (Roxanne, Franka) or a duplicate back (Chloe Tan).
+
 Two rules the automated pass got wrong, both fixed by hand:
 
 - **The hero need not be image 1.** Walker, Taylor, Maverick and Willow reception
