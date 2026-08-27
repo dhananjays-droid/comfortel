@@ -48,6 +48,25 @@ const DRY = process.argv.includes("--dry");
 
 const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, "src/data/catalog-full.json"), "utf8"));
 
+/**
+ * Products already judged by hand, which this script must not overwrite.
+ *
+ * 52 of them, and six of those are corrections to sets this script produced —
+ * a white-basin photo referenced for a black-basin unit, the Single mirror used
+ * as a side view of the Double, a square-topped mirror used as the front of an
+ * arched one. Re-running blind would put every one of those back.
+ *
+ * `--force` overrides, for when the prompt below has genuinely improved.
+ */
+const AUDIT = path.join(ROOT, "src/data/product-views-audit.json");
+const audit = fs.existsSync(AUDIT) ? JSON.parse(fs.readFileSync(AUDIT, "utf8")) : { products: {} };
+const HAND = new Set(
+  Object.entries(audit.products ?? {})
+    .filter(([, p]) => p.decidedBy === "hand")
+    .map(([id]) => id),
+);
+const FORCE = process.argv.includes("--force");
+
 const SYSTEM = `You classify product photographs for a salon furniture catalogue.
 
 You are given several photographs from ONE catalogue listing. They are NOT
@@ -195,7 +214,12 @@ async function classify(id, product) {
 
 const ids = Object.keys(catalog)
   .filter((id) => (catalog[id].images ?? []).length > 1)
-  .filter((id) => !ONLY || ONLY.has(id));
+  .filter((id) => !ONLY || ONLY.has(id))
+  .filter((id) => FORCE || !HAND.has(id));
+
+if (HAND.size && !FORCE) {
+  console.log(`skipping ${HAND.size} products decided by hand (--force to include them)`);
+}
 const todo = ids.slice(0, LIMIT);
 console.log(
   `classifying ${todo.length} products with >1 photo (of ${ids.length}), up to ${MAX_IMAGES} images each${DRY ? " — DRY RUN" : ""}`,

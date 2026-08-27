@@ -373,6 +373,14 @@ Six sets the automated pass got wrong, found by looking:
 Plus three chairs whose "front" was actually a three-quarter shot on another
 base (Roxanne, Franka) or a duplicate back (Chloe Tan).
 
+**The reasoning is in `src/data/product-views-audit.json`.** Every photograph of
+every product, with the verdict it was given and why — 1047 images, 654 of them
+rejects. `product-views.json` holds only the survivors, so before this the
+reasoning lived nowhere and each re-run repeated the work, mistakes included.
+`classify-product-views.mjs` now reads the audit and refuses to overwrite the 52
+hand-decided products unless given `--force`, and tests assert the two files
+cannot drift apart.
+
 Two rules the automated pass got wrong, both fixed by hand:
 
 - **The hero need not be image 1.** Walker, Taylor, Maverick and Willow reception
