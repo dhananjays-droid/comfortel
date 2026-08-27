@@ -1,0 +1,388 @@
+{
+ "330299": {
+  "note": "shell identical throughout; base is a separate SKU so it varies by photo. Best angle coverage: #11 front, #13 side, #7 back. #3/#4 are disc bases and #5/#6 close-ups.",
+  "views": {
+   "hero": 1,
+   "front": 11,
+   "side": 13,
+   "back": 7
+  }
+ },
+ "330276": {
+  "note": "same: #8 front, #10 side, #7 back. Shell identical, bases differ because they are bought separately.",
+  "views": {
+   "hero": 1,
+   "front": 8,
+   "side": 10,
+   "back": 7
+  }
+ },
+ "348239": {
+  "note": "8 photos, all the SAME 3/4 angle in different base finishes (chrome disc, black 5-star, black disc, gold disc, white disc, gold, white 5-star) plus one salon interior. No second angle exists.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "330271": {
+  "note": "anchor #1 polished aluminium 5-star + chrome column. #7/#8/#9 are front/side/back on that exact base. Full set.",
+  "views": {
+   "hero": 1,
+   "front": 7,
+   "side": 8,
+   "back": 9
+  }
+ },
+ "343746": {
+  "note": "#1 is a lifestyle shot (why the auto pass binned the whole set). #2 is a clean studio 3/4 and anchors it. #3 shelf side, #4 cabinet side, #6 narrow end. #5 has doors open, #7/#8/#10/#11 are close-ups.",
+  "views": {
+   "hero": 2,
+   "front": 3,
+   "back": 4,
+   "side": 6
+  }
+ },
+ "8077": {
+  "note": "#1/#2/#7 lifestyle. #3 clean studio 3/4 anchors. #4 front panel, #5 narrow end, #8 staff side. #6 has a drawer pulled out.",
+  "views": {
+   "hero": 3,
+   "front": 4,
+   "side": 5,
+   "back": 8
+  }
+ },
+ "6574": {
+  "note": "#1/#2/#4 lifestyle. #3 clean studio 3/4 anchors. #7 customer side, #8 staff side with cupboard doors, #6 narrow end.",
+  "views": {
+   "hero": 3,
+   "front": 7,
+   "side": 6,
+   "back": 8
+  }
+ },
+ "8075": {
+  "note": "#1/#5/#6/#7 lifestyle. #3 studio 3/4 anchors. #4 quilted customer face, #2 the plain staff face with drawers - same desk, other side, not another product. No side elevation.",
+  "views": {
+   "hero": 3,
+   "front": 4,
+   "back": 2
+  }
+ },
+ "342591": {
+  "note": "sold as BLACK basin and #1 shows one. Every other full shot (#2,#5,#6) is the WHITE-basin variant; #7-#12 are taps, hoses, a valve and a UPC logo. Hero only.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "346190": {
+  "note": "sold as BLACK basin. #2 and #3 are the WHITE-basin variant, rest are upholstery close-ups. Hero only.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "6230": {
+  "note": "#1 the only whole-unit shot, #2 a shelf-corner close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "3960": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "3961": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349931": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349924": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349932": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349933": {
+  "note": "hero + seat close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "343762": {
+  "note": "hero + three seat close-ups.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "343761": {
+  "note": "hero + three seat close-ups.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "316359": {
+  "note": "hero + seat and backrest close-ups.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "316366": {
+  "note": "#2 is a high top-down of the same stool - no silhouette information a round seat does not already give.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349909": {
+  "note": "#1 is the white-basin recline, #2 the BLACK-basin 3/4. Different basins, so they cannot be one set.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349367": {
+  "note": "hero + edge close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349334": {
+  "note": "hero + edge close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349329": {
+  "note": "hero + edge close-up.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "349333": {
+  "note": "hero + two edge close-ups.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "324960": {
+  "note": "#1 is a styled two-unit shot, so #3 (clean studio 3/4, bronze body + black drawers) anchors. #8 drawer face, #7 socket face, #4 narrow end - all bronze, all studio. #5 has drawers open.",
+  "views": {
+   "hero": 3,
+   "front": 8,
+   "back": 7,
+   "side": 4
+  }
+ },
+ "4162": {
+  "note": "#2 lifestyle, #3/#4/#5 frame and shelf close-ups. A flat wall mirror has no meaningful second elevation anyway.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "342465": {
+  "note": "every clean studio angle carries a burned-in GOOD DESIGN AWARD badge and the rest have hands or a brush in frame. Benchtop appliance, negligible in a room render, so hero only - but #3 (clean studio) beats #1 (a hand holding a brush) as the reference.",
+  "views": {
+   "hero": 3
+  }
+ },
+ "331349": {
+  "note": "existing auto set mixed a chrome disc hero with an aluminium 5-star front and a BLACK 5-star side. Shell is identical in all; taking the polished-base angles #5 front, #7 side, #8 back.",
+  "views": {
+   "hero": 1,
+   "front": 5,
+   "side": 7,
+   "back": 8
+  }
+ },
+ "343609": {
+  "note": "aluminium 5-star throughout: #6 front, #5 side, #12 back. #7-#11 are the same angles on black bases, #13/#14 close-ups.",
+  "views": {
+   "hero": 1,
+   "front": 6,
+   "side": 5,
+   "back": 12
+  }
+ },
+ "331021": {
+  "note": "black 5-star throughout: #5 front, #9 side, #6 back. #7/#8/#10 are the aluminium-base twins, #11-#13 lifestyle.",
+  "views": {
+   "hero": 1,
+   "front": 5,
+   "side": 9,
+   "back": 6
+  }
+ },
+ "343628": {
+  "note": "silver bases: #5 front, #9 side, #8 back. #7/#10/#11 are the black-base twins, #12-#14 close-ups.",
+  "views": {
+   "hero": 1,
+   "front": 5,
+   "side": 9,
+   "back": 8
+  }
+ },
+ "330334": {
+  "note": "auto set had TWO backs (#5 and #6) and no front or side. Aluminium-base run: #8 front, #10 side, #6 back.",
+  "views": {
+   "hero": 1,
+   "front": 8,
+   "side": 10,
+   "back": 6
+  }
+ },
+ "330283": {
+  "note": "aluminium run #7 front, #9 side; the only back (#5) is on a black base, taken anyway since the base is a separate SKU and a back view is worth more.",
+  "views": {
+   "hero": 1,
+   "front": 7,
+   "side": 9,
+   "back": 5
+  }
+ },
+ "329914": {
+  "note": "auto set had #2 labelled front - it is a 3/4 on another base. Black 5-star run: #8 front, #5 side, #7 back.",
+  "views": {
+   "hero": 1,
+   "front": 8,
+   "side": 5,
+   "back": 7
+  }
+ },
+ "330309": {
+  "note": "black 5-star run: #9 front, #10 side, #8 back. Auto set used #6, a rear 3/4, as the back; #8 is the true elevation.",
+  "views": {
+   "hero": 1,
+   "front": 9,
+   "side": 10,
+   "back": 8
+  }
+ },
+ "330322": {
+  "note": "auto set had #2 labelled front - a 3/4 on another base. Black 5-star run: #9 front, #10 side, #8 back.",
+  "views": {
+   "hero": 1,
+   "front": 9,
+   "side": 10,
+   "back": 8
+  }
+ },
+ "345751": {
+  "note": "auto set already correct - #6 side, #5 back, both black 5-star. No front elevation exists in the listing.",
+  "views": {
+   "hero": 1,
+   "side": 6,
+   "back": 5
+  }
+ },
+ "330353": {
+  "note": "auto set already correct - #4 front, #5 side, both white base like #1. #6/#7/#8 are other bases, no back elevation.",
+  "views": {
+   "hero": 1,
+   "front": 4,
+   "side": 5
+  }
+ },
+ "342589": {
+  "note": "CORRECTION: sold with a BLACK basin (#1). The auto set's front #3 and side #4 both show the WHITE-basin variant, so the render was being shown the wrong basin. Hero only - every other full shot is white.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "345218": {
+  "note": "CORRECTION: auto set's back #4 is the BLACK-basin variant; #1 is white. Keeping the white-basin run only - #5 side, #6 rear.",
+  "views": {
+   "hero": 1,
+   "side": 5,
+   "back": 6
+  }
+ },
+ "342592": {
+  "note": "CORRECTION: sold with a BLACK basin (#1) but the auto set's front #6 is the WHITE-basin variant. Every other full shot is white. Hero only.",
+  "views": {
+   "hero": 1
+  }
+ },
+ "346202": {
+  "note": "a plain upholstered cube - #5 and #6 are genuine different faces and the auto set is already as good as this listing allows. #2-#4 stitching close-ups, #10 lifestyle.",
+  "views": {
+   "hero": 1,
+   "side": 5,
+   "back": 6
+  }
+ },
+ "4072": {
+  "note": "#3 adds the side elevation in the same chair configuration as #1/#2. #5-#7 are the flat bed configuration, #8-#14 close-ups and the foot pedal.",
+  "views": {
+   "hero": 1,
+   "front": 2,
+   "side": 3
+  }
+ },
+ "8214": {
+  "note": "a flat wall station - #5 and #6 are the only real angles and the auto set already uses them. #8 is a blue-tinted grey-frame finish, #2/#3 lifestyle renders.",
+  "views": {
+   "hero": 1,
+   "front": 6,
+   "side": 5
+  }
+ },
+ "343726": {
+  "note": "CORRECTION: the listing mixes in photos of the SINGLE mirror. #1 and #8 carry two shelves (the Double); the auto set's side #6 has one shelf and is the Single. #11 is a castored version, #2-#5/#10 lifestyle.",
+  "views": {
+   "hero": 1,
+   "side": 8
+  }
+ },
+ "300980": {
+  "note": "#8 adds the side elevation in the same chair configuration as #1/#6. #10-#13 are the flat bed configuration, #2 is the remote.",
+  "views": {
+   "hero": 1,
+   "front": 6,
+   "side": 8
+  }
+ },
+ "343727": {
+  "note": "#8 is the true edge elevation (auto set used #3, a 3/4) and #9 the back panel. #4-#7 lifestyle.",
+  "views": {
+   "hero": 1,
+   "front": 2,
+   "side": 8,
+   "back": 9
+  }
+ },
+ "343692": {
+  "note": "CORRECTION: auto set's side #5 is the mirror WITHOUT its shelf - a different configuration. #7 is the 3/4 with the shelf, #8 the back panel. #3 duplicates #1.",
+  "views": {
+   "hero": 1,
+   "side": 7,
+   "back": 8
+  }
+ },
+ "343689": {
+  "note": "CORRECTION: auto set's front #2 is a SQUARE-topped mirror, not this arched one. #8 3/4, #9 back panel. #3-#6 are LED-strip close-ups.",
+  "views": {
+   "hero": 1,
+   "side": 8,
+   "back": 9
+  }
+ },
+ "4165": {
+  "note": "#7 is the true edge elevation (auto set used #5, a 3/4). #8 is a different mirror entirely - brushed steel, split by a bar. #2/#3 lifestyle.",
+  "views": {
+   "hero": 1,
+   "front": 4,
+   "side": 7
+  }
+ }
+}

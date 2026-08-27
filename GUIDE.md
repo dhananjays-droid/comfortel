@@ -305,6 +305,48 @@ three-station fixture, two kept three chairs and one produced four, despite the
 prompt pinning the count both in the install step and in the closing check.
 Treat exact count as likely, not guaranteed.
 
+### What the reference change actually did — measured
+
+Six renders against a real salon photo, three per arm, same plan (4 × Harper
+Styling Chair, 4 × Sienna Black Salon Mirror, 2 × Mova Trolley Bronze). OLD =
+one hero photograph per product, which is what `refit_room` sent before. NEW =
+the fifteen slots shared out, several views per product, grouped in the prompt.
+
+| | inspector faults | quantities | Harper armrest correct |
+| --- | --- | --- | --- |
+| OLD ×3 | 1 (`stale_mirror`) | 4/4/2 every time | 3 of 3 |
+| NEW ×3 | 0 | 4/4/2 every time | 2 of 3 |
+
+**Two things are settled.** Quantities land: every one of the six renders held
+exactly four chairs, four mirrors and two trolleys. Before, `refit_room` sent
+one photograph per product and said nothing about counts, so a four-chair
+package rendered as one chair under a subtotal charging for four. And the
+inspector earns its keep — it caught a genuine stale mirror (a white chair and
+basin reflected that were not in the room) which, now the shadowed retry counter
+is fixed, triggers a re-render instead of shipping.
+
+**One thing is not.** Multi-view is a wash. The inspector prefers NEW (0 faults
+to 1); looking at the chairs myself prefers OLD (3 of 3 reproduce Harper's open
+square-tube armrest with its padded bar; NEW 1 made a solid upholstered block).
+Neither gap is meaningful at three samples. It is kept because there is no
+evidence against it either, and because the products it should help most are the
+ones whose hero shot is weakest — but do not describe it as an improvement
+without more renders. `MAX_REFERENCE_SLOTS` and `MAX_VIEWS` are the two numbers
+to turn.
+
+Worth knowing before re-running this: an eleven-reference render pays eleven
+mirror-uploads on a cold cache against three, so first-render latency is not
+free even where quality is level.
+
+**The data fix is separately confirmed.** Walker Reception Desk led with a
+styled lifestyle photograph, which is what the old "hero must be image 1" rule
+forced. Rendered with the studio shot substituted, the desk comes back correct —
+rounded oak carcass, three curved open shelves, plinth base. Its A/B partner
+never returned (the task sat in `generating` for over ten minutes and was
+abandoned), so this is one render, not a comparison; but a lifestyle hero
+competing with "the first image is the salon" was always a defect by inspection,
+not something needing a render to prove.
+
 ### The prompt budget
 
 `assemble()` in `visualize-prompt.ts` caps every prompt at `MAX_PROMPT_CHARS` and
@@ -319,10 +361,77 @@ length. `replace` is the default mode, which is why it looked like "everything i
 broken". Nothing enforced the limit, so a wording change could silently break
 rendering — now it cannot.
 
-**Coverage is the remaining limit.** Of the 126 renderable products, only **34**
-have more than one usable view; the other **92** ship a single photograph, and
-for those this fix changes nothing. Scraping additional angles into
-`catalog-full.json` is the highest-value data work left.
+**Coverage — and where it actually stopped.** Two separate limits were confused
+here for a long time.
+
+The first was a cap in the classifier: `MAX_IMAGES` was **6**, so any listing
+with more photos than that had its tail ignored. Harper Styling Chair carries 14
+images and its clean front, side and back shots sit at positions 12, 14 and 10 —
+behind six base-and-hydraulic variants and two lifestyle features. The classifier
+saw six, correctly rejected all six, returned nothing, and the best angle set in
+the catalogue went unused. Across 64 products, **289 photographs had never once
+been looked at**. The cap is now 14 (`CLASSIFY_MAX_IMAGES` overrides it).
+
+The second was assumed and is **false**: scraping the vendor site for more photos
+gains nothing. Checked by curl and by rendering the pages in a browser —
+`data-large_image` is the gallery's only real source, the thumbnails are
+client-side Underscore templates, and there is no variation-gallery JSON. Blake
+Merlot, Oakley and Cloud Waiting Sofa show **one** photograph on the page, which
+is the one we already hold; Harper shows 14, which are the 14 we already hold.
+`catalog-full.json` is already complete against the vendor. Don't re-run a
+scraper expecting more.
+
+What the photography genuinely cannot give: **Archie Styling Chair** has 8
+photos, all the same 3/4 angle in different base finishes. **Hazel** and **Zippy**
+are sold with a black basin but every extra angle in their listings shows the
+white-basin variant, so they are hero-only on purpose. Twenty-three renderable
+products have exactly one photograph on file and always will.
+
+**The base is a separate SKU.** This is the fact that unlocks most of the
+coverage. A styling-chair listing has no base in its specs and ships at ~33 lbs
+— it is the seat shell. `Capital Base Aluminum` is $70, `Omega Round Base –
+Brushed Brass` $70, `Hydraulic Standard Height 165mm Chrome` $98, all separate
+products. That is why every chair is photographed on four to eight bases, and it
+means **the shell identifies the product, the base does not**. Classify on the
+shell; prefer one base family across a set so the render draws consistent
+chairs; never mix a black base with a gold one when a consistent run exists. The
+refit prompt now says so directly — pick one base and give every copy the same.
+
+Where a variant genuinely IS the product, it is unforgiving: **Hazel** and
+**Zippy** and **Hazel Sage Green** and **Hazel Tan II** are sold with a black
+basin and their extra angles show the white one. Those stay hero-only.
+
+Six sets the automated pass got wrong, found by looking:
+
+| Product | What was wrong |
+| --- | --- |
+| Hazel Sage Green | "front" and "side" were the white-basin variant |
+| Hazel Tan II | "front" was the white-basin variant |
+| Harriet Connect Tan II | "back" was the black-basin variant |
+| Verona Grande – Double | "side" was the **Single** mirror (one shelf, not two) |
+| Onyx Oval | "side" was the mirror **without its shelf** |
+| Arch LED | "front" was a **square-topped** mirror, not the arch |
+
+Plus three chairs whose "front" was actually a three-quarter shot on another
+base (Roxanne, Franka) or a duplicate back (Chloe Tan).
+
+**The reasoning is in `src/data/product-views-audit.json`.** Every photograph of
+every product, with the verdict it was given and why — 1047 images, 654 of them
+rejects. `product-views.json` holds only the survivors, so before this the
+reasoning lived nowhere and each re-run repeated the work, mistakes included.
+`classify-product-views.mjs` now reads the audit and refuses to overwrite the 52
+hand-decided products unless given `--force`, and tests assert the two files
+cannot drift apart.
+
+Two rules the automated pass got wrong, both fixed by hand:
+
+- **The hero need not be image 1.** Walker, Taylor, Maverick and Willow reception
+  desks all lead with a lifestyle shot, so the "hero must be image 1" rule binned
+  four complete studio sets. Anchor on the first clean single-unit studio shot
+  instead.
+- **Filenames lie about variants.** Harper `#11` and `#13` are both named
+  `Black-Pump`; `#11` has a chrome column and `#13` a black one. Only `#13`
+  matches the anchor. Judge the pixels.
 
 Three kie traps, all commented in `kie.server.ts`:
 

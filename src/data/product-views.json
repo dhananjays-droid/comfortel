@@ -7,6 +7,10 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/6083.01_Aquarius-Sand__001.jpg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/6083.01_Aquarius-Sand__003.jpg",
+   "angle": "side"
   }
  ],
  "4126": [
@@ -29,7 +33,7 @@
    "angle": "front"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/8367-Sienna-Black-Salon-Mirror-5.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/8367-Sienna-Black-Salon-Mirror-2.jpg",
    "angle": "side"
   }
  ],
@@ -359,6 +363,10 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/6032.02_Venus-Sand__008.jpg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/6032.02_Venus-Sand__006.jpg",
+   "angle": "side"
   }
  ],
  "300985": [
@@ -485,12 +493,16 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/4141-US-Roxanne-B-Hyd-B-Capital-Black-Footrest.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4141-roxanne-front.jpeg",
    "angle": "front"
   },
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4141-Roxanne-Side-Black-Pump.jpg",
    "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4141-roxanne-back.jpeg",
+   "angle": "back"
   }
  ],
  "330283": [
@@ -499,8 +511,12 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-TB-Blake-Textured-Black-Salon-Chair-Front-Black-Pump.jpeg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-TB-Blake-Textured-Black-Salon-Chair-Front.jpeg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-TB-Blake-Textured-Black-Salon-Chair-Side.jpeg",
+   "angle": "side"
   },
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-TB-Blake-Textured-Black-Salon-Chair-Back.jpeg",
@@ -513,7 +529,15 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4135-T-Aria-Tan-Captial-Back-Angled.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4135-T-Aria-Front-Black-Pump.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4135-T-Aria-Side-Black-Pump.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4135-T-Aria-Back-Black-Pump.jpeg",
    "angle": "back"
   }
  ],
@@ -523,8 +547,16 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/4152-US-Franka-B-Hyd-B-Capital-Black-Footrest.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4152-Franka-Front-Black-Pump.jpeg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4152-Franka-Side-Black-Pump.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4152-Franka-Back-Black-Pump.jpeg",
+   "angle": "back"
   }
  ],
  "330334": [
@@ -533,8 +565,12 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4371-Chloe-Tan-Back-Black-Pump.jpeg",
-   "angle": "back"
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4371-Chloe-Tan-Front.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4371-Chloe-Tan-Side.jpeg",
+   "angle": "side"
   },
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4371-Chloe-Tan-Back.jpeg",
@@ -563,6 +599,10 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/4370-Chloe-Front-Black-Pump.jpeg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/4370-Chloe-Side-Black-Pump.jpeg",
+   "angle": "side"
   },
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/4370-Chloe-Back-Black-Pump.jpeg",
@@ -619,8 +659,12 @@
    "angle": "front"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/05/4361-SGUS-Sage-Chloe-Side-Black-Pump-copy.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/05/4361-SGUS-Sage-Chloe-Side-copy.jpg",
    "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/05/4361-SGUS-Sage-Chloe-Back-copy.jpg",
+   "angle": "back"
   }
  ],
  "331774": [
@@ -703,24 +747,12 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/1160-Hazel-Sage-Shampoo-Basin-with-Black-Basin.jpg",
    "angle": "hero"
-  },
-  {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/1161_Hazel-Sage_005.jpg",
-   "angle": "front"
-  },
-  {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/1161_Hazel-Sage_001.jpg",
-   "angle": "side"
   }
  ],
  "342592": [
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/1160-Hazel-Tan-Shampoo-Basin-with-Black-Basin.jpg",
    "angle": "hero"
-  },
-  {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/1160-Hazel-Tan-Shampoo-Basin-Front.jpg",
-   "angle": "front"
   }
  ],
  "343225": [
@@ -745,6 +777,10 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/4115-TAUS-Blake-TAN-Side.jpeg",
    "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/4115-TAUS-Blake-TAN-Back.jpeg",
+   "angle": "back"
   }
  ],
  "343614": [
@@ -777,6 +813,14 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/4361-SA-Chloe-Sand-Front.jpeg",
    "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/4361-SA-Chloe-Sand-Side.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/4361-SA-Chloe-Sand-Back.jpeg",
+   "angle": "back"
   }
  ],
  "343662": [
@@ -829,8 +873,12 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/8179-Arch-LED-Mirror_002.jpg",
-   "angle": "front"
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8179-Arch-LED-Mirror_005.jpg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8179-Arch-LED-Mirror_007.jpg",
+   "angle": "back"
   }
  ],
  "343692": [
@@ -839,12 +887,12 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/8124_Onyx-Salon-Mirror_001.jpg",
-   "angle": "front"
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8124_Onyx-Salon-Mirror_005.jpg",
+   "angle": "side"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/8124_Onyx-Salon-Mirror_004-No-Bench.jpg",
-   "angle": "side"
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8124_Onyx-Salon-Mirror_002.jpg",
+   "angle": "back"
   }
  ],
  "343709": [
@@ -863,7 +911,7 @@
    "angle": "hero"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/8187-Grande-Blanco-Salon-Mirror_010.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8184_Verona-Grande_004.jpg",
    "angle": "side"
   }
  ],
@@ -877,8 +925,12 @@
    "angle": "front"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/8187-Grande-Blanco-Salon-Mirror_004.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8187-Grande-Blanco-Salon-Mirror_002.jpg",
    "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/8187-Grande-Blanco-Salon-Mirror_003.jpg",
+   "angle": "back"
   }
  ],
  "343976": [
@@ -1007,7 +1059,7 @@
    "angle": "side"
   },
   {
-   "url": "https://comfortelfurniture.com/wp-content/uploads/1535-T-Harriet-Tan-Black-XL-Basin-Reclined-1.jpg",
+   "url": "https://comfortelfurniture.com/wp-content/uploads/1535-T-Harriet-Tan-XL-White-Basin-1-1.jpg",
    "angle": "back"
   }
  ],
@@ -1495,6 +1547,272 @@
   {
    "url": "https://comfortelfurniture.com/wp-content/uploads/7092.02.C-Tint-Bowl-Dryer-Holder_Champagne-Beige-01-L-2.jpg",
    "angle": "front"
+  }
+ ],
+ "330299": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4127-Harper-B-Capital-B-Hyd.jpeg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4127-Harper-Front-Black-Pump.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4127-Harper-Side-Black-Pump.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4127-Harper-Back-B-Capital-B-Hyd.jpg",
+   "angle": "back"
+  }
+ ],
+ "330276": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-Blake-B-Capital-B-Hyd.jpeg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-Blake-Salon-Chair-Front-Black-Pump.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-Blake-Salon-Chair-Side-Black-Pump.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4115-Blake-Salon-Chair-Back.jpeg",
+   "angle": "back"
+  }
+ ],
+ "330271": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4109-SG-Dawn-C-Hyd-A-Captial.jpg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4109-SG-Dawn-Sage-Green-Salon-Chair-Front.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4109-SG-Dawn-Sage-Green-Salon-Chair-Side.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2021/04/4109-SG-Dawn-Sage-Green-Salon-Chair-Back.jpeg",
+   "angle": "back"
+  }
+ ],
+ "343746": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/9032-Walker-Reception-Desk_006.jpg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/9032-Walker-Reception-Desk_005.jpg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/9032-Walker-Reception-Desk_008.jpg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/9032-Walker-Reception-Desk_009-1.jpg",
+   "angle": "back"
+  }
+ ],
+ "8077": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/9045-w-taylor-reception-desk-3.jpg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/9045-W-Taylor-Desk-4.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2019/03/9044-Bennet-Desk-3.jpg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/9045-W-Taylor-Desk-2.jpeg",
+   "angle": "back"
+  }
+ ],
+ "6574": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2017/07/IMG_6932_2.jpg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/Mav-1200x1200-3.jpeg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/Mav-1200x1200-4.jpeg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/Mav-1200x1200-2.jpeg",
+   "angle": "back"
+  }
+ ],
+ "8075": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2018/06/9042-Willow-Reception-Desk-2.png",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2018/06/9042-Willow-Reception-Desk-3.png",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2018/06/9042-Willow-Reception-Desk-1.png",
+   "angle": "back"
+  }
+ ],
+ "324960": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/AU-Mova-Bronze.jpg",
+   "angle": "hero"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/AU-Mova-Bronze-Front.jpg",
+   "angle": "front"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/AU-Mova-Bronze-Side-R.jpg",
+   "angle": "side"
+  },
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/AU-Mova-Bronze-Back.jpg",
+   "angle": "back"
+  }
+ ],
+ "348239": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/4175-Archie-R-Omega-C-Hyd-Chrome-Footrest.jpg",
+   "angle": "hero"
+  }
+ ],
+ "342591": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/1170-Hazel-Black-Washlounge-Black-Basin-Feature.jpg",
+   "angle": "hero"
+  }
+ ],
+ "346190": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/1185-TB_Zippy-Textured-Black-Black-Basin_001-600x600-1.jpg",
+   "angle": "hero"
+  }
+ ],
+ "6230": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2017/07/Adele-Retail-Shelves-3.png",
+   "angle": "hero"
+  }
+ ],
+ "3960": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/3900-Black-Salon-Stool-Black-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "3961": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/01/3900A-Black-Salon-Stool-Aluminium-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "349931": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3500.01.M-Merlot-Salon-Stool-Black-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "349924": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3500.01.M-Merlot-Salon-Stool-Aluminium-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "349932": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3500.01.MD-Midnight-Salon-Stool-Black-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "349933": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3500.01.MD-Midnight-Salon-Stool-Aluminium-Base.jpg",
+   "angle": "hero"
+  }
+ ],
+ "343762": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3907S-Sand-Salon-Stool-Black-Base-1.jpg",
+   "angle": "hero"
+  }
+ ],
+ "343761": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/3907SA-Sand-Salon-Stool-Alumium-Base-1.jpg",
+   "angle": "hero"
+  }
+ ],
+ "316359": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/08/superior-stool-black.jpeg",
+   "angle": "hero"
+  }
+ ],
+ "316366": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2020/08/white-salon-stool-waluminium-base-.jpeg",
+   "angle": "hero"
+  }
+ ],
+ "349909": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/1549.01.TB.US-Harlow-TB-Main-White-Basin.jpg",
+   "angle": "hero"
+  }
+ ],
+ "349367": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/GS-Elite-Bella-Series-3-x-5-Half-Circle.webp",
+   "angle": "hero"
+  }
+ ],
+ "349334": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/GC-Elite-Series-3-x-5-Half-Circle.webp",
+   "angle": "hero"
+  }
+ ],
+ "349329": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/GS-Elite-Series-3-x-5-Half-Circle.webp",
+   "angle": "hero"
+  }
+ ],
+ "349333": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/GC-Elite-Series-3-x-5-Rectangle.webp",
+   "angle": "hero"
+  }
+ ],
+ "4162": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/2017/03/6-Tuscany-Salon-Mirror.png",
+   "angle": "hero"
+  }
+ ],
+ "342465": [
+  {
+   "url": "https://comfortelfurniture.com/wp-content/uploads/1545-comfortel-presto-brush-cleaner.jpeg",
+   "angle": "hero"
   }
  ]
 }

@@ -157,7 +157,24 @@ export function referenceViews(
   // Classified data wins: it knows which photos are the same physical product,
   // which a filename cannot. The classifier already orders these hero-first.
   if (product.views?.length) {
-    return product.views.slice(0, max).map((v) => ({
+    // One image per angle first, duplicates only if slots are left over.
+    //
+    // A listing can yield two photographs the classifier both reads as "side",
+    // and taking the first four in order then spends a slot on the second one
+    // and drops the back view off the end. Harper does exactly that: hero,
+    // front, side, side, back — and the back of a styling chair is worth more
+    // to the render than a second three-quarter view of its flank.
+    const seen = new Set<ViewAngleName>();
+    const primary: typeof product.views = [];
+    const spare: typeof product.views = [];
+    for (const view of product.views) {
+      if (seen.has(view.angle)) spare.push(view);
+      else {
+        seen.add(view.angle);
+        primary.push(view);
+      }
+    }
+    return [...primary, ...spare].slice(0, max).map((v) => ({
       url: v.url,
       angle: ANGLE_PHRASES[v.angle],
     }));
@@ -363,17 +380,45 @@ function buildRefitPrompt(
   scene?: string,
   correction?: string,
 ): string {
-  const list = products
-    .map((p, i) => `Image ${i + 2} is a ${describe(p)} — install ${qtyOf(p)} of this one`)
+  const blocks = allocateReferences(products);
+
+  // Each product is a CONTIGUOUS block of images, and the prompt says so, because
+  // the failure to avoid is the model reading six photographs of three products
+  // as six different products and furnishing the room with all of them.
+  const list = blocks
+    .map((b) => {
+      const many = b.views.length > 1;
+      const angles = b.views.map((v) => v.angle).join(", ");
+      return many
+        ? `${imageRange(b)} are ALL THE SAME single product — a ${describe(b.product)} — photographed from different angles (${angles}); install ${qtyOf(b.product)} of it`
+        : `${imageRange(b)} is a ${describe(b.product)} — install ${qtyOf(b.product)} of this one`;
+    })
     .join(". ");
 
   const tally = products.map((p) => `${qtyOf(p)} × ${p.name}`).join(", ");
   const multiples = products.some((p) => qtyOf(p) > 1);
+  const grouped = blocks.some((b) => b.views.length > 1);
 
   return assemble([
     req(
-      `The first image is a photograph of a real hair salon. The images after it are Comfortel product references. ${list}.`,
+      `The first image is a photograph of a real hair salon. The images after it are Comfortel product references, grouped by product. ${list}.`,
     ),
+    ...(grouped
+      ? [
+          req(
+            `There are exactly ${blocks.length} DIFFERENT products in these references, no more. Where several images show one product, they are the same physical piece from different sides — study them together to get its shape right, and do not treat them as separate products to add to the room.`,
+          ),
+          // Comfortel sells the seat shell and the base as separate SKUs — a
+          // Capital Base is $70, a hydraulic $98 — so a chair is photographed on
+          // four to eight different bases and the reference set legitimately
+          // contains more than one. The shell is the product; the base is a
+          // choice. Left unsaid, the model reads the mismatch as licence to give
+          // each chair in the room a different base.
+          req(
+            `Where one product's images show it on more than one style of base or column, the seat and its upholstery are the product and the base is an option. Pick ONE base from those shown and give every copy of that product the same one.`,
+          ),
+        ]
+      : []),
     req(`Refit this salon with the Comfortel products shown.`),
     // A zone render must not invent the rest of the salon. Told it is the wash
     // bay, the model stops adding styling chairs that are not in the references.
@@ -622,6 +667,64 @@ export function buildSalonPrompt(
 }
 
 /**
+ * How many reference slots a multi-product render may use.
+ *
+ * GPT Image 2 takes 16 images and the room takes the first, so 15 remain. The
+ * refit used exactly one per product and left the rest empty: on a real
+ * seven-piece plan that meant 6 references sent against 15 already on disk.
+ */
+export const MAX_REFERENCE_SLOTS = 15;
+
+export type ReferenceBlock = {
+  product: VisualizeProduct;
+  /** Position of this product's first image in the request, 1-based overall. */
+  start: number;
+  views: Array<{ url: string; angle: string }>;
+};
+
+/**
+ * Share the reference slots across the products in a plan.
+ *
+ * Every product gets its hero first — a plan is unusable if one piece is
+ * missing entirely — and only then are the leftovers dealt out a round at a
+ * time. Round-robin rather than "best-photographed first" so a plan cannot
+ * spend twelve slots on one chair and leave the wash unit as a lone thumbnail.
+ */
+export function allocateReferences(products: VisualizeProduct[]): ReferenceBlock[] {
+  const available = products.map((p) => referenceViews(p, MAX_VIEWS));
+  const taken: number[] = available.map((views) => (views.length ? 1 : 0));
+
+  let used = taken.reduce((a, b) => a + b, 0);
+  let progress = true;
+  while (used < MAX_REFERENCE_SLOTS && progress) {
+    progress = false;
+    for (let i = 0; i < products.length && used < MAX_REFERENCE_SLOTS; i++) {
+      if (taken[i]! > 0 && taken[i]! < (available[i]?.length ?? 0)) {
+        taken[i]!++;
+        used++;
+        progress = true;
+      }
+    }
+  }
+
+  const blocks: ReferenceBlock[] = [];
+  let cursor = 2; // image 1 is the room
+  for (let i = 0; i < products.length; i++) {
+    const views = (available[i] ?? []).slice(0, taken[i]);
+    if (!views.length) continue;
+    blocks.push({ product: products[i] as VisualizeProduct, start: cursor, views });
+    cursor += views.length;
+  }
+  return blocks;
+}
+
+/** "Image 3", or "Images 3-5", for a block of references. */
+function imageRange(block: ReferenceBlock): string {
+  const end = block.start + block.views.length - 1;
+  return block.start === end ? `Image ${block.start}` : `Images ${block.start} to ${end}`;
+}
+
+/**
  * The prompt and the image array in one call, deliberately.
  *
  * The prompt refers to its references positionally ("image 2 shows it from the
@@ -638,11 +741,10 @@ export function buildRenderRequest(
   const prompt = buildSalonPrompt(products, mode, scene, correction);
 
   const imageUrls = isMultiReferenceMode(mode)
-    ? // one hero shot per DIFFERENT product
-      products
-        .slice(0, MAX_REFERENCES)
-        .map((p) => p.images?.[0])
-        .filter((u): u is string => Boolean(u))
+    ? // several views per product, sharing the 15 slots the API leaves free
+      allocateReferences(products.slice(0, MAX_REFERENCES)).flatMap((b) =>
+        b.views.map((v) => v.url),
+      )
     : // several views of THE SAME product
       referenceViews(products[0] as VisualizeProduct).map((v) => v.url);
 
