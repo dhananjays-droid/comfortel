@@ -1,4 +1,4 @@
-import { ArrowRight, Camera, Layers, Ruler, Wallet } from "lucide-react";
+import { ArrowRight, Camera, Layers } from "lucide-react";
 import { useRef } from "react";
 
 import { cn } from "@/lib/utils";
@@ -16,50 +16,16 @@ import { cn } from "@/lib/utils";
  * which is the thing people are actually unsure about.
  */
 
-type Starter = {
-  /** Sent as a chat turn, unless `opens` says this starter needs input first. */
-  prompt: string;
-  label: string;
-  hint: string;
-  Icon: typeof Layers;
-  /**
-   * Which guided flow this starter opens.
-   *
-   * Every starter that needs more than a sentence now opens one. Sending the
-   * label straight to the chat looked like it worked and quietly skipped the
-   * part that makes the answer good — how big, how much, what matters.
-   */
-  opens?: "brief" | "budget" | "dimensions";
-};
-
 /**
- * Each starter maps to a capability rather than just a phrase, so the four
- * options teach the range of the tool: a whole fit-out, a price ceiling, a spec
- * filter, and pieces that have to work as a set.
+ * One way in, not three.
+ *
+ * This was "A whole salon", "To a budget" and "Plan by dimensions", which all
+ * opened the same dialog with different fields hidden. Three tiles implied
+ * three different answers and made the customer categorise their own question
+ * first — badly, for anyone who had both a budget and a tape measure. The
+ * dialog now asks for everything and requires almost none of it, so there is
+ * one door.
  */
-const STARTERS: Starter[] = [
-  {
-    prompt: "",
-    label: "A whole salon",
-    hint: "Describe it, we'll spec it",
-    Icon: Layers,
-    opens: "brief",
-  },
-  {
-    prompt: "",
-    label: "To a budget",
-    hint: "Three ways to spend it",
-    Icon: Wallet,
-    opens: "budget",
-  },
-  {
-    prompt: "",
-    label: "Plan by dimensions",
-    hint: "What fits, then furnished",
-    Icon: Ruler,
-    opens: "dimensions",
-  },
-];
 
 const STEPS = [
   { n: 1, text: "Tell us the space, or pick from the range" },
@@ -75,7 +41,7 @@ export function EmptyState({
   onPick: (prompt: string) => void;
   /** Same handler the composer uses, so a photo picked here behaves identically. */
   onPickPhoto: (file: File | undefined) => void;
-  onOpenWizard: (mode: "brief" | "budget" | "dimensions") => void;
+  onOpenWizard: () => void;
 }) {
   // Its own input rather than reaching for the composer's: this button exists
   // before the composer matters, and sharing a DOM node across two components
@@ -132,39 +98,28 @@ export function EmptyState({
         <ArrowRight className="h-4 w-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-ink-1" />
       </button>
 
-      {/* Secondary: typed starters, each teaching a different way in. */}
-      <div className="mt-6">
-        <p
-          className="animate-in text-xs font-medium uppercase tracking-wide text-ink-4 fade-in duration-500"
-          style={{ animationDelay: "120ms" }}
-        >
-          Or start by telling us
-        </p>
-        {/* Three across on desktop: the fourth starter is gone, and a 2-column
-            grid would strand one card alone on a second row. */}
-        <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
-          {STARTERS.map((starter, i) => (
-            <button
-              key={starter.prompt}
-              type="button"
-              onClick={() => (starter.opens ? onOpenWizard(starter.opens) : onPick(starter.prompt))}
-              className={cn(
-                "group flex animate-in items-start gap-3 rounded-xl border border-border bg-surface2/60 px-3.5 py-3 text-left fade-in slide-in-from-bottom-2 duration-500",
-                "transition-colors hover:border-border-strong hover:bg-surface2",
-              )}
-              style={{ animationDelay: `${160 + i * 45}ms` }}
-            >
-              <starter.Icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-4 transition-colors group-hover:text-ink-2" />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium leading-snug text-ink-1">
-                  {starter.label}
-                </span>
-                <span className="block text-xs leading-snug text-ink-3">{starter.hint}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Secondary: the one guided way in, for people without a photo yet. */}
+      <button
+        type="button"
+        onClick={onOpenWizard}
+        className={cn(
+          "group mt-3 flex w-full animate-in items-center gap-3 rounded-2xl border border-border bg-surface2/60 p-4 text-left fade-in slide-in-from-bottom-2 duration-500",
+          "transition-colors hover:border-border-strong hover:bg-surface2",
+        )}
+        style={{ animationDelay: "120ms" }}
+      >
+        <Layers className="h-4 w-4 shrink-0 text-ink-2" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-ink-1">
+            Or plan it out without a photo
+          </span>
+          <span className="mt-0.5 block text-sm leading-relaxed text-ink-3">
+            Tell us the room, the stations or the wall length, and a budget — we&apos;ll come back
+            with three ways to do it.
+          </span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-ink-4 transition-transform group-hover:translate-x-0.5 group-hover:text-ink-1" />
+      </button>
 
       {/* The void below the fold, spent on the question people actually have. */}
       <ol

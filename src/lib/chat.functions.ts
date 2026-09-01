@@ -2,11 +2,26 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { CATALOG_FULL, CATALOG_SLIM } from "@/lib/catalog";
 import { describePlan, type PlanLine } from "@/lib/plan";
+import { lastUserTurn, wantsRender } from "@/lib/render-intent";
 import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 export type ChatMessageInput = { role: "user" | "assistant"; content: string };
 
 export type RenderRequest = { mode: VisualizeMode; productIds: string[] };
+
+/**
+ * What came back about rendering.
+ *
+ * `render` fires immediately and bills. `offer` is the same request downgraded
+ * to a button, used when the model asked to render but the customer's turn did
+ * not ask for one — see render-intent.ts. Only ever one of the two.
+ */
+export type ChatReply = {
+  text: string;
+  productIds: string[];
+  render: RenderRequest | null;
+  offer: RenderRequest | null;
+};
 
 /**
  * Reasons the assistant can be unavailable, safe to send to the browser: they
@@ -190,128 +205,134 @@ export const chat = createServerFn({ method: "POST" })
       return { messages, hasRoomPhoto: input.hasRoomPhoto === true, plan };
     },
   )
-  .handler(
-    async ({
-      data,
-    }): Promise<{ text: string; productIds: string[]; render: RenderRequest | null }> => {
-      try {
-        const apiKey = process.env["ANTHROPIC_API_KEY"];
-        if (!apiKey) throw new ChatError("CHAT_NOT_CONFIGURED");
+  .handler(async ({ data }): Promise<ChatReply> => {
+    try {
+      const apiKey = process.env["ANTHROPIC_API_KEY"];
+      if (!apiKey) throw new ChatError("CHAT_NOT_CONFIGURED");
 
-        // The Anthropic API rejects a leading assistant turn, which happens when a
-        // trimmed window starts mid-exchange.
-        const messages = [...data.messages];
-        while (messages.length && messages[0]!.role === "assistant") messages.shift();
-        if (!messages.length) throw new Error("no user turn in window");
+      // The Anthropic API rejects a leading assistant turn, which happens when a
+      // trimmed window starts mid-exchange.
+      const messages = [...data.messages];
+      while (messages.length && messages[0]!.role === "assistant") messages.shift();
+      if (!messages.length) throw new Error("no user turn in window");
 
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            max_tokens: 1024,
-            system: [
-              { type: "text", text: SYSTEM_INSTRUCTIONS },
-              {
-                type: "text",
-                text: CATALOG_BLOCK,
-                cache_control: { type: "ephemeral" },
-              },
-              {
-                // ORDER MATTERS: caching is a prefix match, so everything volatile
-                // has to sit AFTER the cache_control breakpoint. Above the catalog
-                // block the photo flag would invalidate the whole cached prefix the
-                // first time the customer attached a photo, and the plan — which
-                // changes on almost every turn — would invalidate it constantly.
-                type: "text",
-                text: [
-                  data.hasRoomPhoto
-                    ? "A photo of the customer's salon IS attached to this conversation. You may emit a RENDER line."
-                    : "No photo of the customer's salon is attached yet. Do not emit a RENDER line.",
-                  describePlan(data.plan),
-                ].join("\n\n"),
-              },
-            ],
-            messages,
-          }),
-        });
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1024,
+          system: [
+            { type: "text", text: SYSTEM_INSTRUCTIONS },
+            {
+              type: "text",
+              text: CATALOG_BLOCK,
+              cache_control: { type: "ephemeral" },
+            },
+            {
+              // ORDER MATTERS: caching is a prefix match, so everything volatile
+              // has to sit AFTER the cache_control breakpoint. Above the catalog
+              // block the photo flag would invalidate the whole cached prefix the
+              // first time the customer attached a photo, and the plan — which
+              // changes on almost every turn — would invalidate it constantly.
+              type: "text",
+              text: [
+                data.hasRoomPhoto
+                  ? "A photo of the customer's salon IS attached to this conversation. You may emit a RENDER line."
+                  : "No photo of the customer's salon is attached yet. Do not emit a RENDER line.",
+                describePlan(data.plan),
+              ].join("\n\n"),
+            },
+          ],
+          messages,
+        }),
+      });
 
-        if (!res.ok) {
-          console.error("Anthropic error", res.status, await res.text());
-          // 401/403 means the key is present but rejected — a different fix
-          // from the key being absent, so it gets a different code.
-          throw new ChatError(
-            res.status === 401 || res.status === 403
-              ? "CHAT_KEY_REJECTED"
-              : res.status === 429
-                ? "CHAT_RATE_LIMITED"
-                : "CHAT_UPSTREAM_ERROR",
-          );
-        }
-
-        const json = (await res.json()) as {
-          content?: Array<{ type: string; text?: string }>;
-        };
-
-        const raw = (json.content ?? [])
-          .filter((b) => b.type === "text" && typeof b.text === "string")
-          .map((b) => b.text as string)
-          .join("\n");
-
-        // 1. collect the ids from every marker, 2. strip them all from the text
-        const ids: string[] = [];
-        for (const match of raw.matchAll(PRODUCTS_MARKER)) {
-          for (const id of (match[1] ?? "").split(",")) {
-            const trimmed = id.trim();
-            // hallucination guard: the id must resolve to a real catalog entry
-            if (trimmed && Object.prototype.hasOwnProperty.call(CATALOG_FULL, trimmed)) {
-              ids.push(trimmed);
-            }
-          }
-        }
-        const productIds = Array.from(new Set(ids)).slice(0, 4);
-
-        // A render marker is only honoured when a photo actually exists, so a
-        // stray one can never bill for a generation that has nothing to render.
-        let render: RenderRequest | null = null;
-        if (data.hasRoomPhoto) {
-          for (const match of raw.matchAll(RENDER_MARKER)) {
-            const parts = (match[1] ?? "").split(",").map((t) => t.trim());
-            // replace_all is the safe default: single-piece replacement needs
-            // instance tracking the image model does not do reliably.
-            const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace_all";
-            const first = isVisualizeMode(parts[0]) ? 1 : 0;
-            const renderIds = Array.from(
-              new Set(
-                parts
-                  .slice(first)
-                  .filter((id) => id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)),
-              ),
-            ).slice(0, MAX_RENDERS);
-            if (renderIds.length) {
-              render = { mode, productIds: renderIds };
-              break; // one render request per reply
-            }
-          }
-        }
-
-        const text = stripToolCallSyntax(raw)
-          .replace(PRODUCTS_MARKER, "")
-          .replace(RENDER_MARKER, "")
-          // stripping a marker off its own line leaves a hole in the prose
-          .replace(/[ \t]+\n/g, "\n")
-          .replace(/\n{3,}/g, "\n\n")
-          .trim();
-
-        return { text, productIds, render };
-      } catch (err) {
-        console.error("chat failed", err);
-        if (err instanceof ChatError) throw new Error(err.code);
-        throw new Error("CHAT_FAILED");
+      if (!res.ok) {
+        console.error("Anthropic error", res.status, await res.text());
+        // 401/403 means the key is present but rejected — a different fix
+        // from the key being absent, so it gets a different code.
+        throw new ChatError(
+          res.status === 401 || res.status === 403
+            ? "CHAT_KEY_REJECTED"
+            : res.status === 429
+              ? "CHAT_RATE_LIMITED"
+              : "CHAT_UPSTREAM_ERROR",
+        );
       }
-    },
-  );
+
+      const json = (await res.json()) as {
+        content?: Array<{ type: string; text?: string }>;
+      };
+
+      const raw = (json.content ?? [])
+        .filter((b) => b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text as string)
+        .join("\n");
+
+      // 1. collect the ids from every marker, 2. strip them all from the text
+      const ids: string[] = [];
+      for (const match of raw.matchAll(PRODUCTS_MARKER)) {
+        for (const id of (match[1] ?? "").split(",")) {
+          const trimmed = id.trim();
+          // hallucination guard: the id must resolve to a real catalog entry
+          if (trimmed && Object.prototype.hasOwnProperty.call(CATALOG_FULL, trimmed)) {
+            ids.push(trimmed);
+          }
+        }
+      }
+      const productIds = Array.from(new Set(ids)).slice(0, 4);
+
+      // A render marker is only honoured when a photo actually exists, so a
+      // stray one can never bill for a generation that has nothing to render.
+      let render: RenderRequest | null = null;
+      let offer: RenderRequest | null = null;
+      if (data.hasRoomPhoto) {
+        for (const match of raw.matchAll(RENDER_MARKER)) {
+          const parts = (match[1] ?? "").split(",").map((t) => t.trim());
+          // replace_all is the safe default: single-piece replacement needs
+          // instance tracking the image model does not do reliably.
+          const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace_all";
+          const first = isVisualizeMode(parts[0]) ? 1 : 0;
+          const renderIds = Array.from(
+            new Set(
+              parts
+                .slice(first)
+                .filter((id) => id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)),
+            ),
+          ).slice(0, MAX_RENDERS);
+          if (renderIds.length) {
+            // The second gate, and the one that matters. The photo lasts the
+            // whole session, so "is a photo attached" was true on every turn
+            // from the first upload onwards — which billed for half of an
+            // ordinary conversation about a picture the customer already had.
+            // Asking for a render is now the customer's move, not the model's.
+            if (wantsRender(lastUserTurn(data.messages))) {
+              render = { mode, productIds: renderIds };
+            } else {
+              offer = { mode, productIds: renderIds };
+            }
+            break; // one render request per reply
+          }
+        }
+      }
+
+      const text = stripToolCallSyntax(raw)
+        .replace(PRODUCTS_MARKER, "")
+        .replace(RENDER_MARKER, "")
+        // stripping a marker off its own line leaves a hole in the prose
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      return { text, productIds, render, offer };
+    } catch (err) {
+      console.error("chat failed", err);
+      if (err instanceof ChatError) throw new Error(err.code);
+      throw new Error("CHAT_FAILED");
+    }
+  });

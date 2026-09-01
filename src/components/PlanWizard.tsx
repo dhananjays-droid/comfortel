@@ -31,7 +31,15 @@ import { cn } from "@/lib/utils";
  * and lets the numbers be corrected before anything is proposed.
  */
 
-export type WizardMode = "brief" | "budget" | "dimensions";
+/**
+ * How the customer told us the size of the room.
+ *
+ * The one genuine either/or in this dialog: a wall length *derives* a station
+ * count, so accepting both would leave two numbers claiming to be the same
+ * fact. Everything else — the description, the budget — is additive and is
+ * simply asked for.
+ */
+export type Sizing = "stations" | "room";
 
 export type WizardResult = {
   pkg: Package;
@@ -43,40 +51,35 @@ export type WizardResult = {
   byZone: boolean;
 };
 
-const TITLE: Record<WizardMode, string> = {
-  brief: "Tell us about the salon",
-  budget: "Design to a budget",
-  dimensions: "Plan by dimensions",
-};
-
-const BLURB: Record<WizardMode, string> = {
-  brief: "A sentence or two is plenty. The more you say, the closer the first pass lands.",
-  budget: "Give us a number and we'll build three ways to spend it.",
-  dimensions: "Give us the room and we'll work out what fits, then furnish it.",
-};
-
-const ICON: Record<WizardMode, typeof Wallet> = {
-  brief: Sparkles,
-  budget: Wallet,
-  dimensions: Ruler,
-};
+/**
+ * One flow, not three.
+ *
+ * This was three entry points — "a whole salon", "to a budget", "by
+ * dimensions" — which turned out to be the same dialog with different fields
+ * hidden, all converging on the same packages step. Three doors into one room
+ * asks the customer to categorise their own question before they are allowed
+ * to ask it, and gets it wrong for anyone who has both a budget and a tape
+ * measure. So: ask for everything, require almost none of it.
+ */
+const TITLE = "Plan your space";
+const BLURB =
+  "Tell us what you can. A sentence is plenty — the numbers below are all optional, and anything you skip we'll assume.";
 
 /** A sane opening bid, so the packages step is never empty on arrival. */
 const DEFAULT_BUDGET = 15000;
 const DEFAULT_STATIONS = 4;
 
 export function PlanWizard({
-  mode,
   open,
   onClose,
   onChoose,
 }: {
-  mode: WizardMode | null;
   open: boolean;
   onClose: () => void;
   onChoose: (result: WizardResult) => void;
 }) {
   const [step, setStep] = useState<"ask" | "choose">("ask");
+  const [sizing, setSizing] = useState<Sizing>("stations");
   const [note, setNote] = useState("");
   const [stations, setStations] = useState(String(DEFAULT_STATIONS));
   const [budget, setBudget] = useState(String(DEFAULT_BUDGET));
@@ -87,6 +90,7 @@ export function PlanWizard({
   useEffect(() => {
     if (open) return;
     setStep("ask");
+    setSizing("stations");
     setNote("");
     setWall("");
     setDepth("");
@@ -115,9 +119,9 @@ export function PlanWizard({
     });
   }, [wallCm, depthCm, unit]);
 
-  // Dimensions decide the station count; the other modes are told it.
+  // A measured wall decides the station count; otherwise we are told it.
   const effectiveStations =
-    mode === "dimensions"
+    sizing === "room"
       ? (fits?.fits ?? 0)
       : Math.max(1, Math.min(20, Number.parseInt(stations, 10) || DEFAULT_STATIONS));
 
@@ -158,11 +162,7 @@ export function PlanWizard({
     }
   }
 
-  if (!mode) return null;
-  const Icon = ICON[mode];
-
-  const canContinue =
-    mode === "dimensions" ? effectiveStations > 0 : effectiveStations > 0 && effectiveBudget > 0;
+  const canContinue = effectiveStations > 0 && effectiveBudget > 0;
 
   function choose(pkg: Package) {
     onChoose({
@@ -170,7 +170,7 @@ export function PlanWizard({
       stations: effectiveStations,
       budget: effectiveBudget,
       note: note.trim(),
-      byZone: mode === "dimensions",
+      byZone: sizing === "room",
     });
     onClose();
   }
@@ -190,124 +190,89 @@ export function PlanWizard({
                 <ArrowLeft className="h-4 w-4" />
               </button>
             ) : (
-              <Icon className="h-4 w-4 text-ink-2" />
+              <Sparkles className="h-4 w-4 text-ink-2" />
             )}
-            {step === "ask" ? TITLE[mode] : "Three ways to do it"}
+            {step === "ask" ? TITLE : "Three ways to do it"}
           </DialogTitle>
           <DialogDescription className="text-sm leading-relaxed text-ink-3">
             {step === "ask"
-              ? BLURB[mode]
+              ? BLURB
               : `${effectiveStations} station${effectiveStations === 1 ? "" : "s"} against ${formatPrice(effectiveBudget)}. Every option below is the most you can get at its price.`}
           </DialogDescription>
         </DialogHeader>
 
         {step === "ask" ? (
           <div className="space-y-4">
-            {mode === "brief" ? (
-              <div className="space-y-2">
-                <Label htmlFor="brief" className="text-sm text-ink-2">
-                  What are you fitting out?
-                </Label>
-                <Textarea
-                  id="brief"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder={BRIEF_PLACEHOLDER}
-                  rows={4}
-                  className="resize-none text-sm leading-relaxed"
-                />
-                <div className="flex flex-wrap gap-1.5">
-                  {BRIEF_PROMPTS.map((prompt) => (
-                    <span
-                      key={prompt}
-                      className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-3"
+            <div className="space-y-2">
+              <Label htmlFor="brief" className="text-sm text-ink-2">
+                What are you fitting out?
+              </Label>
+              <Textarea
+                id="brief"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={BRIEF_PLACEHOLDER}
+                rows={3}
+                className="resize-none text-sm leading-relaxed"
+                autoFocus
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {BRIEF_PROMPTS.map((prompt) => (
+                  <span
+                    key={prompt}
+                    className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-3"
+                  >
+                    {prompt}
+                  </span>
+                ))}
+              </div>
+              {parsed.stations || parsed.budget ? (
+                <p className="flex items-center gap-1.5 text-xs text-ink-3">
+                  <Check className="h-3.5 w-3.5 text-ink-2" />
+                  Read from that:{" "}
+                  {[
+                    parsed.stations ? `${parsed.stations} stations` : null,
+                    parsed.budget ? formatPrice(parsed.budget) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  . Correct it below if that&apos;s wrong.
+                </p>
+              ) : null}
+            </div>
+
+            {/*
+              Stations or wall length, never both: a measured wall produces the
+              station count, so offering both fields would be two answers to one
+              question and no way to say which wins.
+            */}
+            <div className="space-y-3 rounded-xl border border-border bg-surface2/50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-sm text-ink-2">Size of the room</Label>
+                <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
+                  {(
+                    [
+                      ["stations", "By stations"],
+                      ["room", "By wall length"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSizing(value)}
+                      aria-pressed={sizing === value}
+                      className={cn(
+                        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        sizing === value ? "bg-surface2 text-ink-1 shadow-sm" : "text-ink-3",
+                      )}
                     >
-                      {prompt}
-                    </span>
+                      {label}
+                    </button>
                   ))}
                 </div>
-                {parsed.stations || parsed.budget ? (
-                  <p className="flex items-center gap-1.5 text-xs text-ink-3">
-                    <Check className="h-3.5 w-3.5 text-ink-2" />
-                    Read from that:{" "}
-                    {[
-                      parsed.stations ? `${parsed.stations} stations` : null,
-                      parsed.budget ? formatPrice(parsed.budget) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    . Correct it below if that's wrong.
-                  </p>
-                ) : null}
               </div>
-            ) : null}
 
-            {mode === "dimensions" ? (
-              <>
-                <div className="flex items-center justify-between gap-3">
-                  <Label className="text-sm text-ink-2">Measuring in</Label>
-                  <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
-                    {(["ft", "m"] as const).map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setUnit(u)}
-                        aria-pressed={unit === u}
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                          unit === u ? "bg-surface2 text-ink-1 shadow-sm" : "text-ink-3",
-                        )}
-                      >
-                        {u === "ft" ? "Feet" : "Metres"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <Num
-                  id="wiz-wall"
-                  label="Styling wall length"
-                  hint="The wall the chairs sit along"
-                  unit={unit}
-                  value={wall}
-                  onChange={setWall}
-                  autoFocus
-                />
-                <Num
-                  id="wiz-depth"
-                  label="Room depth"
-                  hint="Optional"
-                  unit={unit}
-                  value={depth}
-                  onChange={setDepth}
-                />
-                {fits ? (
-                  <div className="rounded-xl border border-border bg-surface2 p-3">
-                    <p className="text-sm text-ink-1">
-                      {fits.fits > 0 ? (
-                        <>
-                          That wall takes <span className="font-semibold">{fits.fits}</span> station
-                          {fits.fits === 1 ? "" : "s"}.
-                        </>
-                      ) : (
-                        "That wall is too short for a full station."
-                      )}
-                    </p>
-                    {fits.warnings.map((w) => (
-                      <p key={w} className="mt-1.5 text-xs leading-snug text-ink-3">
-                        {w}
-                      </p>
-                    ))}
-                    <p className="mt-1.5 text-[11px] leading-snug text-ink-4">
-                      At a typical {ASSUMED.stationWidth}cm station with {CLEARANCE.betweenStations}
-                      cm between chairs. Trade convention, not building code.
-                    </p>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {mode !== "dimensions" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              {sizing === "stations" ? (
                 <Num
                   id="wiz-stations"
                   label="Styling stations"
@@ -315,27 +280,80 @@ export function PlanWizard({
                   unit="stations"
                   value={stations}
                   onChange={setStations}
-                  autoFocus={mode === "budget"}
                 />
-                <Num
-                  id="wiz-budget"
-                  label="Budget"
-                  hint="Furniture only"
-                  unit="USD"
-                  value={budget}
-                  onChange={setBudget}
-                />
-              </div>
-            ) : (
-              <Num
-                id="wiz-budget-dims"
-                label="Budget"
-                hint="Optional — shapes what we pick"
-                unit="USD"
-                value={budget}
-                onChange={setBudget}
-              />
-            )}
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-sm text-ink-2">Measuring in</Label>
+                    <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
+                      {(["ft", "m"] as const).map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setUnit(u)}
+                          aria-pressed={unit === u}
+                          className={cn(
+                            "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                            unit === u ? "bg-surface2 text-ink-1 shadow-sm" : "text-ink-3",
+                          )}
+                        >
+                          {u === "ft" ? "Feet" : "Metres"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Num
+                    id="wiz-wall"
+                    label="Styling wall length"
+                    hint="The wall the chairs sit along"
+                    unit={unit}
+                    value={wall}
+                    onChange={setWall}
+                  />
+                  <Num
+                    id="wiz-depth"
+                    label="Room depth"
+                    hint="Optional"
+                    unit={unit}
+                    value={depth}
+                    onChange={setDepth}
+                  />
+                  {fits ? (
+                    <div className="rounded-lg border border-border bg-surface2 p-3">
+                      <p className="text-sm text-ink-1">
+                        {fits.fits > 0 ? (
+                          <>
+                            That wall takes <span className="font-semibold">{fits.fits}</span>{" "}
+                            station{fits.fits === 1 ? "" : "s"}.
+                          </>
+                        ) : (
+                          "That wall is too short for a full station."
+                        )}
+                      </p>
+                      {fits.warnings.map((w) => (
+                        <p key={w} className="mt-1.5 text-xs leading-snug text-ink-3">
+                          {w}
+                        </p>
+                      ))}
+                      <p className="mt-1.5 text-[11px] leading-snug text-ink-4">
+                        At a typical {ASSUMED.stationWidth}cm station with{" "}
+                        {CLEARANCE.betweenStations}cm between chairs. Trade convention, not building
+                        code.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+
+            <Num
+              id="wiz-budget"
+              label="Budget"
+              hint="Furniture only — shapes what we pick"
+              unit="USD"
+              value={budget}
+              onChange={setBudget}
+            />
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="ghost" onClick={onClose} className="text-ink-3 hover:bg-muted">

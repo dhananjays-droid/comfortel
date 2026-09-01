@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, RefreshCw, SquarePen } from "lucide-react";
+import { CheckCircle2, RefreshCw, Sparkles, SquarePen } from "lucide-react";
 import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,7 +14,7 @@ import { ProductSheet } from "@/components/ProductSheet";
 import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
-import { PlanWizard, type WizardMode, type WizardResult } from "@/components/PlanWizard";
+import { PlanWizard, type WizardResult } from "@/components/PlanWizard";
 import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
 import type { WaAction } from "@/lib/wa-flow";
 import { Switch } from "@/components/ui/switch";
@@ -30,7 +30,7 @@ import {
   type FullProduct,
 } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
-import { chat, type ChatMessageInput } from "@/lib/chat.functions";
+import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
@@ -121,6 +121,11 @@ type Message =
       productIds?: string[];
       /** Reply buttons or a list, when this turn came from the WhatsApp menu. */
       action?: WaAction | undefined;
+      /**
+       * A render the model wanted to run on a turn that did not ask for one.
+       * Shown as a button rather than spent — see render-intent.ts.
+       */
+      offer?: RenderRequest | undefined;
     }
   | {
       id: string;
@@ -412,7 +417,7 @@ function Index() {
   }, [planIds, planQty]);
 
   const [planCollapsed, setPlanCollapsed] = useState(false);
-  const [wizard, setWizard] = useState<WizardMode | null>(null);
+  const [wizard, setWizard] = useState(false);
   /**
    * A dimensions run promised one image per zone. The photo usually arrives
    * after the package, so the intent is held here and spent when it does.
@@ -727,6 +732,10 @@ function Index() {
             kind: "text",
             content: res.text,
             productIds: res.productIds,
+            // Offered, not spent: the model asked to render on a turn that did
+            // not ask for one, so it becomes a button the customer can decline
+            // by simply not tapping it.
+            ...(res.offer && roomPhotoRef.current ? { offer: res.offer } : {}),
           },
         ];
 
@@ -813,6 +822,24 @@ function Index() {
     }
 
     void runChat(next, roomPhotoRef.current !== null);
+  }
+
+  /**
+   * The customer tapped a render the model had only offered.
+   *
+   * Routed through startRender, the same path the card button and the photo
+   * dialog use, so an accepted offer is indistinguishable from having asked in
+   * the first place — including the "Show me the X in my space" turn it writes
+   * into the thread, which keeps the transcript honest about who asked.
+   */
+  function acceptOffer(offer: RenderRequest) {
+    const photo = roomPhotoRef.current;
+    if (!photo) return;
+    const products = offer.productIds
+      .map((id) => getProduct(id))
+      .filter((p): p is FullProduct => Boolean(p));
+    if (!products.length) return;
+    startRender(products, offer.mode, photo, planQtyRef.current);
   }
 
   const pickPhoto = useCallback(async (file: File | undefined) => {
@@ -1000,7 +1027,7 @@ function Index() {
     const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
     if (!products.length) return;
 
-    setWizard(null);
+    setWizard(false);
     setPlanIds(ids);
     setPlanQty(Object.fromEntries(result.pkg.lines.map((line) => [line.product.id, line.qty])));
     setPlanCollapsed(false);
@@ -1235,7 +1262,7 @@ function Index() {
             </p>
           </div>
         ) : empty ? (
-          <EmptyState onPick={send} onPickPhoto={pickPhoto} onOpenWizard={setWizard} />
+          <EmptyState onPick={send} onPickPhoto={pickPhoto} onOpenWizard={() => setWizard(true)} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -1246,6 +1273,7 @@ function Index() {
                 planIds={planIds}
                 onTogglePlan={togglePlan}
                 onShareRenders={shareRenders}
+                onAcceptOffer={acceptOffer}
                 onVisualize={(product) => setPhotoProducts([product])}
                 onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
                 onRetryRender={(entry) => {
@@ -1333,12 +1361,7 @@ function Index() {
         </div>
       </div>
 
-      <PlanWizard
-        mode={wizard}
-        open={wizard !== null}
-        onClose={() => setWizard(null)}
-        onChoose={acceptPackage}
-      />
+      <PlanWizard open={wizard} onClose={() => setWizard(false)} onChoose={acceptPackage} />
 
       <ProductSheet
         product={sheetProduct}
@@ -1384,6 +1407,7 @@ function MessageRow({
   planIds,
   onTogglePlan,
   onShareRenders,
+  onAcceptOffer,
 }: {
   message: Message;
   onOpenProduct: (product: FullProduct) => void;
@@ -1393,6 +1417,7 @@ function MessageRow({
   onShareRenders: (entries: RenderEntry[]) => void | Promise<void>;
   onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
   onRetryRender: (entry: RenderEntry) => void;
+  onAcceptOffer: (offer: RenderRequest) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -1447,6 +1472,24 @@ function MessageRow({
                   );
                 })}
               </ProductStrip>
+            ) : null}
+
+            {/*
+              The model wanted to render on a turn that did not ask for one.
+              Offering it costs nothing and declining it is simply not tapping —
+              which is the whole point: half of an ordinary conversation about a
+              picture used to bill for a new one.
+            */}
+            {message.kind === "text" && message.offer ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onAcceptOffer(message.offer as RenderRequest)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                See this in your space
+              </Button>
             ) : null}
 
             {message.kind === "visualization" ? (
