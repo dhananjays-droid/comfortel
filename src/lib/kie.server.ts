@@ -132,7 +132,8 @@ async function mirrorAll(urls: string[]): Promise<string[]> {
  * first image", "image 2 is a..."), so reordering silently inverts it.
  */
 export async function createVisualizeTask(
-  roomUrl: string,
+  /** null for staged_room, where the references are the only input. */
+  roomUrl: string | null,
   productImageUrls: string[],
   prompt: string,
   aspectRatio: string,
@@ -145,7 +146,7 @@ export async function createVisualizeTask(
     body: JSON.stringify({
       model: MODEL,
       input: {
-        input_urls: [roomUrl, ...references],
+        input_urls: roomUrl ? [roomUrl, ...references] : references,
         prompt,
         aspect_ratio: aspectRatio,
         resolution: resolution(),

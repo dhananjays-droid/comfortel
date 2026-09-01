@@ -38,6 +38,12 @@ const ASKS = [
   // naming the space is a request on its own
   /\bin\s+my\s+(?:room|salon|space|shop|store|studio|spa|photo|picture|place)\b/,
   /\bin\s+the\s+(?:photo|picture)\b/,
+
+  // A room we invent is still a render, and asking for one should not be
+  // treated as idle chat just because no photograph is involved.
+  /\b(?:empty|blank|bare|imaginary|example|sample|generic|new|staged?)\s+(?:room|salon|space|studio|shop)\b/,
+  /\b(?:build|design|lay\s?out|furnish|stage|set\s?up|mock)\b[\s\S]{0,30}\b(?:room|salon|space|studio|shop|salon)\b/,
+  /\bfrom\s+scratch\b/,
 ];
 
 /**

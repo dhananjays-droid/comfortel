@@ -1,4 +1,19 @@
-export type VisualizeMode = "replace" | "replace_all" | "add" | "refit_room" | "lineup";
+export type VisualizeMode =
+  | "replace"
+  | "replace_all"
+  | "add"
+  | "refit_room"
+  | "lineup"
+  /**
+   * No room photograph at all — the salon is built around the products.
+   *
+   * Every other mode needs a picture of somewhere real, which made a photo the
+   * price of admission for seeing your own plan. Someone still deciding, or
+   * fitting out a space that does not exist yet, had nothing to upload and so
+   * could not use the feature at all. Here the references ARE the input and
+   * image 1 is a product, not a room.
+   */
+  | "staged_room";
 
 export const VISUALIZE_MODES: VisualizeMode[] = [
   "replace",
@@ -6,10 +21,16 @@ export const VISUALIZE_MODES: VisualizeMode[] = [
   "add",
   "refit_room",
   "lineup",
+  "staged_room",
 ];
 
 /** Modes that render ONE image from several product references. */
-export const MULTI_REFERENCE_MODES: VisualizeMode[] = ["refit_room", "lineup"];
+export const MULTI_REFERENCE_MODES: VisualizeMode[] = ["refit_room", "lineup", "staged_room"];
+
+/** The one mode that needs no room photograph. */
+export function needsRoomPhoto(mode: VisualizeMode): boolean {
+  return mode !== "staged_room";
+}
 
 export function isMultiReferenceMode(mode: VisualizeMode): boolean {
   return MULTI_REFERENCE_MODES.includes(mode);
@@ -482,6 +503,65 @@ function buildRefitPrompt(
  * separate image every time. Here the customer sees every design in situ at
  * once, for a quarter of the cost, and gives up like-for-like positioning.
  */
+/**
+ * A salon built around the products, with no photograph to work from.
+ *
+ * The fidelity clauses are the same as everywhere else — the room being
+ * invented is no licence to invent the furniture, which is the whole point of
+ * the render. What changes is that there is no room to preserve, so the
+ * instructions describe the space to build instead of the space to leave alone.
+ */
+function buildStagedPrompt(products: VisualizeProduct[], correction?: string): string {
+  const blocks = allocateReferences(products, 1);
+
+  const list = blocks
+    .map((b) => {
+      const many = b.views.length > 1;
+      const angles = b.views.map((v) => v.angle).join(", ");
+      return many
+        ? `${imageRange(b)} are ALL THE SAME single product — a ${describe(b.product)} — photographed from different angles (${angles}); install ${qtyOf(b.product)} of it`
+        : `${imageRange(b)} is a ${describe(b.product)} — install ${qtyOf(b.product)} of this one`;
+    })
+    .join(". ");
+
+  const tally = products.map((p) => `${qtyOf(p)} × ${p.name}`).join(", ");
+
+  return assemble([
+    req(
+      `Every image here is a Comfortel product reference, grouped by product. There is NO photograph of a room — you are building the room. ${list}.`,
+    ),
+    req(
+      `There are exactly ${blocks.length} DIFFERENT products in these references, no more. Where several images show one product, they are the same physical piece from different sides — study them together to get its shape right, and do not treat them as separate products.`,
+    ),
+    // Same rule as a refit: the shell is the product and the base is an option,
+    // because Comfortel sells them as separate SKUs and a product is therefore
+    // photographed on several bases.
+    req(
+      `Where one product's images show it on more than one style of base or column, the seat and its upholstery are the product and the base is an option. Pick ONE base from those shown and give every copy of that product the same one.`,
+    ),
+    req(
+      `Build a photorealistic interior of a real working hair salon and install exactly these pieces in it: ${tally}. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
+    ),
+    req(
+      `COPY EACH PRODUCT EXACTLY — the most important requirement here. The room is yours to invent; the furniture is not. A beautiful salon containing the wrong chair is a failed render. Match each reference's silhouette, the profile of its ARMRESTS, its upholstery seams, and its BASE — shape, legs or disc, column and footrest.`,
+    ),
+    req(
+      `Every copy of a product must be identical to the others: same silhouette, same armrests, same base, same seams, same finish. They may differ ONLY in size, angle and position, as perspective requires.`,
+    ),
+    opt(
+      `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or salon lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
+    ),
+    opt(
+      `Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.`,
+    ),
+    ...realismClauses(),
+    ...correctionClauses(correction),
+    req(
+      `Never shrink a piece, overlap two, or sink one into a wall to make the count fit. If ${tally} genuinely cannot be arranged in one plausible room, install as many as fit correctly and leave the rest out rather than distorting anything.`,
+    ),
+  ]);
+}
+
 function buildLineupPrompt(products: VisualizeProduct[], correction?: string): string {
   const subject = products[0]?.replaces ?? "unit";
   const assignments = products
@@ -538,6 +618,8 @@ export function buildSalonPrompt(
   if (mode === "refit_room")
     return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene, correction);
   if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction);
+  if (mode === "staged_room")
+    return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction);
 
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
@@ -690,7 +772,11 @@ export type ReferenceBlock = {
  * time. Round-robin rather than "best-photographed first" so a plan cannot
  * spend twelve slots on one chair and leave the wash unit as a lone thumbnail.
  */
-export function allocateReferences(products: VisualizeProduct[]): ReferenceBlock[] {
+export function allocateReferences(
+  products: VisualizeProduct[],
+  /** 2 normally, because image 1 is the room; 1 when there is no room. */
+  firstSlot = 2,
+): ReferenceBlock[] {
   const available = products.map((p) => referenceViews(p, MAX_VIEWS));
   const taken: number[] = available.map((views) => (views.length ? 1 : 0));
 
@@ -708,7 +794,7 @@ export function allocateReferences(products: VisualizeProduct[]): ReferenceBlock
   }
 
   const blocks: ReferenceBlock[] = [];
-  let cursor = 2; // image 1 is the room
+  let cursor = firstSlot;
   for (let i = 0; i < products.length; i++) {
     const views = (available[i] ?? []).slice(0, taken[i]);
     if (!views.length) continue;
@@ -741,9 +827,10 @@ export function buildRenderRequest(
   const prompt = buildSalonPrompt(products, mode, scene, correction);
 
   const imageUrls = isMultiReferenceMode(mode)
-    ? // several views per product, sharing the 15 slots the API leaves free
-      allocateReferences(products.slice(0, MAX_REFERENCES)).flatMap((b) =>
-        b.views.map((v) => v.url),
+    ? // several views per product, sharing the slots the API leaves free — all
+      // 16 when there is no room photograph taking the first one.
+      allocateReferences(products.slice(0, MAX_REFERENCES), needsRoomPhoto(mode) ? 2 : 1).flatMap(
+        (b) => b.views.map((v) => v.url),
       )
     : // several views of THE SAME product
       referenceViews(products[0] as VisualizeProduct).map((v) => v.url);

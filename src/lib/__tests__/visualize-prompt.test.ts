@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  allocateReferences,
-  buildRenderRequest,
   MAX_PROMPT_CHARS,
   MAX_REFERENCE_SLOTS,
+  allocateReferences,
+  buildRenderRequest,
+  needsRoomPhoto,
   referenceViews,
   type VisualizeProduct,
 } from "@/lib/visualize-prompt";
@@ -393,5 +394,51 @@ describe("a refit that groups several views per product", () => {
     expect(buildRenderRequest(wide, "refit_room").prompt.length).toBeLessThanOrEqual(
       MAX_PROMPT_CHARS,
     );
+  });
+});
+
+describe("staged_room — no photograph", () => {
+  const products = [
+    { id: "a", name: "Harper Styling Chair", images: ["https://x/a.jpg"], qty: 4 },
+    { id: "b", name: "Sienna Salon Mirror", images: ["https://x/b.jpg"], qty: 4 },
+  ] as unknown as Parameters<typeof buildRenderRequest>[0];
+
+  it("numbers the references from 1, since no room takes the first slot", () => {
+    // Off by one here and every positional reference in the prompt points at
+    // the wrong product, which is the exact failure the grouping prevents.
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).toContain("Image 1");
+    expect(prompt).not.toMatch(/first image is a photograph/i);
+  });
+
+  it("says there is no room, so the model builds one", () => {
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).toMatch(/NO photograph of a room/i);
+    expect(prompt).toMatch(/building the room/i);
+  });
+
+  it("still demands the products be copied exactly", () => {
+    // The room being invented is no licence to invent the furniture.
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).toMatch(/COPY EACH PRODUCT EXACTLY/);
+    expect(prompt).toMatch(/ARMRESTS/);
+  });
+
+  it("carries the quantities", () => {
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).toContain("4 × Harper Styling Chair");
+    expect(prompt).toContain("4 × Sienna Salon Mirror");
+  });
+
+  it("sends no room image, only references", () => {
+    const { imageUrls } = buildRenderRequest(products, "staged_room");
+    expect(imageUrls).toEqual(["https://x/a.jpg", "https://x/b.jpg"]);
+  });
+
+  it("is the only mode that needs no photograph", () => {
+    expect(needsRoomPhoto("staged_room")).toBe(false);
+    for (const mode of ["replace", "replace_all", "add", "refit_room", "lineup"] as const) {
+      expect(needsRoomPhoto(mode)).toBe(true);
+    }
   });
 });

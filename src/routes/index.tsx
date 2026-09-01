@@ -347,13 +347,15 @@ function toWaItems(messages: Message[]): WaItem[] {
 function buildRenderMessage(
   mode: VisualizeMode,
   productIds: string[],
-  photo: RoomPhoto,
+  /** Absent for staged_room, which builds the room instead of using one. */
+  photo: RoomPhoto | null,
   quantities?: Record<string, number> | undefined,
 ): { message: Message; entries: RenderEntry[] } {
   const base = {
-    base64: photo.image.base64,
+    base64: photo?.image.base64 ?? "",
     mode,
-    aspectRatio: photo.image.aspectRatio,
+    // 3:2 reads as a room seen wide, which is what a built salon should be.
+    aspectRatio: photo?.image.aspectRatio ?? "3:2",
   };
 
   // refit_room and lineup are ONE image built from several references. Every
@@ -373,10 +375,14 @@ function buildRenderMessage(
         label:
           mode === "refit_room"
             ? "Your salon, refitted"
-            : mode === "lineup"
-              ? `${ids.length} options in your space`
-              : (getProduct(ids[0]!)?.name ?? "Your render"),
-        before: photo.preview,
+            : mode === "staged_room"
+              ? "Your plan, staged in a salon"
+              : mode === "lineup"
+                ? `${ids.length} options in your space`
+                : (getProduct(ids[0]!)?.name ?? "Your render"),
+        // "" is already the no-comparison case, used after a reload drops the
+        // original — the before/after toggle simply hides itself.
+        before: photo?.preview ?? "",
         status: "loading",
       },
     };
@@ -784,21 +790,24 @@ function Index() {
             // Offered, not spent: the model asked to render on a turn that did
             // not ask for one, so it becomes a button the customer can decline
             // by simply not tapping it.
-            ...(res.offer && roomPhotoRef.current ? { offer: res.offer } : {}),
+            ...(res.offer && (roomPhotoRef.current || res.offer.mode === "staged_room")
+              ? { offer: res.offer }
+              : {}),
           },
         ];
 
-        // The assistant can ask for renders itself. It only ever gets here when
-        // a photo is attached — the server refuses to parse the marker otherwise.
+        // The assistant can ask for renders itself. Every mode but staged_room
+        // needs a photograph; staged_room builds the room from the references,
+        // which is what stops a missing photo being a dead end.
         const photo = roomPhotoRef.current;
-        if (res.render && photo) {
+        if (res.render && (photo || res.render.mode === "staged_room")) {
           // The plan's quantities travel with it: when the model renders the
           // plan — which is what it is told to do for "show me these" — the
           // picture has to hold the number the tray and the quote say.
           const { message, entries } = buildRenderMessage(
             res.render.mode,
             res.render.productIds,
-            photo,
+            res.render.mode === "staged_room" ? null : photo,
             planQtyRef.current,
           );
           if (entries.length) {
@@ -953,13 +962,14 @@ function Index() {
    * into the thread, which keeps the transcript honest about who asked.
    */
   function acceptOffer(offer: RenderRequest) {
+    const staged = offer.mode === "staged_room";
     const photo = roomPhotoRef.current;
-    if (!photo) return;
+    if (!photo && !staged) return;
     const products = offer.productIds
       .map((id) => getProduct(id))
       .filter((p): p is FullProduct => Boolean(p));
     if (!products.length) return;
-    startRender(products, offer.mode, photo, planQtyRef.current);
+    startRender(products, offer.mode, staged ? null : photo, planQtyRef.current);
   }
 
   const pickPhoto = useCallback(async (file: File | undefined) => {
@@ -994,7 +1004,8 @@ function Index() {
   function startRender(
     products: FullProduct[],
     mode: VisualizeMode,
-    photo: RoomPhoto,
+    /** Absent for staged_room, which builds the room around the products. */
+    photo: RoomPhoto | null,
     quantities?: Record<string, number> | undefined,
   ) {
     const verb =
@@ -1007,21 +1018,30 @@ function Index() {
     // on top of it.
     setPlanCollapsed(true);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        role: "user",
-        kind: "photo",
-        content:
-          products.length > 1
-            ? `Fit my space out with these ${pieceCount(products, quantities)} pieces.`
-            : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`,
-        photo: photo.preview,
-        productId: ids[0] as string,
-      },
-      message,
-    ]);
+    // A staged render has no photo to show back, so the turn is plain text.
+    const asked: Message = photo
+      ? {
+          id: nextId(),
+          role: "user",
+          kind: "photo",
+          content:
+            products.length > 1
+              ? `Fit my space out with these ${pieceCount(products, quantities)} pieces.`
+              : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`,
+          photo: photo.preview,
+          productId: ids[0] as string,
+        }
+      : {
+          id: nextId(),
+          role: "user",
+          kind: "text",
+          content:
+            products.length > 1
+              ? `Build a salon around these ${pieceCount(products, quantities)} pieces.`
+              : `Show me the ${products[0]?.name ?? "this piece"} in a salon.`,
+        };
+
+    setMessages((prev) => [...prev, asked, message]);
     entries.forEach((entry) => void runRender(entry));
   }
 
@@ -1132,6 +1152,18 @@ function Index() {
       photo,
       planQty,
     );
+  }
+
+  /**
+   * Render the plan without a room photograph.
+   *
+   * A photo used to be the price of admission for seeing your own plan: with
+   * none attached the only path was a dialog demanding one, which is a dead end
+   * for anyone still deciding or fitting out a space that does not exist yet.
+   */
+  function renderPlanStaged() {
+    if (!planProducts.length) return;
+    startRender(planProducts, "staged_room", null, planQty);
   }
 
   /**
@@ -1469,6 +1501,7 @@ function Index() {
               setPlanQty({});
             }}
             onVisualize={renderPlan}
+            onVisualizeStaged={renderPlanStaged}
             hasPhoto={hasRoomPhoto}
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
             zoneCount={groupByZone(planProducts).length}

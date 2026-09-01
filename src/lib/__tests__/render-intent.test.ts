@@ -119,3 +119,27 @@ describe("lastUserTurn", () => {
     expect(lastUserTurn([])).toBe("");
   });
 });
+
+describe("wantsRender — a room we build", () => {
+  /**
+   * A photo used to be the price of admission. Asking for a salon we invent is
+   * still asking for a picture, and must not read as idle chat just because no
+   * photograph is involved.
+   */
+  const asking = [
+    "build it in an empty room",
+    "show me these in an empty room",
+    "can you build a salon around these",
+    "design a room with these pieces",
+    "just make an example room",
+    "lay out a salon from scratch",
+    "stage it in a blank space",
+  ];
+  for (const text of asking) {
+    it(`asks: ${text}`, () => expect(wantsRender(text)).toBe(true));
+  }
+
+  it("still refuses when they say not to", () => {
+    expect(wantsRender("don't build a room, just tell me the total")).toBe(false);
+  });
+});

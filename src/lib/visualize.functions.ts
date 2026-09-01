@@ -15,6 +15,7 @@ import {
 type StartInput = {
   /** One id for the placement modes; up to MAX_REFERENCES for refit_room. */
   productIds: string[];
+  /** Empty for staged_room, which invents the room instead of using one. */
   roomImageBase64: string;
   mode: VisualizeMode;
   aspectRatio?: string;
@@ -120,15 +121,19 @@ export const visualizeStart = createServerFn({ method: "POST" })
       ? input.productIds.filter((id) => typeof id === "string" && id.length > 0)
       : [];
     if (!productIds.length) throw new Error("productIds required");
-    if (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string") {
+    // staged_room is the one mode with nothing to upload: the references are
+    // the input and the room is invented, so requiring a photo here is what
+    // used to make a photo the price of admission for seeing your own plan.
+    const staged = input?.mode === "staged_room";
+    if (!staged && (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string")) {
       throw new Error("roomImageBase64 required");
     }
-    if (input.roomImageBase64.length > MAX_BASE64_CHARS) {
+    if ((input.roomImageBase64?.length ?? 0) > MAX_BASE64_CHARS) {
       throw new Error("roomImageBase64 too large");
     }
     return {
       productIds: productIds.slice(0, MAX_REFERENCES),
-      roomImageBase64: input.roomImageBase64,
+      roomImageBase64: staged ? "" : input.roomImageBase64,
       // replace_all, not replace: single-unit replacement needs the model to
       // track one instance among identical units, which it does not do
       // reliably. replace_all has been correct in every live test, mirrors
@@ -213,7 +218,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
       const cached = await readCache(hash);
       if (cached) return { imageUrl: cached };
 
-      const roomUrl = await uploadToKie(data.roomImageBase64);
+      const roomUrl = data.roomImageBase64 ? await uploadToKie(data.roomImageBase64) : null;
       const taskId = await createVisualizeTask(roomUrl, imageUrls, prompt, data.aspectRatio);
 
       await writeCache({
