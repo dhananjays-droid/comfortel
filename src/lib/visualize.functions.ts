@@ -203,7 +203,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
         data.room,
       );
 
-      const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
+      const { uploadToKie, createVisualizeTask, resolutionFor } = await import("@/lib/kie.server");
 
       // Cache key: sha256(ids + mode + roomImageBase64). Mode is in the key
       // because the same photo and products render differently per mode.
@@ -224,6 +224,12 @@ export const visualizeStart = createServerFn({ method: "POST" })
           quantityKey(data.quantities) +
           // The stated room size changes the prompt, so it changes the image.
           `${data.room?.wallCm ?? ""}x${data.room?.depthCm ?? ""}` +
+          // The resolution tier is derived from the mode, which is already in
+          // the key — but the mapping itself can change, and an override can
+          // change it without the mode moving. Left out, every render cached
+          // before a tier change would be served back at the old resolution
+          // forever, silently undoing the upgrade.
+          resolutionFor(data.mode) +
           data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);
@@ -238,7 +244,13 @@ export const visualizeStart = createServerFn({ method: "POST" })
       if (cached) return { imageUrl: cached };
 
       const roomUrl = data.roomImageBase64 ? await uploadToKie(data.roomImageBase64) : null;
-      const taskId = await createVisualizeTask(roomUrl, imageUrls, prompt, data.aspectRatio);
+      const taskId = await createVisualizeTask(
+        roomUrl,
+        imageUrls,
+        prompt,
+        data.aspectRatio,
+        data.mode,
+      );
 
       await writeCache({
         hash,

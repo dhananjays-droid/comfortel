@@ -8,6 +8,8 @@
  * references after — the order is what tells the model which is which.
  */
 
+import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
+
 const KIE_API = "https://api.kie.ai";
 const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 
@@ -27,13 +29,31 @@ const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 const MODEL = "gpt-image-2-image-to-image";
 
 /**
- * 1K is the default because it is what the aspect ratios we send support (the
- * API only returns 4K for some ratios, and "auto" is 1K-only) and because the
- * render is viewed in a chat bubble. 2K/4K are opt-in via KIE_IMAGE_RESOLUTION.
+ * Resolution is chosen per render, because what it buys depends on the mode.
+ *
+ * kie's tiers are native generations rather than upscales — 6 credits ($0.03)
+ * at 1K, 10 ($0.05) at 2K, 16 ($0.08) at 4K — so 2K is four times the pixels
+ * for two-thirds more money, not a resize.
+ *
+ * Where that matters is crowding. A refit, a lineup or a staged room puts
+ * several DIFFERENT products in one frame, and each one's share of the pixels
+ * is what decides whether its armrests and base survive; a seven-product plan
+ * at 1K is where pieces stop being recognisable. A single-product placement has
+ * one identity to get right and is read in a chat bubble, so it gains almost
+ * nothing and 1K stays the honest default there.
+ *
+ * The aspect-ratio caveat does not bite: 2K and 4K exclude 5:4, 4:5, 3:1, 1:3
+ * and 9:21, and resize-image.ts only ever produces 1:1, 3:2 or 2:3.
+ *
+ * KIE_IMAGE_RESOLUTION still overrides both, for testing a whole run at one
+ * tier without touching code.
  */
-function resolution(): string {
-  const r = (process.env["KIE_IMAGE_RESOLUTION"] ?? "1K").trim();
-  return ["1K", "2K", "4K"].includes(r) ? r : "1K";
+const VALID_RESOLUTIONS = ["1K", "2K", "4K"];
+
+export function resolutionFor(mode: VisualizeMode): string {
+  const override = (process.env["KIE_IMAGE_RESOLUTION"] ?? "").trim();
+  if (VALID_RESOLUTIONS.includes(override)) return override;
+  return isMultiReferenceMode(mode) ? "2K" : "1K";
 }
 
 // Narrow shapes for the three kie responses this module reads. Only the fields
@@ -137,6 +157,8 @@ export async function createVisualizeTask(
   productImageUrls: string[],
   prompt: string,
   aspectRatio: string,
+  /** Decides the resolution tier — see resolution(). */
+  mode: VisualizeMode,
 ): Promise<string> {
   const references = await mirrorAll(productImageUrls);
 
@@ -149,7 +171,7 @@ export async function createVisualizeTask(
         input_urls: roomUrl ? [roomUrl, ...references] : references,
         prompt,
         aspect_ratio: aspectRatio,
-        resolution: resolution(),
+        resolution: resolutionFor(mode),
       },
     }),
   });

@@ -23,7 +23,7 @@ flowchart TD
     H --> V["parse + validate<br/><small>strip markers, check every id</small>"]
     F["catalog-full.json<br/><small>374 KB · never sent to the model</small>"] --> V
     V --> C["product cards<br/><small>price, images, specs</small>"]
-    V --> R["renders<br/><small>kie · GPT Image 2 · $0.03 each</small>"]
+    V --> R["renders<br/><small>kie · GPT Image 2 · $0.03 at 1K, $0.05 at 2K</small>"]
 ```
 
 The server function is the only thing that talks to Anthropic. No API call is
@@ -86,8 +86,8 @@ Cost per reply with the cache warm:
 | output     | ~150   | $5.00 / MTok | $0.0008       |
 |            |        |              | **≈ $0.0017** |
 
-For scale: **one render costs $0.03 — about eighteen chat replies.** The chat model
-is rounding error next to image generation.
+For scale: **one render costs $0.03-0.05 — twenty to thirty chat replies.** The
+chat model is rounding error next to image generation.
 
 ### What the instructions actually enforce
 
@@ -112,7 +112,7 @@ flowchart LR
     A["raw reply<br/><small>prose + up to 2 markers</small>"] --> M1["PRODUCTS: ids<br/><small>max 4, every id validated</small>"]
     A --> M2["RENDER: mode, ids<br/><small>dead without a photo</small>"]
     M1 --> C["cards<br/><small>no extra cost</small>"]
-    M2 --> R["images<br/><small>$0.03 each</small>"]
+    M2 --> R["images<br/><small>$0.03-0.05 each</small>"]
 ```
 
 ```
@@ -153,16 +153,32 @@ their ids. That shipped and was visible in the UI.
 
 ## 5. Render modes and cost
 
-One generation is **6 kie credits = $0.03** at 1K, measured from
+kie's resolution tiers are native generations, not upscales: **6 credits
+($0.03) at 1K, 10 ($0.05) at 2K, 16 ($0.08) at 4K**, measured from
 `recordInfo.creditsConsumed`. A failed task consumes 0 — failures are free.
 
-| Mode          | Images         | Cost      | Use for                                                             |
-| ------------- | -------------- | --------- | ------------------------------------------------------------------- |
-| `replace_all` | 1              | $0.03     | every matching piece becomes the SAME product                       |
-| `lineup`      | 1              | $0.03     | 2–4 DIFFERENT products side by side, one per station, left to right |
-| `refit_room`  | 1              | $0.03     | whole room refitted across furniture types                          |
-| `add`         | 1              | $0.03     | drop one piece into free space                                      |
-| `replace`     | **one per id** | $0.03 × n | true A/B — same position, each candidate in turn                    |
+The tier is chosen per render by `resolutionFor(mode)` in `kie.server.ts`,
+because what 2K buys is each product's share of the pixels. A refit, a lineup
+or a staged room puts several DIFFERENT products in one frame and gets **2K**;
+a single-product placement has one identity to get right, is read in a chat
+bubble, and stays **1K**. `KIE_IMAGE_RESOLUTION` overrides both for testing.
+
+The tier is part of the render cache key. It is derived from the mode, which
+was already in the key — but the mapping itself can change, and the override
+can change it without the mode moving, so every previously cached render would
+otherwise be served back at the old resolution forever.
+
+2K and 4K do not support 5:4, 4:5, 3:1, 1:3 or 9:21. `resize-image.ts` only
+ever produces 1:1, 3:2 or 2:3, so the restriction never bites.
+
+| Mode          | Images         | Tier | Cost      | Use for                                                             |
+| ------------- | -------------- | ---- | --------- | ------------------------------------------------------------------- |
+| `replace_all` | 1              | 1K   | $0.03     | every matching piece becomes the SAME product                       |
+| `lineup`      | 1              | 2K   | $0.05     | 2–4 DIFFERENT products side by side, one per station, left to right |
+| `refit_room`  | 1              | 2K   | $0.05     | whole room refitted across furniture types                          |
+| `staged_room` | 1              | 2K   | $0.05     | no room photo at all — the salon is built around the pieces         |
+| `add`         | 1              | 1K   | $0.03     | drop one piece into free space                                      |
+| `replace`     | **one per id** | 1K   | $0.03 × n | true A/B — same position, each candidate in turn                    |
 
 `replace` is the only mode that multiplies, and it has to: one image shows one
 state of a room, so comparing candidates _in the same spot_ is inherently one
@@ -208,12 +224,12 @@ there — that is a FAILED render" verbatim in the prompt did not change it.
 each station's facing while doing it. That is the whole reason for the switch.
 It also lifts the two limits that shaped this code:
 
-| | gpt-image/1.5 | GPT Image 2 |
-| --- | --- | --- |
-| prompt limit | 3000 chars (hard reject) | 20000 documented, 6000 verified |
-| reference images | effectively few | 16 |
-| sizing | `quality: medium\|high` | `resolution: 1K\|2K\|4K` |
-| fetches `comfortelfurniture.com` | yes | **no — must be mirrored** |
+|                                  | gpt-image/1.5            | GPT Image 2                     |
+| -------------------------------- | ------------------------ | ------------------------------- |
+| prompt limit                     | 3000 chars (hard reject) | 20000 documented, 6000 verified |
+| reference images                 | effectively few          | 16                              |
+| sizing                           | `quality: medium\|high`  | `resolution: 1K\|2K\|4K`        |
+| fetches `comfortelfurniture.com` | yes                      | **no — must be mirrored**       |
 
 `referenceViews()` sends up to **four** views of the same product — the hero shot
 plus any explicit front/side/back photograph — so the model can see the armrest
@@ -238,13 +254,13 @@ leaving the customer's old chair standing in every reflection.
 
 The fix is a framing, and the framing is the whole trick. Three attempts:
 
-| Instruction | Result |
-| --- | --- |
-| "rebuild the floor, skirting and wall behind it" (original — no mention of mirrors) | old chair left standing in every mirror |
-| "mirrors are part of this REMOVAL — remove all those copies" | stale reflections gone, mirrors left **empty** |
-| "treat each reflected ${subject} as ANOTHER ONE TO REPLACE" | **reflections show the new product** |
+| Instruction                                                                         | Result                                         |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------- |
+| "rebuild the floor, skirting and wall behind it" (original — no mention of mirrors) | old chair left standing in every mirror        |
+| "mirrors are part of this REMOVAL — remove all those copies"                        | stale reflections gone, mirrors left **empty** |
+| "treat each reflected ${subject} as ANOTHER ONE TO REPLACE"                         | **reflections show the new product**           |
 
-Telling the model to *clear* a reflection gets it cleared and not repainted.
+Telling the model to _clear_ a reflection gets it cleared and not repainted.
 Telling it the reflection is simply another instance of the thing being replaced
 puts it inside the operation the model is already good at, and the mirror comes
 back correct — including from a different angle than the camera sees.
@@ -254,7 +270,7 @@ observed output: a mirror still showing the old unit, and a mirror emptied of a
 chair that is still standing in front of it.
 
 Worth knowing: these models do not compute reflection geometry, they duplicate.
-Generated *fixtures* show the same tell — ask for a salon whose mirrors reflect
+Generated _fixtures_ show the same tell — ask for a salon whose mirrors reflect
 the chairs and you get the chair's rear view in the mirror when the chair's back
 is to the camera, which is physically impossible. The replace framing works
 anyway because it never asks the model to reason about geometry.
@@ -268,12 +284,12 @@ room containing several identical ones has never been reliable.
 Four prompt formulations were tried against the same three-chair fixture, each
 more specific than the last:
 
-| Wording | What the render did |
-| --- | --- |
-| "remove only the one nearest the camera" | replaced every chair in the room |
-| hard count: "exactly ONE changes" | deleted the two it was told to leave |
-| + "mirror scope follows floor scope" | changed the wrong chair, left reflections stale |
-| + spatial "FOREGROUND" anchor | still wrong |
+| Wording                                  | What the render did                             |
+| ---------------------------------------- | ----------------------------------------------- |
+| "remove only the one nearest the camera" | replaced every chair in the room                |
+| hard count: "exactly ONE changes"        | deleted the two it was told to leave            |
+| + "mirror scope follows floor scope"     | changed the wrong chair, left reflections stale |
+| + spatial "FOREGROUND" anchor            | still wrong                                     |
 
 The task is instance tracking — pick one of several identical objects and edit
 only it, and only its reflection. Image models do not do that from prose. The
@@ -294,7 +310,7 @@ back. The client already does canvas work in `resize-image.ts`.
 
 ### Every copy is the same model
 
-Pinning count and facing said nothing about the copies matching *each other*, so
+Pinning count and facing said nothing about the copies matching _each other_, so
 each position became a fresh interpretation of the references and the chairs
 drifted apart. The prompt now states that all instances are one model, identical
 in silhouette, arms, base, seams and finish, differing **only** in size, angle
@@ -312,10 +328,10 @@ Styling Chair, 4 × Sienna Black Salon Mirror, 2 × Mova Trolley Bronze). OLD =
 one hero photograph per product, which is what `refit_room` sent before. NEW =
 the fifteen slots shared out, several views per product, grouped in the prompt.
 
-| | inspector faults | quantities | Harper armrest correct |
-| --- | --- | --- | --- |
-| OLD ×3 | 1 (`stale_mirror`) | 4/4/2 every time | 3 of 3 |
-| NEW ×3 | 0 | 4/4/2 every time | 2 of 3 |
+|        | inspector faults   | quantities       | Harper armrest correct |
+| ------ | ------------------ | ---------------- | ---------------------- |
+| OLD ×3 | 1 (`stale_mirror`) | 4/4/2 every time | 3 of 3                 |
+| NEW ×3 | 0                  | 4/4/2 every time | 2 of 3                 |
 
 **Two things are settled.** Quantities land: every one of the six renders held
 exactly four chairs, four mirrors and two trolleys. Before, `refit_room` sent
@@ -403,14 +419,14 @@ basin and their extra angles show the white one. Those stay hero-only.
 
 Six sets the automated pass got wrong, found by looking:
 
-| Product | What was wrong |
-| --- | --- |
-| Hazel Sage Green | "front" and "side" were the white-basin variant |
-| Hazel Tan II | "front" was the white-basin variant |
-| Harriet Connect Tan II | "back" was the black-basin variant |
+| Product                | What was wrong                                        |
+| ---------------------- | ----------------------------------------------------- |
+| Hazel Sage Green       | "front" and "side" were the white-basin variant       |
+| Hazel Tan II           | "front" was the white-basin variant                   |
+| Harriet Connect Tan II | "back" was the black-basin variant                    |
 | Verona Grande – Double | "side" was the **Single** mirror (one shelf, not two) |
-| Onyx Oval | "side" was the mirror **without its shelf** |
-| Arch LED | "front" was a **square-topped** mirror, not the arch |
+| Onyx Oval              | "side" was the mirror **without its shelf**           |
+| Arch LED               | "front" was a **square-topped** mirror, not the arch  |
 
 Plus three chairs whose "front" was actually a three-quarter shot on another
 base (Roxanne, Franka) or a duplicate back (Chloe Tan).
@@ -502,15 +518,15 @@ distinct copy so whoever is testing can self-diagnose.
 
 ## 8. Environment variables
 
-| Name                            | Needed by              | Without it                            |
-| ------------------------------- | ---------------------- | ------------------------------------- |
-| `ANTHROPIC_API_KEY`             | server                 | chat dead                             |
-| `KIE_API_KEY`                   | server                 | renders dead                          |
+| Name                            | Needed by              | Without it                             |
+| ------------------------------- | ---------------------- | -------------------------------------- |
+| `ANTHROPIC_API_KEY`             | server                 | chat dead                              |
+| `KIE_API_KEY`                   | server                 | renders dead                           |
 | `KIE_IMAGE_RESOLUTION`          | server, optional       | defaults to `1K` (`2K`/`4K` cost more) |
-| `SUPABASE_SERVICE_ROLE_KEY`     | server                 | quote requests fail; render cache off |
-| `SUPABASE_URL`                  | server                 | as above                              |
-| `VITE_SUPABASE_URL`             | client, **build time** | see below                             |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | client, **build time** | see below                             |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server                 | quote requests fail; render cache off  |
+| `SUPABASE_URL`                  | server                 | as above                               |
+| `VITE_SUPABASE_URL`             | client, **build time** | see below                              |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | client, **build time** | see below                              |
 
 **The `VITE_` pair is inlined at build time.** A build that ran without them
 ships `undefined` — no runtime setting can recover it, only a rebuild. This
@@ -551,21 +567,21 @@ But while it's off, every repeat of the same photo + products + mode bills again
 
 ## 10. File map
 
-| File                             | Job                                                 |
-| -------------------------------- | --------------------------------------------------- |
-| `src/lib/chat.functions.ts`      | system prompt, Anthropic call, marker parsing       |
-| `src/lib/catalog.ts`             | catalog access, USD formatting, category labels     |
-| `src/lib/visualize.functions.ts` | render orchestration, cache, polling                |
-| `src/lib/visualize-prompt.ts`    | the image prompts, one builder per mode             |
-| `src/lib/kie.server.ts`          | the only place that talks to kie                    |
-| `src/lib/resize-image.ts`        | client-side downscale before upload                 |
-| `src/lib/enquiry.functions.ts`   | quote requests                                      |
-| `src/lib/layout.ts`              | station geometry: clearances, capacity arithmetic    |
-| `src/lib/room.ts`                | typed room dimensions, units, the planner's message  |
-| `src/lib/whatsapp.ts`            | WhatsApp platform limits and which primitive fits    |
-| `src/routes/index.tsx`           | the chat page, message model, render dispatch       |
-| `src/components/WhatsAppView.tsx`| the WhatsApp Mode preview surface                   |
-| `src/components/`                | cards, sheets, dialogs, lightbox, markdown renderer |
+| File                              | Job                                                 |
+| --------------------------------- | --------------------------------------------------- |
+| `src/lib/chat.functions.ts`       | system prompt, Anthropic call, marker parsing       |
+| `src/lib/catalog.ts`              | catalog access, USD formatting, category labels     |
+| `src/lib/visualize.functions.ts`  | render orchestration, cache, polling                |
+| `src/lib/visualize-prompt.ts`     | the image prompts, one builder per mode             |
+| `src/lib/kie.server.ts`           | the only place that talks to kie                    |
+| `src/lib/resize-image.ts`         | client-side downscale before upload                 |
+| `src/lib/enquiry.functions.ts`    | quote requests                                      |
+| `src/lib/layout.ts`               | station geometry: clearances, capacity arithmetic   |
+| `src/lib/room.ts`                 | typed room dimensions, units, the planner's message |
+| `src/lib/whatsapp.ts`             | WhatsApp platform limits and which primitive fits   |
+| `src/routes/index.tsx`            | the chat page, message model, render dispatch       |
+| `src/components/WhatsAppView.tsx` | the WhatsApp Mode preview surface                   |
+| `src/components/`                 | cards, sheets, dialogs, lightbox, markdown renderer |
 
 `src/integrations/supabase/*` is generated by Lovable — don't hand-edit it,
 except `types.ts` when a table is added.
@@ -627,11 +643,11 @@ is my budget" and "here are my dimensions" are the same question underneath:
 which pieces, how many, what total. Computing it here rather than asking the
 model means real prices, correct arithmetic, and the same answer every time.
 
-| Starter            | Asks for                          | Ends with                    |
-| ------------------ | --------------------------------- | ---------------------------- |
-| A whole salon      | free text; count and budget parsed | three packages               |
-| To a budget        | budget + station count            | three packages               |
-| Plan by dimensions | wall, depth, budget               | three packages, then zone renders |
+| Starter            | Asks for                           | Ends with                         |
+| ------------------ | ---------------------------------- | --------------------------------- |
+| A whole salon      | free text; count and budget parsed | three packages                    |
+| To a budget        | budget + station count             | three packages                    |
+| Plan by dimensions | wall, depth, budget                | three packages, then zone renders |
 
 ### Curation: the model picks, code counts
 
@@ -650,7 +666,7 @@ cannot fill, absurd quantities, and any package without styling chairs.
 Four things this cost to get right, all worth knowing before touching it:
 
 - **`strict: true` is not optional.** Without it the model returned `packages` as
-  a JSON *string* containing another `{"packages": [...]}` object, and
+  a JSON _string_ containing another `{"packages": [...]}` object, and
   `Array.isArray` quietly failed. `readPackages()` still tolerates that shape.
 - **Strict accepts a narrow JSON Schema subset.** `minItems` above 1 and
   `minimum`/`maximum` on numbers are both rejected with a 400. Bounds live in
@@ -710,12 +726,12 @@ view is held to them and annotates what would be cut.
 
 Limits encoded in `src/lib/whatsapp.ts`, from Meta's Cloud API docs (Aug 2026):
 
-| Primitive              | Cap                                       |
-| ---------------------- | ----------------------------------------- |
-| Reply buttons          | 3 per message, 20-char labels             |
-| List message           | 10 rows total, 24-char titles, 72-char descriptions |
-| Multi-product message  | 30 products, needs a synced Meta catalogue |
-| Body / footer          | 1024 / 60 characters                      |
+| Primitive             | Cap                                                 |
+| --------------------- | --------------------------------------------------- |
+| Reply buttons         | 3 per message, 20-char labels                       |
+| List message          | 10 rows total, 24-char titles, 72-char descriptions |
+| Multi-product message | 30 products, needs a synced Meta catalogue          |
+| Body / footer         | 1024 / 60 characters                                |
 
 `carrierFor(n)` picks the primitive a set of products actually needs, so the
 annotation cannot claim a list holds 30 or that a catalogue message cuts rows.
