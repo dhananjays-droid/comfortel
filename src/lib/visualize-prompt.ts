@@ -511,7 +511,18 @@ function buildRefitPrompt(
  * the render. What changes is that there is no room to preserve, so the
  * instructions describe the space to build instead of the space to leave alone.
  */
-function buildStagedPrompt(products: VisualizeProduct[], correction?: string): string {
+export type RoomSize = { wallCm: number; depthCm?: number | undefined };
+
+/** Feet, because this is a US catalogue and rooms are stated in feet. */
+function ft(cm: number): number {
+  return Math.round(cm / 30.48);
+}
+
+function buildStagedPrompt(
+  products: VisualizeProduct[],
+  correction?: string,
+  room?: RoomSize,
+): string {
   const blocks = allocateReferences(products, 1);
 
   const list = blocks
@@ -554,6 +565,17 @@ function buildStagedPrompt(products: VisualizeProduct[], correction?: string): s
     opt(
       `Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.`,
     ),
+    // Given a room size, the layout stops being a guess. Without it the model
+    // composes a pleasant corner and quietly drops most of the plan.
+    ...(room
+      ? [
+          req(
+            room.depthCm
+              ? `The room is approximately ${ft(room.wallCm)} feet along the styling wall and ${ft(room.depthCm)} feet deep. Frame the shot wide enough to show a room that size and fit every piece listed above inside it.`
+              : `The styling wall is approximately ${ft(room.wallCm)} feet long. Frame the shot wide enough to show it and fit every piece listed above inside the room.`,
+          ),
+        ]
+      : []),
     ...realismClauses(),
     ...correctionClauses(correction),
     req(
@@ -614,12 +636,14 @@ export function buildSalonPrompt(
    * that silently broke every render before it was found.
    */
   correction?: string,
+  /** The customer's stated room size, when they gave one. */
+  room?: RoomSize,
 ): string {
   if (mode === "refit_room")
     return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene, correction);
   if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction);
   if (mode === "staged_room")
-    return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction);
+    return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction, room);
 
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
@@ -823,8 +847,9 @@ export function buildRenderRequest(
   mode: VisualizeMode,
   scene?: string,
   correction?: string,
+  room?: RoomSize,
 ): { prompt: string; imageUrls: string[] } {
-  const prompt = buildSalonPrompt(products, mode, scene, correction);
+  const prompt = buildSalonPrompt(products, mode, scene, correction, room);
 
   const imageUrls = isMultiReferenceMode(mode)
     ? // several views per product, sharing the slots the API leaves free — all

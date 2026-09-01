@@ -43,6 +43,8 @@ export type Brief = {
 export type Intake = Brief & {
   /** Styling wall length in centimetres, when they gave one with a unit. */
   wallCm?: number | undefined;
+  /** The other dimension, when they gave the room as "12 by 20 ft". */
+  depthCm?: number | undefined;
 };
 
 /** Station counts read from "four chairs", "4-chair", "6 stations". */
@@ -115,9 +117,40 @@ export function readWall(text: string): number | undefined {
   return cm >= 100 && cm <= 3000 ? Math.round(cm) : undefined;
 }
 
+/**
+ * A room given as two dimensions — "12 by 20 ft", "12x20", "12 ft x 20 ft".
+ *
+ * People state a room as an area far more often than as one wall, and readWall
+ * only ever sees the number a unit happens to be stuck to: given "12 by 20 ft"
+ * it returned 20ft and silently dropped the 12. The longer side is taken as the
+ * styling wall, which is where the chairs go in almost every real salon.
+ */
+export function readRoomPair(text: string): { wallCm: number; depthCm: number } | undefined {
+  const match = text.match(
+    /(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?|ft\b|foot|feet|'|")?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?|ft\b|foot|feet|'|")?/i,
+  );
+  if (!match?.[1] || !match?.[3]) return undefined;
+
+  // The unit is usually written once, after the second number.
+  const unit = (match[4] || match[2] || "ft").toLowerCase();
+  const scale = unit.startsWith("m") ? METRE_TO_CM : FEET_TO_CM;
+  const a = Number.parseFloat(match[1]) * scale;
+  const b = Number.parseFloat(match[3]) * scale;
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined;
+
+  const wallCm = Math.round(Math.max(a, b));
+  const depthCm = Math.round(Math.min(a, b));
+  if (wallCm < 100 || wallCm > 3000 || depthCm < 100) return undefined;
+  return { wallCm, depthCm };
+}
+
 /** Read one reply for everything it happens to contain. */
 export function readIntake(text: string): Intake {
   const brief = readBrief(text);
+  // A stated area wins over a single length: "12 by 20 ft" is a whole room and
+  // readWall would see only the number the unit is attached to.
+  const pair = readRoomPair(text);
+  if (pair) return { ...brief, wallCm: pair.wallCm, depthCm: pair.depthCm };
   const wallCm = readWall(text);
   return { ...brief, ...(wallCm === undefined ? {} : { wallCm }) };
 }

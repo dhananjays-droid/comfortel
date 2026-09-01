@@ -99,6 +99,8 @@ type VisualizeJob = {
    * Drives both the prompt and the count the finished image is checked against.
    */
   quantities?: Record<string, number> | undefined;
+  /** The customer's stated room size, when they gave one. */
+  room?: { wallCm: number; depthCm?: number } | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -350,12 +352,14 @@ function buildRenderMessage(
   /** Absent for staged_room, which builds the room instead of using one. */
   photo: RoomPhoto | null,
   quantities?: Record<string, number> | undefined,
+  room?: { wallCm: number; depthCm?: number } | undefined,
 ): { message: Message; entries: RenderEntry[] } {
   const base = {
     base64: photo?.image.base64 ?? "",
     mode,
     // 3:2 reads as a room seen wide, which is what a built salon should be.
     aspectRatio: photo?.image.aspectRatio ?? "3:2",
+    ...(room ? { room } : {}),
   };
 
   // refit_room and lineup are ONE image built from several references. Every
@@ -451,6 +455,16 @@ function Index() {
    * one, and adding it to the deps would rebuild the callback on every tap of
    * the tray.
    */
+  /**
+   * The room the customer described, so a render can be laid out at that scale.
+   *
+   * A ref because startRender reads it from a plain function body, and because
+   * a stated area should outlive the turn it was mentioned in — they say "12 by
+   * 20 ft" once and expect every later render to know it. It was being parsed,
+   * used to work out a station count, and then thrown away.
+   */
+  const roomSpecRef = useRef<{ wallCm: number; depthCm?: number } | null>(null);
+
   const planIdsRef = useRef<string[]>(planIds);
   const planQtyRef = useRef<Record<string, number>>(planQty);
   useEffect(() => {
@@ -710,6 +724,7 @@ function Index() {
             ...(job.scene ? { scene: job.scene } : {}),
             ...(job.correction ? { correction: job.correction } : {}),
             ...(job.quantities ? { quantities: job.quantities } : {}),
+            ...(job.room ? { room: job.room } : {}),
           },
         });
 
@@ -896,6 +911,12 @@ function Index() {
    */
   async function offerPackages(text: string) {
     const intake = readIntake(text);
+    if (intake.wallCm) {
+      roomSpecRef.current = {
+        wallCm: intake.wallCm,
+        ...(intake.depthCm ? { depthCm: intake.depthCm } : {}),
+      };
+    }
     const fromWall = intake.wallCm
       ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits
       : 0;
@@ -1008,11 +1029,12 @@ function Index() {
     photo: RoomPhoto | null,
     quantities?: Record<string, number> | undefined,
   ) {
+    const room = roomSpecRef.current ?? undefined;
     const verb =
       mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
 
     const ids = products.map((p) => p.id);
-    const { message, entries } = buildRenderMessage(mode, ids, photo, quantities);
+    const { message, entries } = buildRenderMessage(mode, ids, photo, quantities, room);
 
     // The render is the thing they just asked to look at; the tray must not sit
     // on top of it.
@@ -1264,11 +1286,27 @@ function Index() {
         return;
       }
       if (flow.awaiting === "visualize") {
-        const note = describeIntake(readIntake(text));
+        const parsed = readIntake(text);
+        if (parsed.wallCm) {
+          roomSpecRef.current = {
+            wallCm: parsed.wallCm,
+            ...(parsed.depthCm ? { depthCm: parsed.depthCm } : {}),
+          };
+        }
+        const note = describeIntake(parsed);
         setFlow(INITIAL);
         // content carries the note, display stays the customer's own words.
         send(note ? `${text}\n\n(${note})` : text, text);
         return;
+      }
+      // Any turn can mention the room — "it's 12 by 20 ft" is a perfectly
+      // ordinary thing to say three messages in, and it should stick.
+      const mentioned = readIntake(text);
+      if (mentioned.wallCm) {
+        roomSpecRef.current = {
+          wallCm: mentioned.wallCm,
+          ...(mentioned.depthCm ? { depthCm: mentioned.depthCm } : {}),
+        };
       }
       setFlow(INITIAL);
       send(text);

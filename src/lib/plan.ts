@@ -97,12 +97,23 @@ This list is live and it is the truth. The customer edits it directly, so it cha
  * a number in the prompt that contradicts the mode, and then have the inspector
  * report a shortfall against it.
  */
+/**
+ * Modes that furnish a room and therefore care how many of each piece.
+ *
+ * `lineup` is deliberately absent: it stands one of each product side by side
+ * for comparison, so a count would be meaningless there. This was the string
+ * "refit_room" compared inline, which silently dropped every quantity the
+ * moment a second furnishing mode existed — a seven-product, twenty-four-piece
+ * plan rendered as one of each, because the prompt was told to install one.
+ */
+export const QUANTITY_MODES = ["refit_room", "staged_room"] as const;
+
 export function quantitiesFor(
   mode: string,
   productIds: string[],
   quantities: Record<string, number> | undefined,
 ): Record<string, number> | undefined {
-  if (mode !== "refit_room" || !quantities) return undefined;
+  if (!(QUANTITY_MODES as readonly string[]).includes(mode) || !quantities) return undefined;
   const out: Record<string, number> = {};
   for (const id of productIds) {
     const qty = quantities[id];

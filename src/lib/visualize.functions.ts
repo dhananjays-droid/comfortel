@@ -17,6 +17,8 @@ type StartInput = {
   productIds: string[];
   /** Empty for staged_room, which invents the room instead of using one. */
   roomImageBase64: string;
+  /** The customer's stated room size, when they gave one. */
+  room?: { wallCm: number; depthCm?: number } | undefined;
   mode: VisualizeMode;
   aspectRatio?: string;
   /** Which part of the salon this render covers, for a zone render. */
@@ -134,6 +136,20 @@ export const visualizeStart = createServerFn({ method: "POST" })
     return {
       productIds: productIds.slice(0, MAX_REFERENCES),
       roomImageBase64: staged ? "" : input.roomImageBase64,
+      // Rebuilt rather than trusted, and bounded: a hostile depth would
+      // otherwise reach the prompt verbatim.
+      ...(input.room && Number.isFinite(Number(input.room.wallCm))
+        ? {
+            room: {
+              wallCm: Math.min(3000, Math.max(100, Math.round(Number(input.room.wallCm)))),
+              ...(Number.isFinite(Number(input.room.depthCm))
+                ? {
+                    depthCm: Math.min(3000, Math.max(100, Math.round(Number(input.room.depthCm)))),
+                  }
+                : {}),
+            },
+          }
+        : {}),
       // replace_all, not replace: single-unit replacement needs the model to
       // track one instance among identical units, which it does not do
       // reliably. replace_all has been correct in every live test, mirrors
@@ -184,6 +200,7 @@ export const visualizeStart = createServerFn({ method: "POST" })
         data.mode,
         data.scene,
         data.correction,
+        data.room,
       );
 
       const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
@@ -205,6 +222,8 @@ export const visualizeStart = createServerFn({ method: "POST" })
           // the key, a four-chair render would collide with the one-chair render
           // of the same plan and serve back the wrong picture.
           quantityKey(data.quantities) +
+          // The stated room size changes the prompt, so it changes the image.
+          `${data.room?.wallCm ?? ""}x${data.room?.depthCm ?? ""}` +
           data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);
