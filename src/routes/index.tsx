@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/BrandMark";
 import { ChatComposer } from "@/components/ChatComposer";
-import { EmptyState } from "@/components/EmptyState";
 import { EnquiryDialog, type EnquiryTarget } from "@/components/EnquiryDialog";
 import { Markdown } from "@/components/Markdown";
 import { ProductCard } from "@/components/ProductCard";
@@ -14,7 +13,6 @@ import { ProductSheet } from "@/components/ProductSheet";
 import { PlanTray } from "@/components/PlanTray";
 import { ProductStrip } from "@/components/ProductStrip";
 import { VisualizationMessage, type VisualizationState } from "@/components/VisualizationMessage";
-import { PlanWizard, type WizardResult } from "@/components/PlanWizard";
 import { WhatsAppView, type WaItem } from "@/components/WhatsAppView";
 import type { WaAction } from "@/lib/wa-flow";
 import { Switch } from "@/components/ui/switch";
@@ -34,8 +32,17 @@ import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.func
 import { shareDesign } from "@/lib/design.functions";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
-import { TIER_LABEL, idsOf } from "@/lib/packages";
-import { INITIAL, advance, parseWall, welcome, type FlowState } from "@/lib/wa-flow";
+import { TIER_LABEL, buildPackages, idsOf, needsFor, type Package } from "@/lib/packages";
+import { curatePackages } from "@/lib/curate.functions";
+import { genericCapacity } from "@/lib/room";
+import {
+  INITIAL,
+  advance,
+  describeIntake,
+  readIntake,
+  welcome,
+  type FlowState,
+} from "@/lib/wa-flow";
 import { resizeImage, type ResizedImage } from "@/lib/resize-image";
 import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
 import { inspectRender } from "@/lib/render-qa.functions";
@@ -179,6 +186,35 @@ const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 let seq = 0;
 const nextId = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`;
+
+/**
+ * A package the customer accepted, and the numbers it was built against.
+ *
+ * Was the modal form's return value. The form is gone — the same three costed
+ * options now arrive in the thread as tappable chips, which is the only shape
+ * WhatsApp can carry.
+ */
+type PackageChoice = {
+  pkg: Package;
+  stations: number;
+  budget: number;
+  /** What the customer said, replayed to the model for the taste half. */
+  note: string;
+  /** A measured room ends in one image per zone rather than a single frame. */
+  byZone: boolean;
+};
+
+/** The opening turn: what we do, and the three things you can do about it. */
+function greetingMessage(): Message {
+  const hello = welcome();
+  return {
+    id: nextId(),
+    role: "assistant",
+    kind: "text",
+    content: hello.text,
+    ...(hello.action ? { action: hello.action } : {}),
+  };
+}
 
 /** The customer's salon photo, held for the session so later turns can reuse it. */
 type RoomPhoto = { image: ResizedImage; preview: string };
@@ -417,7 +453,15 @@ function Index() {
   }, [planIds, planQty]);
 
   const [planCollapsed, setPlanCollapsed] = useState(false);
-  const [wizard, setWizard] = useState(false);
+  /**
+   * The three options currently on the table, so a tap can be matched back to
+   * a real package. Held rather than rebuilt: the curated set comes from a
+   * round trip, and rebuilding locally on tap could hand back a different one.
+   */
+  const [offered, setOffered] = useState<{
+    packages: Package[];
+    choice: Omit<PackageChoice, "pkg">;
+  } | null>(null);
   /**
    * A dimensions run promised one image per zone. The photo usually arrives
    * after the package, so the intent is held here and spent when it does.
@@ -493,9 +537,13 @@ function Index() {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) setMessages(JSON.parse(raw) as Message[]);
+      const stored = raw ? (JSON.parse(raw) as Message[]) : [];
+      // The greeting is a real message in the thread, not a landing screen.
+      // That is the whole point: WhatsApp has no hero section, so anything a
+      // customer meets on arrival has to be something the assistant said.
+      setMessages(stored.length ? stored : [greetingMessage()]);
     } catch {
-      /* a corrupt or unavailable store just means an empty thread */
+      setMessages([greetingMessage()]);
     }
     try {
       const raw = sessionStorage.getItem(PLAN_KEY);
@@ -593,6 +641,7 @@ function Index() {
 
   // ---- render -------------------------------------------------------------
   const runInspect = useServerFn(inspectRender);
+  const curate = useServerFn(curatePackages);
 
   /**
    * Check a finished render, and re-run it once if something basic is broken.
@@ -824,6 +873,77 @@ function Index() {
     void runChat(next, roomPhotoRef.current !== null);
   }
 
+  /** Assumed when the customer did not say. Stated out loud, never silent. */
+  const DEFAULT_STATIONS = 4;
+  const DEFAULT_BUDGET = 15000;
+
+  /**
+   * Answer a planning brief with three costed options.
+   *
+   * The packages are decided in code — real products, real prices — so this is
+   * not a model call. It posts what it read, what it assumed, and three chips.
+   * Three because that is what WhatsApp allows as reply buttons, which is the
+   * same reason the menu above has three.
+   */
+  async function offerPackages(text: string) {
+    const intake = readIntake(text);
+    const fromWall = intake.wallCm
+      ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits
+      : 0;
+    const stations = fromWall || intake.stations || DEFAULT_STATIONS;
+    const budget = intake.budget || DEFAULT_BUDGET;
+    const note = describeIntake(intake);
+
+    const said: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: note ? `${text}\n\n(${note})` : text,
+      display: text,
+    };
+    setMessages((prev) => [...prev, said]);
+    setThinking(true);
+
+    // Seeded locally so there is something correct on screen even with no
+    // network, then replaced by the curated set if the round trip lands.
+    let packages = buildPackages(budget, needsFor(stations));
+    try {
+      const curated = await curate({ data: { brief: text, stations, budget } });
+      if (curated.packages.length) packages = curated.packages;
+    } catch {
+      /* the local packer is the fallback, not an error worth showing */
+    }
+    setThinking(false);
+    if (!packages.length) return;
+
+    setOffered({
+      packages,
+      choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
+    });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "assistant",
+        kind: "text",
+        content: [
+          `${note} Here are three ways to do it — each is the most you can get at its price.`,
+          "",
+          ...packages.map(
+            (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
+          ),
+        ].join("\n"),
+        action: {
+          kind: "buttons",
+          buttons: packages.slice(0, 3).map((p) => ({
+            id: `pkg:${p.tier}`,
+            title: TIER_LABEL[p.tier],
+          })),
+        },
+      },
+    ]);
+  }
+
   /**
    * The customer tapped a render the model had only offered.
    *
@@ -1022,12 +1142,11 @@ function Index() {
    * plan, and lets the customer edit it or render it straight away. The room
    * photo is optional: without one we still show the list and offer the upload.
    */
-  function acceptPackage(result: WizardResult) {
+  function acceptPackage(result: PackageChoice) {
     const ids = idsOf(result.pkg).slice(0, MAX_REFERENCES);
     const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
     if (!products.length) return;
 
-    setWizard(false);
     setPlanIds(ids);
     setPlanQty(Object.fromEntries(result.pkg.lines.map((line) => [line.product.id, line.qty])));
     setPlanCollapsed(false);
@@ -1072,49 +1191,55 @@ function Index() {
   }
 
   /**
-   * Send, the WhatsApp way.
+   * The only way a turn enters the conversation.
    *
-   * A business number answers "Hi" from a script, instantly and for free — only
-   * a sentence the menu cannot serve is worth a model call. So the scripted flow
-   * gets first refusal, and `send` is the fallback rather than the default.
+   * The scripted flow gets first refusal and the model is the fallback, not the
+   * default: a business number answers "Hi" from a script, instantly and for
+   * free, and only a sentence the menu cannot serve is worth a model call. This
+   * used to be the WhatsApp-only path while the web had a landing screen and a
+   * modal form; two flows meant two products, and only one of them could ever
+   * ship to a phone number.
    *
    * @param tapped An option id from a reply button or list row, when the
    *   customer tapped rather than typed.
    */
-  function sendWhatsApp(raw: string, tapped?: string) {
+  function sendTurn(raw: string, tapped?: string) {
     const text = tapped ? `wa:${tapped}` : raw.trim();
-    if (!text || thinking) return;
+    if ((!text && !pendingPhoto) || thinking) return;
 
-    const shown = tapped ? labelFor(tapped, raw) : text;
-    const outgoing: Message = {
-      id: nextId(),
-      role: "user",
-      kind: "text",
-      content: text,
-      display: shown,
-    };
+    // A package tap is answered from what is already on the table, not by the
+    // menu and not by the model: the pieces and prices are already decided.
+    if (tapped?.startsWith("pkg:") && offered) {
+      const pkg = offered.packages.find((p) => `pkg:${p.tier}` === tapped);
+      if (pkg) {
+        setOffered(null);
+        acceptPackage({ ...offered.choice, pkg });
+        return;
+      }
+    }
 
     const step = advance(flow, text);
 
-    // Nothing scripted fits — hand the turn to the model, but keep the room
-    // measurement in the words the model needs if that is what this was.
+    // Nothing scripted fits, so the model takes it. If this turn is answering a
+    // question the flow just asked, whatever we could parse out of it travels
+    // with it — and so does what we are assuming instead, said out loud rather
+    // than guessed silently into a package.
     if (!step) {
-      const metres = flow.awaiting === "wall" ? parseWall(text) : null;
-      setFlow(INITIAL);
-      setInput("");
-      if (metres !== null) {
-        const spec: RoomSpec = { wallCm: metres * 100, unit: "m" };
-        const next = [
-          ...messages,
-          { ...outgoing, content: planSummary(spec), display: shown } as Message,
-        ];
-        setMessages(next);
-        void runChat(next, roomPhotoRef.current !== null);
+      if (flow.awaiting === "build") {
+        setFlow(INITIAL);
+        setInput("");
+        void offerPackages(text);
         return;
       }
-      const next = [...messages, outgoing];
-      setMessages(next);
-      void runChat(next, roomPhotoRef.current !== null);
+      if (flow.awaiting === "visualize") {
+        const note = describeIntake(readIntake(text));
+        setFlow(INITIAL);
+        // content carries the note, display stays the customer's own words.
+        send(note ? `${text}\n\n(${note})` : text, text);
+        return;
+      }
+      setFlow(INITIAL);
+      send(text);
       return;
     }
 
@@ -1129,6 +1254,14 @@ function Index() {
           .map((p) => p.id)
       : [];
 
+    const outgoing: Message = {
+      id: nextId(),
+      role: "user",
+      kind: "text",
+      content: text,
+      display: tapped ? labelFor(tapped, raw) : text,
+    };
+
     const answer: Message = {
       id: nextId(),
       role: "assistant",
@@ -1140,7 +1273,7 @@ function Index() {
       ...(reply.action ? { action: reply.action } : {}),
     };
 
-    setMessages([...messages, outgoing, answer]);
+    setMessages((prev) => [...prev, outgoing, answer]);
   }
 
   /** What the customer sees when they tap, rather than the raw option id. */
@@ -1170,7 +1303,7 @@ function Index() {
   }
 
   function reset() {
-    setMessages([]);
+    setMessages([greetingMessage()]);
     setInput("");
     setPendingPhoto(null);
     setPlanIds([]);
@@ -1243,8 +1376,8 @@ function Index() {
               items={toWaItems(messages)}
               value={input}
               onChange={setInput}
-              onSend={() => sendWhatsApp(input)}
-              onTap={(id) => sendWhatsApp("", id)}
+              onSend={() => sendTurn(input)}
+              onTap={(id) => sendTurn("", id)}
               onPickPhoto={() => waFileRef.current?.click()}
               disabled={thinking}
             />
@@ -1261,8 +1394,6 @@ function Index() {
               WhatsApp would cut.
             </p>
           </div>
-        ) : empty ? (
-          <EmptyState onPick={send} onPickPhoto={pickPhoto} onOpenWizard={() => setWizard(true)} />
         ) : (
           <div className="space-y-6 py-8" role="log" aria-live="polite" aria-label="Conversation">
             {messages.map((message) => (
@@ -1274,6 +1405,7 @@ function Index() {
                 onTogglePlan={togglePlan}
                 onShareRenders={shareRenders}
                 onAcceptOffer={acceptOffer}
+                onTapOption={(id) => sendTurn("", id)}
                 onVisualize={(product) => setPhotoProducts([product])}
                 onEnquire={(product, visualizationUrl) => setEnquiry({ product, visualizationUrl })}
                 onRetryRender={(entry) => {
@@ -1348,7 +1480,7 @@ function Index() {
           <ChatComposer
             value={input}
             onChange={setInput}
-            onSend={() => send(input)}
+            onSend={() => sendTurn(input)}
             disabled={thinking}
             photo={pendingPhoto?.preview ?? null}
             photoLoading={photoLoading}
@@ -1360,8 +1492,6 @@ function Index() {
           </p>
         </div>
       </div>
-
-      <PlanWizard open={wizard} onClose={() => setWizard(false)} onChoose={acceptPackage} />
 
       <ProductSheet
         product={sheetProduct}
@@ -1408,6 +1538,7 @@ function MessageRow({
   onTogglePlan,
   onShareRenders,
   onAcceptOffer,
+  onTapOption,
 }: {
   message: Message;
   onOpenProduct: (product: FullProduct) => void;
@@ -1418,6 +1549,7 @@ function MessageRow({
   onEnquire: (product: FullProduct, visualizationUrl?: string) => void;
   onRetryRender: (entry: RenderEntry) => void;
   onAcceptOffer: (offer: RenderRequest) => void;
+  onTapOption: (id: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -1472,6 +1604,35 @@ function MessageRow({
                   );
                 })}
               </ProductStrip>
+            ) : null}
+
+            {/*
+              The options this turn offers. Tapping one sends its id; typing
+              "1" or the label does the same thing, because people type at
+              menus regardless of what you show them. Rendered as chips here
+              and as reply buttons or a list on WhatsApp — same flow, and
+              neither surface can express anything the other cannot.
+            */}
+            {message.kind === "text" && message.action ? (
+              <div className="flex flex-wrap gap-2">
+                {(message.action.kind === "buttons"
+                  ? message.action.buttons
+                  : message.action.rows
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onTapOption(opt.id)}
+                    className={cn(
+                      "rounded-full border border-border-strong bg-surface2 px-3.5 py-1.5",
+                      "text-sm font-medium text-ink-1 transition-colors",
+                      "hover:border-ink-1 hover:bg-muted",
+                    )}
+                  >
+                    {opt.title}
+                  </button>
+                ))}
+              </div>
             ) : null}
 
             {/*

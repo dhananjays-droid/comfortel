@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BRIEF_PLACEHOLDER, readBrief } from "@/lib/brief";
+import { BRIEF_PLACEHOLDER, readBrief, readIntake, readWall } from "@/lib/brief";
 
 describe("readBrief — stations", () => {
   it("reads digits and words alike", () => {
@@ -61,5 +61,39 @@ describe("readBrief — together", () => {
   // the first person who takes the hint literally.
   it("understands its own placeholder", () => {
     expect(readBrief(BRIEF_PLACEHOLDER)).toEqual({ stations: 4, budget: 15000 });
+  });
+});
+
+describe("readWall", () => {
+  it("reads a wall with an explicit unit", () => {
+    expect(readWall("the wall is 16ft")).toBe(488);
+    expect(readWall("about 5 metres")).toBe(500);
+    expect(readWall("4.5m along the back")).toBe(450);
+  });
+
+  it("ignores a bare number, which is ambiguous in a combined reply", () => {
+    // "4 chairs, 15000 budget" must not yield a 4cm or 15000cm wall.
+    expect(readWall("4 chairs and a 15000 budget")).toBeUndefined();
+  });
+
+  it("rejects a length no salon wall could be", () => {
+    expect(readWall("0.5m")).toBeUndefined();
+    expect(readWall("400 feet")).toBeUndefined();
+  });
+});
+
+describe("readIntake", () => {
+  it("reads everything one ordinary sentence happens to contain", () => {
+    const out = readIntake("4 chair salon, warm and modern, around $15k, the wall is 16ft");
+    expect(out.stations).toBe(4);
+    expect(out.budget).toBe(15000);
+    expect(out.wallCm).toBe(488);
+  });
+
+  it("returns only what was actually there", () => {
+    const out = readIntake("something modern, not sure on numbers yet");
+    expect(out.stations).toBeUndefined();
+    expect(out.budget).toBeUndefined();
+    expect(out.wallCm).toBeUndefined();
   });
 });
