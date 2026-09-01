@@ -6,7 +6,6 @@ describe("wantsRender — asks", () => {
   const asking = [
     "show me the Blake in my salon",
     "show me how that looks",
-    "can you show me the Harper",
     "could I see that in my room",
     "let me see it",
     "I'd like to see them in my space",
@@ -42,6 +41,21 @@ describe("wantsRender — not asks", () => {
   ];
   for (const text of reacting) {
     it(`reacts: ${text}`, () => expect(wantsRender(text)).toBe(false));
+  }
+
+  /**
+   * "Show me X" with no target is a browse request, and the cards answer it.
+   * These become an offer button rather than $0.03 — a tap the customer can
+   * decline by not making it.
+   */
+  const browsing = [
+    "show me some styling chairs",
+    "can you show me the Harper",
+    "show me your barber chairs",
+    "show me what you have",
+  ];
+  for (const text of browsing) {
+    it(`browses: ${text}`, () => expect(wantsRender(text)).toBe(false));
   }
 
   const chatting = [

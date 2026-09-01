@@ -24,21 +24,8 @@
  * complaint this fixes.
  */
 
-/**
- * Turns of phrase that mean "put this in front of me as a picture".
- *
- * Anchored on the verb rather than on the room, because "show me the Blake"
- * with a photo attached is a render request and "in my salon" never appears.
- */
+/** Turns of phrase that mean "put this in front of me as a picture". */
 const ASKS = [
-  // show / see, including the polite forms
-  /\b(?:can|could|will|would|may)\s+(?:you|i|we)\s+(?:please\s+)?(?:show|see)\b/,
-  /\b(?:show|showing)\s+(?:me|us|it|them|this|that|how)\b/,
-  /\blet(?:'s| us| me)\s+see\b/,
-  /\b(?:see|seeing)\s+(?:it|them|this|that|these|those)\b/,
-  /\bi(?:'d| would)\s+like\s+to\s+see\b/,
-  /\bwant\s+to\s+see\b/,
-
   // the verbs that only ever mean an image
   /\b(?:render|renders|rendering|visuali[sz]e|visuali[sz]ed|mock\s?up|mocked\s?up|preview)\b/,
 
@@ -48,10 +35,23 @@ const ASKS = [
   // placing it somewhere — only counts with a destination
   /\b(?:put|place|drop|install|fit|try)\b[\s\S]{0,30}\bin\s+(?:my|the|this|that)\b/,
 
-  // naming the space is a request when paired with nothing else
+  // naming the space is a request on its own
   /\bin\s+my\s+(?:room|salon|space|shop|store|studio|spa|photo|picture|place)\b/,
   /\bin\s+the\s+(?:photo|picture)\b/,
 ];
+
+/**
+ * "Show me" and "see it" need something to point at.
+ *
+ * On their own they are how people ask to be shown a *product* — "show me some
+ * styling chairs" is a browse request that the cards already answer, and
+ * rendering it spends $0.03 nobody asked for. Paired with a pronoun it points
+ * at something already on screen, and with a room it names the destination;
+ * either way it is asking for a picture. Without one it becomes an offer, which
+ * costs a tap rather than three cents.
+ */
+const SHOW = /\b(?:show|showing|see|seeing)\b/;
+const POINTS_AT = /\b(?:it|them|this|that|these|those)\b/;
 
 /**
  * Phrases that cancel a request, checked first.
@@ -73,7 +73,8 @@ export function wantsRender(text: string): boolean {
   if (!t.trim()) return false;
 
   if (REFUSALS.some((r) => r.test(t))) return false;
-  return ASKS.some((r) => r.test(t));
+  if (ASKS.some((r) => r.test(t))) return true;
+  return SHOW.test(t) && POINTS_AT.test(t);
 }
 
 /**
