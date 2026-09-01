@@ -15,6 +15,10 @@ const SLOTS: Record<VisualizeMode, Array<"new" | "kept">> = {
   // map is keyed by mode, so it needs an entry.
   refit_room: ["new", "new", "new"],
   lineup: ["new", "new", "new"],
+  // Nothing is kept because there is nothing to keep — the room is built around
+  // the pieces. Like refit_room it is never offered in the picker, but the map
+  // is keyed by mode so it needs an entry.
+  staged_room: ["new", "new", "new"],
 };
 
 const W = 78;

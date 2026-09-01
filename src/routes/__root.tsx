@@ -73,33 +73,61 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+/**
+ * One source for the strings the head repeats.
+ *
+ * They were written out four times between the root and the index route, which
+ * is how og:description and the meta description drift apart. The description
+ * now names what the app actually does — plan to a budget, fit to dimensions —
+ * rather than only the browse-and-quote half it started as.
+ */
+const TITLE = "Comfortel — Salon Furniture Assistant";
+const DESCRIPTION =
+  "Plan a salon, barber or spa fit-out to your budget and your dimensions, then see the pieces rendered into a photo of your own room before you order.";
+const OG_ALT = "Comfortel — see salon furniture in your own room before you buy.";
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Comfortel — Salon Furniture Assistant" },
-      {
-        name: "description",
-        content:
-          "Find salon, barber and spa furniture, see it rendered into a photo of your own space, and request a quote.",
-      },
+      { title: TITLE },
+      { name: "description", content: DESCRIPTION },
       { name: "author", content: "Comfortel" },
-      { property: "og:title", content: "Comfortel — Salon Furniture Assistant" },
-      {
-        property: "og:description",
-        content:
-          "Find salon, barber and spa furniture, see it rendered into a photo of your own space, and request a quote.",
-      },
+      // Tints the browser chrome on mobile to the app's own surface rather than
+      // leaving a white bar above a warm page.
+      { name: "theme-color", content: "#fbf7f2" },
+      { name: "apple-mobile-web-app-title", content: "Comfortel" },
+
+      { property: "og:site_name", content: "Comfortel" },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
+      { property: "og:locale", content: "en_US" },
+      // summary_large_image was already declared but no image was ever supplied,
+      // so every shared link rendered as a bare card. These four go together:
+      // drop the image and the card type has to drop with it.
+      { property: "og:image", content: "/og.jpg" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: OG_ALT },
+
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
+      { name: "twitter:image", content: "/og.jpg" },
+      { name: "twitter:image:alt", content: OG_ALT },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      // SVG first for browsers that take it — it stays crisp at any tab size and
+      // on a retina bookmark bar. The .ico is the fallback for those that don't.
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon.ico", sizes: "any" },
+      { rel: "apple-touch-icon", href: "/favicon.svg" },
     ],
   }),
   shellComponent: RootShell,

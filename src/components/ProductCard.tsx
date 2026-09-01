@@ -1,7 +1,8 @@
-import { ImageIcon, Sparkles } from "lucide-react";
+import { Check, ImageIcon, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   categoryLabel,
   discountPercent,
@@ -15,11 +16,17 @@ export function ProductCard({
   onOpen,
   onVisualize,
   onEnquire,
+  inPlan = false,
+  planFull = false,
+  onTogglePlan,
 }: {
   product: FullProduct;
   onOpen: (product: FullProduct) => void;
   onVisualize: (product: FullProduct) => void;
   onEnquire: (product: FullProduct) => void;
+  inPlan?: boolean;
+  planFull?: boolean;
+  onTogglePlan?: (product: FullProduct) => void;
 }) {
   const [broken, setBroken] = useState(false);
   const canVisualize = isVisualizable(product.id);
@@ -27,7 +34,37 @@ export function ProductCard({
   const image = product.images?.[0];
 
   return (
-    <article className="flex w-[228px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-border bg-surface2 transition-shadow hover:shadow-[0_1px_2px_rgba(15,15,12,0.04),0_8px_24px_-12px_rgba(15,15,12,0.18)]">
+    <article className="relative flex w-[228px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-border bg-surface2 transition-shadow hover:shadow-[0_1px_2px_rgba(15,15,12,0.04),0_8px_24px_-12px_rgba(15,15,12,0.18)]">
+      {canVisualize && onTogglePlan ? (
+        <button
+          type="button"
+          onClick={() => onTogglePlan(product)}
+          disabled={!inPlan && planFull}
+          aria-pressed={inPlan}
+          aria-label={
+            inPlan ? `Remove ${product.name} from your plan` : `Add ${product.name} to your plan`
+          }
+          title={
+            !inPlan && planFull ? "Your plan is full" : inPlan ? "In your plan" : "Add to your plan"
+          }
+          className={cn(
+            "absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors",
+            inPlan
+              ? "border-ink-1 bg-ink-1 text-primary"
+              : "border-border bg-surface2/90 text-ink-3 hover:border-border-strong hover:text-ink-1",
+            !inPlan &&
+              planFull &&
+              "cursor-not-allowed opacity-40 hover:border-border hover:text-ink-3",
+          )}
+        >
+          {inPlan ? (
+            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
+        </button>
+      ) : null}
+
       <button
         type="button"
         onClick={() => onOpen(product)}
