@@ -31,6 +31,22 @@ export type Brief = {
   budget?: number | undefined;
 };
 
+/**
+ * Everything one free-text reply can yield.
+ *
+ * The guided form is gone: the assistant now asks for what it needs in a single
+ * message and the customer answers however they like, because that is the only
+ * shape that survives the move to WhatsApp — there is no dialog to open there,
+ * and a five-question interrogation is how a business number gets muted.
+ * Whatever is missing is assumed, and the assumption is said out loud.
+ */
+export type Intake = Brief & {
+  /** Styling wall length in centimetres, when they gave one with a unit. */
+  wallCm?: number | undefined;
+  /** The other dimension, when they gave the room as "12 by 20 ft". */
+  depthCm?: number | undefined;
+};
+
 /** Station counts read from "four chairs", "4-chair", "6 stations". */
 function readStations(text: string): number | undefined {
   const words = Object.keys(WORD_NUMBER).join("|");
@@ -75,6 +91,68 @@ function readBudget(text: string): number | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * A wall length, in centimetres.
+ *
+ * Requires an explicit unit, unlike the standalone wall question in the
+ * scripted menu. There, "16" answers a question that was just asked and can
+ * only be a length. Here it sits in a sentence beside a station count and a
+ * budget, so a bare number is genuinely ambiguous and is left alone rather than
+ * guessed at.
+ */
+const FEET_TO_CM = 30.48;
+const METRE_TO_CM = 100;
+
+export function readWall(text: string): number | undefined {
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?|ft\b|foot|feet|'|")/i);
+  if (!match?.[1]) return undefined;
+  const value = Number.parseFloat(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+
+  const unit = (match[2] ?? "").toLowerCase();
+  const cm = unit.startsWith("m") ? value * METRE_TO_CM : value * FEET_TO_CM;
+  // A salon wall outside this range is a typo, not a room.
+  return cm >= 100 && cm <= 3000 ? Math.round(cm) : undefined;
+}
+
+/**
+ * A room given as two dimensions — "12 by 20 ft", "12x20", "12 ft x 20 ft".
+ *
+ * People state a room as an area far more often than as one wall, and readWall
+ * only ever sees the number a unit happens to be stuck to: given "12 by 20 ft"
+ * it returned 20ft and silently dropped the 12. The longer side is taken as the
+ * styling wall, which is where the chairs go in almost every real salon.
+ */
+export function readRoomPair(text: string): { wallCm: number; depthCm: number } | undefined {
+  const match = text.match(
+    /(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?|ft\b|foot|feet|'|")?\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*(m\b|metres?|meters?|ft\b|foot|feet|'|")?/i,
+  );
+  if (!match?.[1] || !match?.[3]) return undefined;
+
+  // The unit is usually written once, after the second number.
+  const unit = (match[4] || match[2] || "ft").toLowerCase();
+  const scale = unit.startsWith("m") ? METRE_TO_CM : FEET_TO_CM;
+  const a = Number.parseFloat(match[1]) * scale;
+  const b = Number.parseFloat(match[3]) * scale;
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined;
+
+  const wallCm = Math.round(Math.max(a, b));
+  const depthCm = Math.round(Math.min(a, b));
+  if (wallCm < 100 || wallCm > 3000 || depthCm < 100) return undefined;
+  return { wallCm, depthCm };
+}
+
+/** Read one reply for everything it happens to contain. */
+export function readIntake(text: string): Intake {
+  const brief = readBrief(text);
+  // A stated area wins over a single length: "12 by 20 ft" is a whole room and
+  // readWall would see only the number the unit is attached to.
+  const pair = readRoomPair(text);
+  if (pair) return { ...brief, wallCm: pair.wallCm, depthCm: pair.depthCm };
+  const wallCm = readWall(text);
+  return { ...brief, ...(wallCm === undefined ? {} : { wallCm }) };
 }
 
 export function readBrief(text: string): Brief {

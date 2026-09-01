@@ -1,4 +1,4 @@
-import { ChevronUp, ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ChevronUp, Home, ImageIcon, LayoutGrid, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,10 @@ export function PlanTray({
   onRemove,
   onClear,
   onVisualize,
+  onVisualizeStaged,
   hasPhoto = false,
   onUseAnotherPhoto,
   zoneCount = 1,
-  onRenderByZone,
   collapsed = false,
   onExpand,
   quantities,
@@ -31,13 +31,14 @@ export function PlanTray({
   onRemove: (product: FullProduct) => void;
   onClear: () => void;
   onVisualize: () => void;
+  /** Render the plan into a salon we build, with no photograph involved. */
+  onVisualizeStaged: () => void;
   /** True once a room photo is in the session, so rendering needs no upload. */
   hasPhoto?: boolean;
   onUseAnotherPhoto?: () => void;
   /** How many salon zones this plan spans. */
   zoneCount?: number;
   /** Only supplied when a split would actually produce more than one image. */
-  onRenderByZone?: (() => void) | undefined;
   /**
    * Shrinks the tray to a single bar. Set once a render is underway: the plan
    * deliberately survives rendering so you can tweak it and go again, but at
@@ -163,18 +164,22 @@ export function PlanTray({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {onRenderByZone ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onRenderByZone}
-              title={`One image per zone — ${zoneCount} generations`}
-              className="h-8 gap-1.5 border-border bg-transparent text-xs font-medium text-ink-2 shadow-none hover:bg-muted hover:text-ink-1"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              By zone ({zoneCount})
-            </Button>
-          ) : null}
+          {/*
+            Without this, a plan could only be seen by uploading a photo — a
+            dead end for anyone still deciding, or fitting out a space that does
+            not exist yet. Offered whether or not a photo is attached: an empty
+            room is a legitimate thing to want, not just a fallback.
+          */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onVisualizeStaged}
+            title="One image — we build the salon around your pieces"
+            className="h-8 gap-1.5 border-border bg-transparent text-xs font-medium text-ink-2 shadow-none hover:bg-muted hover:text-ink-1"
+          >
+            <Home className="h-3.5 w-3.5" />
+            In an empty room
+          </Button>
           <Button
             size="sm"
             onClick={onVisualize}

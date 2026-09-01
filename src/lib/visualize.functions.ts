@@ -15,7 +15,10 @@ import {
 type StartInput = {
   /** One id for the placement modes; up to MAX_REFERENCES for refit_room. */
   productIds: string[];
+  /** Empty for staged_room, which invents the room instead of using one. */
   roomImageBase64: string;
+  /** The customer's stated room size, when they gave one. */
+  room?: { wallCm: number; depthCm?: number } | undefined;
   mode: VisualizeMode;
   aspectRatio?: string;
   /** Which part of the salon this render covers, for a zone render. */
@@ -120,15 +123,33 @@ export const visualizeStart = createServerFn({ method: "POST" })
       ? input.productIds.filter((id) => typeof id === "string" && id.length > 0)
       : [];
     if (!productIds.length) throw new Error("productIds required");
-    if (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string") {
+    // staged_room is the one mode with nothing to upload: the references are
+    // the input and the room is invented, so requiring a photo here is what
+    // used to make a photo the price of admission for seeing your own plan.
+    const staged = input?.mode === "staged_room";
+    if (!staged && (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string")) {
       throw new Error("roomImageBase64 required");
     }
-    if (input.roomImageBase64.length > MAX_BASE64_CHARS) {
+    if ((input.roomImageBase64?.length ?? 0) > MAX_BASE64_CHARS) {
       throw new Error("roomImageBase64 too large");
     }
     return {
       productIds: productIds.slice(0, MAX_REFERENCES),
-      roomImageBase64: input.roomImageBase64,
+      roomImageBase64: staged ? "" : input.roomImageBase64,
+      // Rebuilt rather than trusted, and bounded: a hostile depth would
+      // otherwise reach the prompt verbatim.
+      ...(input.room && Number.isFinite(Number(input.room.wallCm))
+        ? {
+            room: {
+              wallCm: Math.min(3000, Math.max(100, Math.round(Number(input.room.wallCm)))),
+              ...(Number.isFinite(Number(input.room.depthCm))
+                ? {
+                    depthCm: Math.min(3000, Math.max(100, Math.round(Number(input.room.depthCm)))),
+                  }
+                : {}),
+            },
+          }
+        : {}),
       // replace_all, not replace: single-unit replacement needs the model to
       // track one instance among identical units, which it does not do
       // reliably. replace_all has been correct in every live test, mirrors
@@ -179,9 +200,10 @@ export const visualizeStart = createServerFn({ method: "POST" })
         data.mode,
         data.scene,
         data.correction,
+        data.room,
       );
 
-      const { uploadToKie, createVisualizeTask } = await import("@/lib/kie.server");
+      const { uploadToKie, createVisualizeTask, resolutionFor } = await import("@/lib/kie.server");
 
       // Cache key: sha256(ids + mode + roomImageBase64). Mode is in the key
       // because the same photo and products render differently per mode.
@@ -200,6 +222,14 @@ export const visualizeStart = createServerFn({ method: "POST" })
           // the key, a four-chair render would collide with the one-chair render
           // of the same plan and serve back the wrong picture.
           quantityKey(data.quantities) +
+          // The stated room size changes the prompt, so it changes the image.
+          `${data.room?.wallCm ?? ""}x${data.room?.depthCm ?? ""}` +
+          // The resolution tier is derived from the mode, which is already in
+          // the key — but the mapping itself can change, and an override can
+          // change it without the mode moving. Left out, every render cached
+          // before a tier change would be served back at the old resolution
+          // forever, silently undoing the upgrade.
+          resolutionFor(data.mode) +
           data.roomImageBase64,
       );
       const digest = await crypto.subtle.digest("SHA-256", encoded);
@@ -213,8 +243,14 @@ export const visualizeStart = createServerFn({ method: "POST" })
       const cached = await readCache(hash);
       if (cached) return { imageUrl: cached };
 
-      const roomUrl = await uploadToKie(data.roomImageBase64);
-      const taskId = await createVisualizeTask(roomUrl, imageUrls, prompt, data.aspectRatio);
+      const roomUrl = data.roomImageBase64 ? await uploadToKie(data.roomImageBase64) : null;
+      const taskId = await createVisualizeTask(
+        roomUrl,
+        imageUrls,
+        prompt,
+        data.aspectRatio,
+        data.mode,
+      );
 
       await writeCache({
         hash,

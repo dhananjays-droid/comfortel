@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  QUANTITY_MODES,
   describePlan,
   expectedFrom,
   linesFrom,
@@ -141,5 +142,27 @@ describe("expectedFrom", () => {
 
   it("is empty when nothing repeats", () => {
     expect(expectedFrom(linesFrom([CHAIR, DESK], {}))).toEqual([]);
+  });
+});
+
+describe("quantitiesFor — every furnishing mode", () => {
+  const qty = { a: 6, b: 2, c: 1 };
+
+  it("carries counts for each mode that furnishes a room", () => {
+    // The fault this prevents: a mode was compared by string literal, so
+    // adding staged_room silently dropped every quantity and a 24-piece plan
+    // rendered as one of each.
+    for (const mode of QUANTITY_MODES) {
+      expect(quantitiesFor(mode, ["a", "b", "c"], qty)).toEqual({ a: 6, b: 2 });
+    }
+  });
+
+  it("leaves lineup alone, where a count would be meaningless", () => {
+    expect(quantitiesFor("lineup", ["a", "b"], qty)).toBeUndefined();
+  });
+
+  it("ignores single-piece modes", () => {
+    expect(quantitiesFor("replace", ["a"], qty)).toBeUndefined();
+    expect(quantitiesFor("add", ["a"], qty)).toBeUndefined();
   });
 });
