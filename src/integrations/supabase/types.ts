@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      sessions: {
+        Row: {
+          channel: string
+          created_at: string
+          expires_at: string
+          flow: Json
+          id: string
+          plan: Json
+          room_aspect: string | null
+          room_at: string | null
+          room_url: string | null
+          session_key: string
+          transcript: Json
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          flow?: Json
+          id?: string
+          plan?: Json
+          room_aspect?: string | null
+          room_at?: string | null
+          room_url?: string | null
+          session_key: string
+          transcript?: Json
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          flow?: Json
+          id?: string
+          plan?: Json
+          room_aspect?: string | null
+          room_at?: string | null
+          room_url?: string | null
+          session_key?: string
+          transcript?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       enquiries: {
         Row: {
           business_name: string | null

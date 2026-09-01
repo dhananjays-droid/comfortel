@@ -32,6 +32,8 @@ import {
 import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
+import { loadSession, saveSession } from "@/lib/session.functions";
+import { isSessionKey, newSessionKey } from "@/lib/session";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { TIER_LABEL, idsOf } from "@/lib/packages";
@@ -158,6 +160,19 @@ const STORAGE_KEY = "comfortel.chat.v1";
  * counts only: the catalogue is already in the bundle.
  */
 const PLAN_KEY = "comfortel.plan.v1";
+/**
+ * The browser holds a key; the server holds the conversation.
+ *
+ * `sessionStorage` above is now a local cache, not the record. The plan, the
+ * transcript the model reads and the room reference live in the `sessions`
+ * table, because a WhatsApp message arrives as a webhook with a phone number
+ * and no browser at all — it has to be able to find the same conversation.
+ * localStorage rather than sessionStorage: the key should outlive the tab, or
+ * every new tab starts a stranger.
+ */
+const SESSION_KEY_STORAGE = "comfortel.session.v1";
+/** Coalesces the writes a fast-moving tray would otherwise make one-per-tap. */
+const SESSION_SAVE_DEBOUNCE_MS = 800;
 /** Survives reloads so a demo stays in the mode it was left in. */
 const WA_MODE_KEY = "comfortel.whatsapp.v1";
 
@@ -363,6 +378,8 @@ function Index() {
   const sendChat = useServerFn(chat);
   const startVisualize = useServerFn(visualizeStart);
   const pollVisualize = useServerFn(visualizeStatus);
+  const readSession = useServerFn(loadSession);
+  const writeSession = useServerFn(saveSession);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -530,6 +547,89 @@ function Index() {
       /* over quota or storage disabled — the plan still works in memory */
     }
   }, [planIds, planQty]);
+
+  // ---- server-side session ------------------------------------------------
+  /**
+   * The key for this conversation. Minted once and kept in localStorage; the
+   * state it names lives on the server, which is what a WhatsApp webhook would
+   * read too.
+   */
+  const sessionKeyRef = useRef<string | null>(null);
+  /** True once the server has answered, so a save cannot race the load and
+   * overwrite a stored plan with the empty one this page started with. */
+  const sessionLoadedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let key: string | null = null;
+    try {
+      const stored = localStorage.getItem(SESSION_KEY_STORAGE);
+      key = isSessionKey(stored) ? stored : newSessionKey();
+      localStorage.setItem(SESSION_KEY_STORAGE, key);
+    } catch {
+      // Private mode or blocked storage: the session still works for this page
+      // load, it just will not be found again.
+      key = newSessionKey();
+    }
+    sessionKeyRef.current = key;
+
+    void (async () => {
+      try {
+        const state = await readSession({ data: { key } });
+        if (cancelled) return;
+        // The server wins when it has something. A plan restored from
+        // sessionStorage a moment ago is the same plan in the common case, and
+        // where they differ the server is the one a WhatsApp turn would read.
+        if (state.plan.ids.length) {
+          setPlanIds(state.plan.ids.slice(0, MAX_REFERENCES));
+          setPlanQty(state.plan.qty);
+        }
+        if (state.flow.awaiting) setFlow(state.flow);
+      } catch {
+        /* a session that will not load is an empty one, not an error */
+      } finally {
+        if (!cancelled) sessionLoadedRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [readSession]);
+
+  /**
+   * Mirror the conversation to the server.
+   *
+   * Debounced because the tray moves fast — a quantity stepper held down would
+   * otherwise be one write per tap. The transcript is trimmed the same way
+   * `runChat` trims it, so what is stored is what the model would actually be
+   * sent on the next turn, from this channel or another one.
+   */
+  useEffect(() => {
+    const key = sessionKeyRef.current;
+    if (!key || !sessionLoadedRef.current) return;
+
+    const timer = setTimeout(() => {
+      const transcript: ChatMessageInput[] = messages
+        .filter((m) => m.content.trim().length > 0)
+        .slice(-12)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      void writeSession({
+        data: {
+          key,
+          channel: "web",
+          transcript,
+          plan: { ids: planIds, qty: planQty },
+          flow,
+        },
+      }).catch(() => {
+        /* the conversation still works in the tab; only its backup is lost */
+      });
+    }, SESSION_SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [messages, planIds, planQty, flow, writeSession]);
 
   useEffect(() => {
     try {

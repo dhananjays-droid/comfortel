@@ -563,6 +563,9 @@ But while it's off, every repeat of the same photo + products + mode bills again
 | `src/lib/layout.ts`              | station geometry: clearances, capacity arithmetic    |
 | `src/lib/room.ts`                | typed room dimensions, units, the planner's message  |
 | `src/lib/whatsapp.ts`            | WhatsApp platform limits and which primitive fits    |
+| `src/lib/session.ts`             | channel-agnostic conversation state, and its caps   |
+| `src/lib/session.functions.ts`   | load/save the session server-side                   |
+| `src/lib/session.server.ts`      | phone number -> session key, by HMAC                |
 | `src/routes/index.tsx`           | the chat page, message model, render dispatch       |
 | `src/components/WhatsAppView.tsx`| the WhatsApp Mode preview surface                   |
 | `src/components/`                | cards, sheets, dialogs, lightbox, markdown renderer |
@@ -755,18 +758,33 @@ Not encodable, and the real risks:
   Task-specific sales and support bots remain allowed, which this is — but it
   has to be scoped and presented as a Comfortel sales assistant, not a general
   assistant.
-- **State.** Conversation state currently lives in React and `sessionStorage`.
-  WhatsApp is stateless per message, so a real build needs a server-side session
-  keyed by phone number. This is the largest rewrite.
+- **State.** Done — `src/lib/session.ts` and the `sessions` table. The browser
+  holds a key, the server holds the transcript, plan, flow state and room
+  reference. A WhatsApp key is `wa:` + an HMAC of the phone number, never the
+  number: the webhook supplies it on every message, so storing it would be
+  keeping an identifier we never need to read back.
 - **Media.** kie serves renders from an expiring tempfile CDN. WhatsApp needs a
   durable URL or an upload, so renders must be persisted first, and converted to
-  JPEG against the 5 MB send limit.
+  JPEG against the 5 MB send limit. Inbound is worse: a media URL from the Cloud
+  API needs the auth token and expires in about five minutes, so the photo has
+  to be downloaded inside the webhook handler rather than queued for later.
+- **Compression is not a risk — measured.** WhatsApp re-encodes at ≤1600px
+  q~75; `resize-image.ts` already targets 1024px q0.85, so WhatsApp's cap never
+  binds and the only new loss is one JPEG generation above our own target.
+  Worst case measured at SSIM 0.998-0.9995 (PSNR 33-41 dB), and four renders —
+  each room by the web path and by a pessimistic q60 WhatsApp path — preserved
+  the room and the full 4/4/2 counts either way. See `docs/whatsapp-migration.md`.
 - **Cost.** Service messages inside the 24-hour window are free today but start
   being charged on 1 October 2026, on top of the ~$0.03 per render.
 
 The palette is WhatsApp's own current in-app one (`#008069` header, `#efeae2`
 wallpaper, `#d9fdd3` outgoing, `#005c4b`/`#202c33` in dark), not the legacy brand
 palette (`#dcf8c6`, `#ece5dd`) that colour-listing sites still publish.
+
+`docs/whatsapp-migration.md` is the step-by-step for actually shipping this:
+the Meta approvals in the order they gate each other, the permissions and what
+each one is for, the environment variables, and the two traps (five-minute media
+URLs, one-number-one-WABA) that cost a day each.
 
 ---
 
@@ -783,9 +801,13 @@ palette (`#dcf8c6`, `#ece5dd`) that colour-listing sites still publish.
   `ERR_NETWORK_CHANGED` in the console, so the cause looks like the network
   rather than the data. Both `ProductCard` and `PlanTray` now degrade to an icon
   instead of a broken-image glyph, but the underlying flakiness is unexplained.
-- WhatsApp Mode has no session store. The scripted menu is real and tappable,
-  but its state lives in React like everything else, so a real build still needs
-  a server-side session keyed by phone number.
+- The system prompt has no scope guard. Meta banned general-purpose AI
+  assistants from the WhatsApp Business Platform on 15 January 2026;
+  task-specific sales and support bots are still allowed, which this is. But
+  that is a property of how it behaves: asked to write marketing copy it would
+  currently oblige, which is the behaviour the ban describes. A refusal path in
+  `SYSTEM_INSTRUCTIONS` is a prerequisite for going live on WhatsApp, not a
+  nicety.
 - The scripted menu covers browse, plan and handoff. Anything else falls through
   to the model, so an API outage degrades to "menu works, conversation doesn't"
   rather than failing outright.
