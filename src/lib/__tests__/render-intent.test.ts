@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { lastUserTurn, wantsRender } from "@/lib/render-intent";
+import { lastUserTurn, wantsRender, wantsZoneSplit } from "@/lib/render-intent";
 
 describe("wantsRender — asks", () => {
   const asking = [
@@ -141,5 +141,46 @@ describe("wantsRender — a room we build", () => {
 
   it("still refuses when they say not to", () => {
     expect(wantsRender("don't build a room, just tell me the total")).toBe(false);
+  });
+});
+
+describe("wantsZoneSplit", () => {
+  const asking = [
+    "can you show me each zone separately",
+    "split it up by area",
+    "show me the styling area on its own",
+    "one image per section please",
+    "give me different views",
+    "break it down into areas",
+    "show them one by one",
+  ];
+  for (const text of asking) {
+    it(`asks: ${text}`, () => expect(wantsZoneSplit(text)).toBe(true));
+  }
+
+  const not = ["show me the Blake in my salon", "what's the total?", "the chairs look too big", ""];
+  for (const text of not) {
+    it(`does not: ${text || "(empty)"}`, () => expect(wantsZoneSplit(text)).toBe(false));
+  }
+
+  it("still refuses when they say not to", () => {
+    expect(wantsZoneSplit("no need to split it into areas")).toBe(false);
+  });
+});
+
+describe("wantsZoneSplit — declining the split, not the render", () => {
+  const declining = [
+    "no need to split it into areas",
+    "don't separate them",
+    "all in one image please",
+    "just one image is fine",
+  ];
+  for (const text of declining) {
+    it(`declines: ${text}`, () => expect(wantsZoneSplit(text)).toBe(false));
+  }
+
+  it("does not let a declined split cancel the render itself", () => {
+    // "all in one image" is a request for one picture, not for none.
+    expect(wantsRender("show me these in my salon, all in one image")).toBe(true);
   });
 });

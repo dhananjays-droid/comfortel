@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
+import { wantsZoneSplit } from "@/lib/render-intent";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { TIER_LABEL, buildPackages, idsOf, needsFor, type Package } from "@/lib/packages";
@@ -255,26 +256,30 @@ function expectedFor(job: VisualizeJob): Expected[] {
  */
 function buildZoneRenderMessage(
   groups: Array<{ zone: string; label: string; scene: string; products: FullProduct[] }>,
-  photo: RoomPhoto,
+  /** Absent when there is no room photo — each zone is staged instead. */
+  photo: RoomPhoto | null,
   quantities?: Record<string, number> | undefined,
+  room?: { wallCm: number; depthCm?: number } | undefined,
 ): { message: Message; entries: RenderEntry[] } {
+  const mode: VisualizeMode = photo ? "refit_room" : "staged_room";
   const entries: RenderEntry[] = groups.map((group) => {
     const ids = group.products.map((p) => p.id);
-    const qty = quantitiesFor("refit_room", ids, quantities);
+    const qty = quantitiesFor(mode, ids, quantities);
     return {
       id: nextId(),
       job: {
         productIds: ids,
-        base64: photo.image.base64,
-        mode: "refit_room" as VisualizeMode,
-        aspectRatio: photo.image.aspectRatio,
+        base64: photo?.image.base64 ?? "",
+        mode,
+        aspectRatio: photo?.image.aspectRatio ?? "3:2",
         scene: group.scene,
         ...(qty ? { quantities: qty } : {}),
+        ...(room ? { room } : {}),
       },
       vis: {
         productIds: ids,
         label: group.label,
-        before: photo.preview,
+        before: photo?.preview ?? "",
         status: "loading",
       },
     };
@@ -1124,16 +1129,26 @@ function Index() {
    * something that happens automatically — the customer decides when a cluttered
    * single frame is worth splitting.
    */
+  /**
+   * One image per area of the salon, rather than everything in one frame.
+   *
+   * No longer a button. A big plan crammed into a single render gives each
+   * piece a fraction of the pixels and divides the model's attention across
+   * seven products; splitting it is the right answer often enough to keep, but
+   * it is a thing to ask for, not a second control sitting beside the first.
+   */
   function renderPlanByZone(history?: Message[]) {
     if (!planProducts.length) return;
+    // No photo is no longer a dead end — each zone is staged instead.
     const photo = roomPhotoRef.current;
-    if (!photo) {
-      setPhotoProducts(planProducts);
-      return;
-    }
 
     const groups = groupByZone(planProducts);
-    const { message, entries } = buildZoneRenderMessage(groups, photo, planQty);
+    const { message, entries } = buildZoneRenderMessage(
+      groups,
+      photo,
+      planQty,
+      roomSpecRef.current ?? undefined,
+    );
     setPlanCollapsed(true);
 
     // When the photo message is already in `history` the room shot is on screen,
@@ -1141,18 +1156,23 @@ function Index() {
     if (history) {
       setMessages([...history, message]);
     } else {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextId(),
-          role: "user",
-          kind: "photo",
-          content: `Show me my space zone by zone — ${groups.map((g) => g.label.toLowerCase()).join(", ")}.`,
-          photo: photo.preview,
-          productId: planProducts[0]?.id ?? "",
-        },
-        message,
-      ]);
+      const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
+      const asked: Message = photo
+        ? {
+            id: nextId(),
+            role: "user",
+            kind: "photo",
+            content: `Show me my space zone by zone — ${zones}.`,
+            photo: photo.preview,
+            productId: planProducts[0]?.id ?? "",
+          }
+        : {
+            id: nextId(),
+            role: "user",
+            kind: "text",
+            content: `Show me each area on its own — ${zones}.`,
+          };
+      setMessages((prev) => [...prev, asked, message]);
     }
     entries.forEach((entry) => void runRender(entry));
   }
@@ -1299,6 +1319,20 @@ function Index() {
         send(note ? `${text}\n\n(${note})` : text, text);
         return;
       }
+      // Splitting the plan across zones is now asked for rather than offered.
+      // Guarded on the plan actually having more than one zone in it, so a
+      // stray "show me each one" cannot conjure a three-image bill out of a
+      // single chair.
+      if (wantsZoneSplit(text) && isSplittable(planIdsRef.current.length ? planProducts : [])) {
+        setInput("");
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: "user", kind: "text", content: text },
+        ]);
+        renderPlanByZone();
+        return;
+      }
+
       // Any turn can mention the room — "it's 12 by 20 ft" is a perfectly
       // ordinary thing to say three messages in, and it should stick.
       const mentioned = readIntake(text);
@@ -1543,7 +1577,6 @@ function Index() {
             hasPhoto={hasRoomPhoto}
             onUseAnotherPhoto={() => setPhotoProducts(planProducts)}
             zoneCount={groupByZone(planProducts).length}
-            onRenderByZone={isSplittable(planProducts) ? renderPlanByZone : undefined}
             quantities={planQty}
             collapsed={planCollapsed}
             onExpand={() => setPlanCollapsed(false)}

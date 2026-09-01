@@ -97,3 +97,45 @@ export function lastUserTurn(messages: Array<{ role: string; content: string }>)
   }
   return "";
 }
+
+/**
+ * Did they ask for the plan split across several images?
+ *
+ * This was a button in the tray, which put a costing decision — one render or
+ * three — next to the main action as if the two were equals. A big plan in one
+ * frame gives each piece a fraction of the pixels and divides the model's
+ * attention across every product in it, so splitting is often the better
+ * answer; it is just not a thing to offer permanently. Asked for, it happens.
+ *
+ * Checked only when a plan exists and has more than one zone in it, so a stray
+ * "show me each one" cannot conjure a three-image bill out of a single chair.
+ */
+const ZONE_ASKS = [
+  /\b(?:zone|zones|area|areas|section|sections)\b/,
+  /\b(?:separate|separately|individual|individually|one\s+by\s+one|each\s+on\s+its\s+own)\b/,
+  /\b(?:split|break)\s+(?:it|them|this|that|the\s+\w+)?\s*(?:up|out|down|into)\b/,
+  /\bone\s+(?:image|photo|picture|render|shot)\s+(?:per|for\s+each)\b/,
+  /\bdifferent\s+(?:views|angles|shots|images)\b/,
+];
+
+/**
+ * Its own refusal list, extending the shared one.
+ *
+ * "don't split it" declines the split, not the render — so these cannot go in
+ * REFUSALS, where they would also cancel a perfectly good request for one
+ * picture.
+ */
+const ZONE_REFUSALS = [
+  /\b(?:don'?t|do\s+not|no\s+need\s+to|not?\s+need|without|rather\s+not)\b[\s\S]{0,30}\b(?:split|separat|break|zone|area|divid)/,
+  /\b(?:all|everything)\s+in\s+(?:one|a\s+single)\b/,
+  /\bjust\s+one\s+(?:image|photo|picture|render|shot)\b/,
+];
+
+export function wantsZoneSplit(text: string): boolean {
+  if (typeof text !== "string") return false;
+  const t = text.toLowerCase();
+  if (!t.trim()) return false;
+  if (REFUSALS.some((r) => r.test(t))) return false;
+  if (ZONE_REFUSALS.some((r) => r.test(t))) return false;
+  return ZONE_ASKS.some((r) => r.test(t));
+}
