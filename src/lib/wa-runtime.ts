@@ -1,0 +1,624 @@
+/**
+ * The conversation engine — a server-side port of the dispatcher
+ * `src/routes/index.tsx` runs in `useState`/`useRef`, driven by a `sessions`
+ * DB row instead of component state.
+ *
+ * Ported function-by-function from `index.tsx` on `main` (`sendTurn`,
+ * `offerPackages`, `acceptPackage`, `acceptOffer`, `startRender`,
+ * `renderPlanByZone`, `runChat`) — read that file, not this comment, for the
+ * source of truth on any edge case. Three things are genuinely new here, not
+ * ported, because a webhook has no browser and WhatsApp has no proactive
+ * business-initiated message outside a template:
+ *  1. The greeting is sent as part of the reply to a customer's FIRST ever
+ *     message, rather than pre-seeded before any input exists (§0 of the
+ *     plan requires "they get the same greeting-with-three-buttons").
+ *  2. The "talk to a person" handoff trigger (§8 of the plan) — index.tsx
+ *     has no equivalent because the web app has no compliance requirement to
+ *     escalate.
+ *  3. `renderPlan()`/`renderPlanStaged()` (the PlanTray's plain "Visualize"/
+ *     "staged" buttons) are NOT ported: they have no WhatsApp trigger, since
+ *     WhatsApp has no floating tray UI and index.tsx's own `sendTurn`
+ *     dispatcher never calls them from text either — a customer's plain
+ *     "show me my plan" is already served by chat()'s own render/offer
+ *     marker, which `runChatTurn` below handles. `renderPlanByZone` IS
+ *     ported because it has a real text trigger (`wantsZoneSplit`).
+ */
+
+import { CATALOG_FULL, getProduct, formatPrice, type FullProduct } from "@/lib/catalog";
+import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.functions";
+import { curatePackages } from "@/lib/curate.functions";
+import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
+import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
+import { wantsZoneSplit } from "@/lib/render-intent";
+import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
+import { genericCapacity } from "@/lib/room";
+import { enqueueRenderJob } from "@/lib/wa-render-jobs.server";
+import {
+  liveOffered,
+  liveRoom,
+  sanitizeRoomSpec,
+  type SessionOffered,
+  type SessionOfferedChoice,
+  type SessionRoomPhoto,
+  type SessionState,
+} from "@/lib/wa-session";
+import { isMultiReferenceMode, isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
+import { groupByZone, isSplittable } from "@/lib/zones";
+import {
+  INITIAL,
+  advance,
+  describeIntake,
+  isGreeting,
+  readIntake,
+  welcome,
+  type WaAction,
+} from "@/lib/wa-flow";
+
+/** Assumed when the customer did not say. Stated out loud, never silent — matches index.tsx. */
+const DEFAULT_STATIONS = 4;
+const DEFAULT_BUDGET = 15000;
+
+/** Matches `isGreeting()`'s style: a fixed phrase list, not a model call. */
+const HANDOFF_PHRASE =
+  /\b(talk to (a )?(person|human|agent)|speak to (a )?(person|human|agent)|real (person|human)|human please|agent please)\b/i;
+const HANDOFF_ACK =
+  "Got it — I'll get a person to pick this up from here. They'll reply in this chat shortly.";
+
+function wantsHandoff(text: string): boolean {
+  return HANDOFF_PHRASE.test(text);
+}
+
+export type WaTurn =
+  | { kind: "text"; text: string }
+  | { kind: "buttons"; text: string; action: WaAction & { kind: "buttons" } }
+  | { kind: "list"; text: string; action: WaAction & { kind: "list" } };
+
+/** A real customer can legitimately hit the render rate limit (unlike a
+ * message flood, which is dropped silently) — this gets an explanation
+ * rather than a dropped request. See wa-rate-limit.server.ts. */
+const RATE_LIMITED_TURN: WaTurn = {
+  kind: "text",
+  text: "That's a few renders in a row — give it a few minutes and ask again and I'll get started.",
+};
+
+export type InboundEvent =
+  | { kind: "text"; text: string }
+  | { kind: "button"; id: string }
+  | { kind: "photo"; url: string; caption?: string | undefined }
+  | { kind: "unsupported" };
+
+export type RuntimeResult = { session: SessionState; turns: WaTurn[] };
+
+function planProductsOf(session: SessionState): FullProduct[] {
+  return session.plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+}
+
+function pieceCount(
+  products: FullProduct[],
+  quantities: Record<string, number> | undefined,
+): number {
+  return planPieces(linesFrom(products, quantities));
+}
+
+function appendTranscript(
+  session: SessionState,
+  role: "user" | "assistant",
+  content: string,
+): SessionState {
+  if (!content.trim()) return session;
+  return { ...session, transcript: [...session.transcript, { role, content }] };
+}
+
+// ---------------------------------------------------------------------------
+// rendering
+// ---------------------------------------------------------------------------
+
+/** Matches buildRenderMessage's per-entry label in index.tsx. */
+function entryLabel(mode: VisualizeMode, ids: string[]): string {
+  if (mode === "refit_room") return "Your salon, refitted";
+  if (mode === "staged_room") return "Your plan, staged in a salon";
+  if (mode === "lineup") return `${ids.length} options in your space`;
+  return getProduct(ids[0]!)?.name ?? "Your render";
+}
+
+/**
+ * Enqueues one wa_render_jobs row per group and returns the confirmation text
+ * — the server-side equivalent of buildRenderMessage + runRender, minus the
+ * "asked" bubble (that only exists in index.tsx to echo the customer's own
+ * tap back into the web UI's transcript; on WhatsApp the customer already
+ * knows what they asked, so nothing is sent for it — it still goes into
+ * session.transcript so future chat() calls see consistent history).
+ */
+async function startRenderTurn(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  products: FullProduct[],
+  mode: VisualizeMode,
+  photo: SessionRoomPhoto | null,
+  quantities: Record<string, number> | undefined,
+): Promise<RuntimeResult> {
+  if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
+
+  const ids = products.map((p) => p.id);
+  const roomSpec = session.roomSpec ?? undefined;
+  const groups: string[][] = isMultiReferenceMode(mode) ? [ids] : ids.map((id) => [id]);
+
+  for (const groupIds of groups) {
+    const qty = quantitiesFor(mode, groupIds, quantities);
+    await enqueueRenderJob(sessionKey, phone, {
+      mode,
+      productIds: groupIds,
+      ...(qty ? { quantities: qty } : {}),
+      ...(photo ? { roomUrl: photo.url } : {}),
+      ...(roomSpec ? { roomWallCm: roomSpec.wallCm, roomDepthCm: roomSpec.depthCm } : {}),
+    });
+  }
+
+  const verb =
+    mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
+  const askedText = photo
+    ? products.length > 1
+      ? `Fit my space out with these ${pieceCount(products, quantities)} pieces.`
+      : `Show me the ${products[0]?.name ?? "this piece"} ${verb} my space.`
+    : products.length > 1
+      ? `Build a salon around these ${pieceCount(products, quantities)} pieces.`
+      : `Show me the ${products[0]?.name ?? "this piece"} in a salon.`;
+
+  const names = products.map((p) => p.name).filter(Boolean);
+  const contentText =
+    mode === "refit_room"
+      ? "Here is your salon refitted with those Comfortel pieces — I'll send it over shortly."
+      : mode === "lineup"
+        ? `Here they are in your space, left to right: ${names.join(", ")}. I'll send it over shortly.`
+        : groups.length > 1
+          ? `Here are ${groups.length} options rendered into your space — I'll send each one as it's ready.`
+          : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space — on its way.`;
+
+  let next = appendTranscript(session, "user", askedText);
+  next = appendTranscript(next, "assistant", contentText);
+
+  return { session: next, turns: [{ kind: "text", text: contentText }] };
+}
+
+/**
+ * Ported: same zone split, same staged fallback when there's no photo yet.
+ * No longer photo-gated, matching index.tsx's own comment on this function.
+ */
+async function renderPlanByZoneTurn(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+): Promise<RuntimeResult> {
+  const planProducts = planProductsOf(session);
+  if (!planProducts.length) return { session, turns: [] };
+  if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
+
+  const photo = liveRoom(session.room);
+  const groups = groupByZone(planProducts);
+  const roomSpec = session.roomSpec ?? undefined;
+  const mode: VisualizeMode = photo ? "refit_room" : "staged_room";
+
+  for (const group of groups) {
+    const ids = group.products.map((p) => p.id);
+    const qty = quantitiesFor(mode, ids, session.plan.qty);
+    await enqueueRenderJob(sessionKey, phone, {
+      mode,
+      productIds: ids,
+      scene: group.scene,
+      ...(qty ? { quantities: qty } : {}),
+      ...(photo ? { roomUrl: photo.url } : {}),
+      ...(roomSpec ? { roomWallCm: roomSpec.wallCm, roomDepthCm: roomSpec.depthCm } : {}),
+    });
+  }
+
+  const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
+  const contentText = `Rendering your space zone by zone — ${zones}. I'll send each one as it's ready.`;
+  const next = appendTranscript(session, "assistant", contentText);
+  return { session: next, turns: [{ kind: "text", text: contentText }] };
+}
+
+// ---------------------------------------------------------------------------
+// packages
+// ---------------------------------------------------------------------------
+
+/**
+ * Ported from `offerPackages`. Same logic (`readIntake` → local `buildPackages`
+ * fallback → `curatePackages()` best-effort), but the offered set is
+ * persisted on the session row instead of `useState`, since the next message
+ * may arrive minutes later against a cold request.
+ */
+async function offerPackages(session: SessionState, text: string): Promise<RuntimeResult> {
+  const intake = readIntake(text);
+  let next = session;
+  if (intake.wallCm) {
+    next = {
+      ...next,
+      roomSpec: sanitizeRoomSpec({ wallCm: intake.wallCm, depthCm: intake.depthCm }),
+    };
+  }
+
+  const fromWall = intake.wallCm ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits : 0;
+  const stations = fromWall || intake.stations || DEFAULT_STATIONS;
+  const budget = intake.budget || DEFAULT_BUDGET;
+  const note = describeIntake(intake);
+
+  next = appendTranscript(next, "user", note ? `${text}\n\n(${note})` : text);
+
+  let packages = buildPackages(budget, needsFor(stations));
+  try {
+    const curated = await curatePackages({ data: { brief: text, stations, budget } });
+    if (curated.packages.length) packages = curated.packages;
+  } catch {
+    /* the local packer is the fallback, not an error worth showing */
+  }
+  if (!packages.length) return { session: next, turns: [] };
+
+  const offered: SessionOffered = {
+    packages,
+    choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
+    at: Date.now(),
+  };
+  next = { ...next, offered };
+
+  const replyText = [
+    `${note} Here are three ways to do it — each is the most you can get at its price.`,
+    "",
+    ...packages.map(
+      (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
+    ),
+  ].join("\n");
+  next = appendTranscript(next, "assistant", replyText);
+
+  const action: WaAction & { kind: "buttons" } = {
+    kind: "buttons",
+    buttons: packages.slice(0, 3).map((p) => ({ id: `pkg:${p.tier}`, title: TIER_LABEL[p.tier] })),
+  };
+
+  return { session: next, turns: [{ kind: "buttons", text: replyText, action }] };
+}
+
+/** Ported from `acceptPackage`. Sets session.plan instead of setPlanIds/setPlanQty. */
+function acceptPackageChoice(
+  session: SessionState,
+  pkg: Package,
+  choice: SessionOfferedChoice,
+): RuntimeResult {
+  const ids = idsOf(pkg);
+  const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+  if (!products.length) return { session: { ...session, offered: null }, turns: [] };
+
+  const qty = Object.fromEntries(pkg.lines.map((line) => [line.product.id, line.qty]));
+  let next: SessionState = { ...session, offered: null, plan: { ids, qty } };
+
+  const summary = [
+    `${choice.stations} station${choice.stations === 1 ? "" : "s"}`,
+    formatPrice(pkg.total),
+  ].join(" · ");
+
+  const userContent = [
+    choice.note,
+    `Build me a ${choice.stations}-station salon for about ${formatPrice(choice.budget)}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  next = appendTranscript(next, "user", userContent);
+
+  const replyText = [
+    `Here is the ${TIER_LABEL[pkg.tier].toLowerCase()} package — ${summary}.`,
+    ...pkg.reasons,
+    choice.byZone
+      ? "Add a photo of your room and I'll render it zone by zone."
+      : "Add a photo of your room and I'll render these into it.",
+  ].join(" ");
+  next = appendTranscript(next, "assistant", replyText);
+
+  if (choice.byZone) next = { ...next, pendingZoneRender: true };
+
+  return { session: next, turns: [{ kind: "text", text: replyText }] };
+}
+
+/**
+ * Ported from `acceptOffer`. The offer is self-describing in the button id
+ * (`offer:<mode>:<id1>,<id2>`) rather than looked up from held UI state,
+ * since a WhatsApp button reply carries only the id we sent it with.
+ */
+async function acceptOfferRequest(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  tappedId: string,
+): Promise<RuntimeResult> {
+  const [, mode, idsPart] = tappedId.split(":");
+  if (!mode || !isVisualizeMode(mode) || !idsPart) return { session, turns: [] };
+
+  const staged = mode === "staged_room";
+  const room = liveRoom(session.room);
+  if (!room && !staged) return { session, turns: [] };
+
+  const ids = idsPart
+    .split(",")
+    .filter((id) => Object.prototype.hasOwnProperty.call(CATALOG_FULL, id));
+  const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+  if (!products.length) return { session, turns: [] };
+
+  return startRenderTurn(
+    session,
+    sessionKey,
+    phone,
+    products,
+    mode,
+    staged ? null : room,
+    session.plan.qty,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// chat fallback
+// ---------------------------------------------------------------------------
+
+/** Ported from `runChat`. Calls chat.functions.ts's chat() exactly as index.tsx does. */
+async function runChatTurn(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+): Promise<RuntimeResult> {
+  const payload: ChatMessageInput[] = session.transcript
+    .filter((m) => m.content.trim().length > 0)
+    .slice(-12);
+  const plan = linesFrom(planProductsOf(session), session.plan.qty);
+  const room = liveRoom(session.room);
+
+  let res;
+  try {
+    res = await chat({ data: { messages: payload, hasRoomPhoto: room !== null, plan } });
+  } catch (err) {
+    console.error("wa-runtime: chat failed", err);
+    return {
+      session,
+      turns: [{ kind: "text", text: "Sorry — I couldn't get an answer just now. Try that again?" }],
+    };
+  }
+
+  const next = appendTranscript(session, "assistant", res.text);
+  const turns: WaTurn[] = [];
+
+  if (res.offer && (room || res.offer.mode === "staged_room")) {
+    const offer: RenderRequest = res.offer;
+    const action: WaAction & { kind: "buttons" } = {
+      kind: "buttons",
+      buttons: [
+        {
+          id: `offer:${offer.mode}:${offer.productIds.join(",")}`,
+          title: "See this in your space",
+        },
+      ],
+    };
+    turns.push({ kind: "buttons", text: res.text, action });
+  } else {
+    turns.push({ kind: "text", text: res.text });
+  }
+
+  if (res.render && (room || res.render.mode === "staged_room")) {
+    const products = res.render.productIds
+      .map((id) => getProduct(id))
+      .filter((p): p is FullProduct => Boolean(p));
+    if (products.length) {
+      const rendered = await startRenderTurn(
+        next,
+        sessionKey,
+        phone,
+        products,
+        res.render.mode,
+        res.render.mode === "staged_room" ? null : room,
+        session.plan.qty,
+      );
+      return { session: rendered.session, turns: [...turns, ...rendered.turns] };
+    }
+  }
+
+  return { session: next, turns };
+}
+
+// ---------------------------------------------------------------------------
+// top-level dispatch — ported from sendTurn
+// ---------------------------------------------------------------------------
+
+async function route(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  text: string,
+  tappedId: string | undefined,
+): Promise<RuntimeResult> {
+  // A package tap is answered from what is already on the table, not by the
+  // menu and not by the model — the pieces and prices are already decided.
+  if (tappedId?.startsWith("pkg:")) {
+    const offered = liveOffered(session.offered);
+    const pkg = offered?.packages.find((p) => `pkg:${p.tier}` === tappedId);
+    if (offered && pkg) return acceptPackageChoice(session, pkg, offered.choice);
+    // Stale or unrecognized — the session outlives a browser tab by a lot
+    // (30 days vs. one visit), so a tap on an expired offer has to be
+    // answered rather than silently dropped.
+    return {
+      session: { ...session, offered: null, flow: { awaiting: "build" } },
+      turns: [
+        {
+          kind: "text",
+          text: "Those options have expired — tell me again what you're after (stations, budget, look) and I'll put together fresh ones.",
+        },
+      ],
+    };
+  }
+
+  if (tappedId?.startsWith("offer:")) {
+    return acceptOfferRequest(session, sessionKey, phone, tappedId);
+  }
+
+  const step = advance(session.flow, text);
+
+  if (!step) {
+    if (session.flow.awaiting === "build") {
+      return offerPackages({ ...session, flow: INITIAL }, text);
+    }
+
+    if (session.flow.awaiting === "visualize") {
+      const parsed = readIntake(text);
+      let next = session;
+      if (parsed.wallCm) {
+        next = {
+          ...next,
+          roomSpec: sanitizeRoomSpec({ wallCm: parsed.wallCm, depthCm: parsed.depthCm }),
+        };
+      }
+      const note = describeIntake(parsed);
+      next = { ...next, flow: INITIAL };
+      return runChatTurn(
+        appendTranscript(next, "user", note ? `${text}\n\n(${note})` : text),
+        sessionKey,
+        phone,
+      );
+    }
+
+    // Splitting the plan across zones is asked for, not offered. Guarded on
+    // the plan actually having more than one zone, so a stray "show me each
+    // one" can't conjure a multi-image bill out of a single chair.
+    if (wantsZoneSplit(text) && isSplittable(planProductsOf(session))) {
+      return renderPlanByZoneTurn(appendTranscript(session, "user", text), sessionKey, phone);
+    }
+
+    // Any turn can mention the room — "it's 12 by 20 ft" is a perfectly
+    // ordinary thing to say three messages in, and it should stick.
+    const mentioned = readIntake(text);
+    let next = session;
+    if (mentioned.wallCm) {
+      next = {
+        ...next,
+        roomSpec: sanitizeRoomSpec({ wallCm: mentioned.wallCm, depthCm: mentioned.depthCm }),
+      };
+    }
+    next = { ...next, flow: INITIAL };
+    return runChatTurn(appendTranscript(next, "user", text), sessionKey, phone);
+  }
+
+  const { reply } = step;
+  const turns: WaTurn[] =
+    reply.action?.kind === "buttons"
+      ? [
+          {
+            kind: "buttons",
+            text: reply.text,
+            action: reply.action as WaAction & { kind: "buttons" },
+          },
+        ]
+      : reply.action?.kind === "list"
+        ? [{ kind: "list", text: reply.text, action: reply.action as WaAction & { kind: "list" } }]
+        : [{ kind: "text", text: reply.text }];
+
+  // Matches index.tsx's setMessages((prev) => [...prev, outgoing, answer]) —
+  // both the tap and the scripted reply join the transcript chat() will
+  // later replay, the same as every other branch above.
+  let next = appendTranscript(session, "user", text);
+  next = appendTranscript(next, "assistant", reply.text);
+
+  return { session: { ...next, flow: step.state }, turns };
+}
+
+/** Ported from `send()`'s photo branch. */
+async function handlePhoto(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  url: string,
+  caption: string | undefined,
+): Promise<RuntimeResult> {
+  const content =
+    caption?.trim() || "Here is a photo of my salon. What would you put in this space?";
+  let next: SessionState = { ...session, room: { url, at: Date.now() } };
+  next = appendTranscript(next, "user", content);
+
+  // A dimensions run was promised zone renders and was only ever waiting on
+  // a photo. Honour that instead of asking the model what to do with it.
+  if (next.pendingZoneRender && next.plan.ids.length) {
+    next = { ...next, pendingZoneRender: false };
+    return renderPlanByZoneTurn(next, sessionKey, phone);
+  }
+
+  return runChatTurn(next, sessionKey, phone);
+}
+
+/**
+ * The only way a turn enters the conversation. Ported from `sendTurn` — the
+ * scripted flow (`wa-flow.ts`) gets first refusal and the model is the
+ * fallback, not the default.
+ */
+export async function handleInboundMessage(
+  session: SessionState,
+  sessionKey: string,
+  /** Digits-only WhatsApp number. Never persisted to `session` or the
+   * `sessions` table — threaded through only as far as a render enqueue,
+   * which is the one place it needs to reach (see wa-phone-crypto.server.ts). */
+  phone: string,
+  event: InboundEvent,
+): Promise<RuntimeResult> {
+  if (session.handoff) return { session, turns: [] };
+
+  if (event.kind === "text" && wantsHandoff(event.text)) {
+    return { session: { ...session, handoff: true }, turns: [{ kind: "text", text: HANDOFF_ACK }] };
+  }
+
+  // The greeting-with-three-buttons is what a customer meets on the web the
+  // instant the page opens. WhatsApp has no equivalent of "before any input"
+  // — a business number can't message first outside an approved template —
+  // so it rides along ahead of the reply to their very first message
+  // instead, and (like the web's pre-seeded greetingMessage()) joins the
+  // transcript before anything the customer said, so chat() replays history
+  // in the same order a browser session would have built it. Skipped when
+  // that first message is already a plain greeting: advance() returns the
+  // identical welcome() reply for that case on its own, and sending it twice
+  // would just be noise.
+  const greetFirst = session.transcript.length === 0;
+  const alreadyGreeting = event.kind === "text" && isGreeting(event.text.trim());
+  let working = session;
+  const turns: WaTurn[] = [];
+  if (greetFirst && !alreadyGreeting) {
+    const hello = welcome();
+    working = appendTranscript(working, "assistant", hello.text);
+    turns.push({
+      kind: "buttons",
+      text: hello.text,
+      action: hello.action as WaAction & { kind: "buttons" },
+    });
+  }
+
+  let result: RuntimeResult;
+  if (event.kind === "photo") {
+    result = await handlePhoto(working, sessionKey, phone, event.url, event.caption);
+  } else if (event.kind === "text" || event.kind === "button") {
+    const text = event.kind === "button" ? `wa:${event.id}` : event.text.trim();
+    if (!text) return { session: working, turns };
+    result = await route(
+      working,
+      sessionKey,
+      phone,
+      text,
+      event.kind === "button" ? event.id : undefined,
+    );
+  } else {
+    result = {
+      session: working,
+      turns: [
+        {
+          kind: "text",
+          text: "I can read text, taps and photos of your space — could you try that again?",
+        },
+      ],
+    };
+  }
+
+  return { session: result.session, turns: [...turns, ...result.turns] };
+}
+
+// Re-exported so wa-webhook.server.ts / a future admin tool can build an
+// "expected" list against a job the same way index.tsx's expectedFor() does.
+export { expectedFrom };

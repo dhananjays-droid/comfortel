@@ -116,6 +116,153 @@ export type Database = {
         }
         Relationships: []
       }
+      sessions: {
+        Row: {
+          channel: string
+          created_at: string
+          expires_at: string
+          flow: Json
+          handoff: boolean
+          id: string
+          offered: Json | null
+          pending_zone_render: boolean
+          plan: Json
+          room_at: string | null
+          room_spec_depth_cm: number | null
+          room_spec_wall_cm: number | null
+          room_url: string | null
+          session_key: string
+          transcript: Json
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          flow?: Json
+          handoff?: boolean
+          id?: string
+          offered?: Json | null
+          pending_zone_render?: boolean
+          plan?: Json
+          room_at?: string | null
+          room_spec_depth_cm?: number | null
+          room_spec_wall_cm?: number | null
+          room_url?: string | null
+          session_key: string
+          transcript?: Json
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          flow?: Json
+          handoff?: boolean
+          id?: string
+          offered?: Json | null
+          pending_zone_render?: boolean
+          plan?: Json
+          room_at?: string | null
+          room_spec_depth_cm?: number | null
+          room_spec_wall_cm?: number | null
+          room_url?: string | null
+          session_key?: string
+          transcript?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wa_messages: {
+        Row: {
+          created_at: string
+          direction: string
+          id: string
+          kind: string
+          payload: Json
+          session_key: string
+          wa_message_id: string
+        }
+        Insert: {
+          created_at?: string
+          direction: string
+          id?: string
+          kind: string
+          payload?: Json
+          session_key: string
+          wa_message_id: string
+        }
+        Update: {
+          created_at?: string
+          direction?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          session_key?: string
+          wa_message_id?: string
+        }
+        Relationships: []
+      }
+      wa_render_jobs: {
+        Row: {
+          attempt: number
+          created_at: string
+          customer_phone_enc: string
+          error: string | null
+          id: string
+          kie_task_id: string | null
+          mode: string
+          product_ids: string[]
+          quantities: Json
+          result_url: string | null
+          room_depth_cm: number | null
+          room_url: string | null
+          room_wall_cm: number | null
+          scene: string | null
+          session_key: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt?: number
+          created_at?: string
+          customer_phone_enc: string
+          error?: string | null
+          id?: string
+          kie_task_id?: string | null
+          mode: string
+          product_ids: string[]
+          quantities?: Json
+          result_url?: string | null
+          room_depth_cm?: number | null
+          room_url?: string | null
+          room_wall_cm?: number | null
+          scene?: string | null
+          session_key: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempt?: number
+          created_at?: string
+          customer_phone_enc?: string
+          error?: string | null
+          id?: string
+          kie_task_id?: string | null
+          mode?: string
+          product_ids?: string[]
+          quantities?: Json
+          result_url?: string | null
+          room_depth_cm?: number | null
+          room_url?: string | null
+          room_wall_cm?: number | null
+          scene?: string | null
+          session_key?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
