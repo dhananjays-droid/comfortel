@@ -301,6 +301,49 @@ function explain(pkg: Package, balanced: Package, budget: number): string[] {
  * which is where most people land and where it should be honest rather than
  * engineered.
  */
+/** A salon bigger than this is a chain, not a room. */
+export const MAX_STATIONS = 20;
+
+/**
+ * How many stations a budget actually buys.
+ *
+ * Used when someone gives a budget and no station count. The default of four
+ * was silently wrong for any generous budget: a four-station salon saturates at
+ * about $17,000 because that is the dearest four-station set the catalogue
+ * contains, so $30,000, $50,000 and $100,000 all returned the same three
+ * identical packages, each labelled as though it were a different choice.
+ *
+ * $50,000 does not mean a gold-plated four-chair salon. It means a bigger one.
+ * Rather than guess a cost per station, this asks the packer: the answer is the
+ * largest salon whose balanced package still fits.
+ */
+export function stationsForBudget(budget: number): number {
+  let best = 1;
+  for (let n = 1; n <= MAX_STATIONS; n++) {
+    const { total } = packFor(budget, needsFor(n));
+    if (total > budget) break;
+    best = n;
+  }
+  return best;
+}
+
+/**
+ * Distinct packages only.
+ *
+ * Once a budget exceeds what its station count can absorb, every tier converges
+ * on the same maximum set — and offering three identical totals under "Under
+ * budget", "On budget" and "Stretch" is a lie told three times. Where they
+ * collapse, say so with one.
+ */
+export function distinctPackages(packages: Package[]): Package[] {
+  const seen = new Set<number>();
+  return packages.filter((p) => {
+    if (seen.has(p.total)) return false;
+    seen.add(p.total);
+    return true;
+  });
+}
+
 export function buildPackages(budget: number, needs: Need[]): Package[] {
   const raw = (["lean", "balanced", "premium"] as const).map((tier) => {
     const { lines, total } = packFor(budget * TIER_TARGET[tier], needs);
