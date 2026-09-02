@@ -411,17 +411,25 @@ invoked by Vercel Cron hitting `/api/cron/wa-render-worker`:
    want me to try again?" rather than nothing.
 7. Respond `200` with a small summary (`{ claimed, done, failed }`) for Vercel Cron's log.
 
-**Cadence — needs a decision at setup time, not guessed here:** Vercel Cron's minimum
-interval is once every 60 seconds, and *per-minute* cron schedules require a Pro (or
-higher) plan — Hobby-tier projects are limited to once/day. Confirm the project's Vercel
-plan before relying on a 1-minute schedule; if stuck on Hobby, either upgrade or fall
-back to an external pinger (e.g. cron-job.org hitting the same authenticated endpoint
-every 30-60s) hitting the same `/api/cron/wa-render-worker` path — the endpoint code
-doesn't change either way, only what schedules it. `vercel.json`:
+**Cadence — decided: Hobby plan, external pinger.** Vercel Cron's minimum interval is
+once every 60 seconds, but *per-minute* schedules require Pro or higher — Hobby is
+capped at once/day. The project is on Hobby for now (Pro is a later decision if it
+turns out to be needed), so `vercel.json`'s own cron entry is set to a **once-daily
+fallback safety net** (`"0 0 * * *"`, midnight UTC — the only thing Hobby allows) rather
+than the real driver:
 
 ```json
-{ "crons": [{ "path": "/api/cron/wa-render-worker", "schedule": "* * * * *" }] }
+{ "crons": [{ "path": "/api/cron/wa-render-worker", "schedule": "0 0 * * *" }] }
 ```
+
+The actual near-real-time polling comes from an **external pinger** — a free service
+(e.g. [cron-job.org](https://cron-job.org)) configured to hit
+`https://<deployed-url>/api/cron/wa-render-worker` every 1-2 minutes with header
+`Authorization: Bearer $CRON_SECRET`. The endpoint doesn't care who calls it, only that
+the header matches — `handleRenderWorkerTick`'s own auth check is identical either way,
+so nothing in the code changes based on which scheduler is used. If the project later
+moves to Pro, the `vercel.json` schedule can simply change to `"* * * * *"` and the
+external pinger becomes redundant (harmless to also switch off at that point).
 
 ---
 
