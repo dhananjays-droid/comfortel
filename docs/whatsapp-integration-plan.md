@@ -165,6 +165,9 @@ src/lib/wa-media.server.ts          Inbound photo download (Meta Media API) + ou
                                      durable re-host (new Supabase Storage bucket, 'wa-media')
 src/lib/wa-phone-crypto.server.ts   encryptPhone/decryptPhone (AES-256-GCM) — NEW, not in the
                                      original spec; see §4's correction on wa_render_jobs.
+src/lib/wa-rate-limit.server.ts     tooManyInboundMessages/tooManyRenderRequests (build-order
+                                     item 14) — windowed counts against wa_messages/
+                                     wa_render_jobs directly, no new table.
 src/lib/wa-markdown.ts              Claude's **bold**/lists → WhatsApp's *bold*/_italic_
 supabase/migrations/20260902000000_wa_platform.sql   sessions, wa_messages, wa_render_jobs,
                                      the 'wa-media' storage bucket
@@ -173,6 +176,7 @@ src/lib/__tests__/wa-session.test.ts
 src/lib/__tests__/wa-runtime.test.ts
 src/lib/__tests__/wa-markdown.test.ts
 src/lib/__tests__/wa-phone-crypto.test.ts
+src/lib/__tests__/wa-rate-limit.test.ts
 src/lib/__tests__/wa-render-worker.test.ts   (auth-guard only — see §14/§15 on why the
                                      claim/start/poll/finish orchestration itself isn't
                                      unit-tested, matching visualize.functions.ts/
@@ -646,15 +650,27 @@ neither of which a coding session can do on its own.
     → rendered image back, for real.
 
 **Phase 5 — production readiness**
-12. App Review/Advanced Access (§12 step 7), template approval (§12 step 8, §10).
-13. Load the real business number, re-run the Phase 4 end-to-end test against it.
-14. Rate-limit/abuse guard on the webhook: a phone number sending 50 messages/minute
-    should not enqueue 50 renders. Size a per-`session_key` sliding-window cap (e.g. N
-    inbound messages / N render enqueues per minute, tracked via a count column or a
-    lightweight counter table) against actual expected launch volume before going live
-    — the concrete mechanism is a check inside `wa-webhook.server.ts` before calling
-    `handleInboundMessage()`, and inside `startRender` before inserting a
-    `wa_render_jobs` row.
+12. **Blocked on §12 setup** — App Review/Advanced Access (§12 step 7), template
+    approval (§12 step 8, §10). Can't start until the Meta app exists and a working
+    test-number integration is demonstrable — Meta's review process requires showing
+    the bot actually working.
+13. **Blocked on §12/13** — load the real business number, re-run the Phase 4
+    end-to-end test against it.
+14. **Done.** Rate-limit/abuse guard: `wa-rate-limit.server.ts` — `tooManyInboundMessages()`
+    (20 inbound messages / 60s per `session_key`, checked in `wa-webhook.server.ts`
+    before any dispatch, over-limit messages dropped silently since replying also
+    bills a conversation) and `tooManyRenderRequests()` (5 renders / 5 min per
+    `session_key`, checked at the top of `wa-runtime.ts`'s `startRenderTurn` and
+    `renderPlanByZoneTurn`, over-limit gets an explanation rather than silence — a
+    real customer can legitimately hit this one). No new table: both windowed counts
+    query `wa_messages`/`wa_render_jobs` directly, since they already log exactly
+    what's needed (`session_key` + `created_at`) for audit purposes. Fails open on
+    any DB error, same resilience stance as every other store in this channel —
+    logged loudly either way. Thresholds are a starting point, explicitly not sized
+    against real traffic yet (unknown at build time) — revisit once there's launch
+    volume to look at. 2 tests verify the fail-open behavior (the actual
+    over-threshold behavior needs a real database, same testing-boundary stance as
+    `wa-render-worker.test.ts`).
 
 ---
 

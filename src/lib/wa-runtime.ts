@@ -30,6 +30,7 @@ import { curatePackages } from "@/lib/curate.functions";
 import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
+import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
 import { genericCapacity } from "@/lib/room";
 import { enqueueRenderJob } from "@/lib/wa-render-jobs.server";
 import {
@@ -71,6 +72,14 @@ export type WaTurn =
   | { kind: "text"; text: string }
   | { kind: "buttons"; text: string; action: WaAction & { kind: "buttons" } }
   | { kind: "list"; text: string; action: WaAction & { kind: "list" } };
+
+/** A real customer can legitimately hit the render rate limit (unlike a
+ * message flood, which is dropped silently) — this gets an explanation
+ * rather than a dropped request. See wa-rate-limit.server.ts. */
+const RATE_LIMITED_TURN: WaTurn = {
+  kind: "text",
+  text: "That's a few renders in a row — give it a few minutes and ask again and I'll get started.",
+};
 
 export type InboundEvent =
   | { kind: "text"; text: string }
@@ -129,6 +138,8 @@ async function startRenderTurn(
   photo: SessionRoomPhoto | null,
   quantities: Record<string, number> | undefined,
 ): Promise<RuntimeResult> {
+  if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
+
   const ids = products.map((p) => p.id);
   const roomSpec = session.roomSpec ?? undefined;
   const groups: string[][] = isMultiReferenceMode(mode) ? [ids] : ids.map((id) => [id]);
@@ -181,6 +192,7 @@ async function renderPlanByZoneTurn(
 ): Promise<RuntimeResult> {
   const planProducts = planProductsOf(session);
   if (!planProducts.length) return { session, turns: [] };
+  if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const photo = liveRoom(session.room);
   const groups = groupByZone(planProducts);

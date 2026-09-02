@@ -21,6 +21,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { tooManyInboundMessages } from "@/lib/wa-rate-limit.server";
 import { receiveRoomPhoto } from "@/lib/wa-media.server";
 import { sendButtons, sendList, sendText } from "@/lib/wa-client.server";
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
@@ -227,6 +228,15 @@ async function handleReceive(request: Request): Promise<Response> {
     const sessionKey = waSessionKey(message.from);
     const isNew = await recordInboundIfNew(message, sessionKey);
     if (!isNew) continue;
+
+    // Checked before doing any real work (including resolving a photo,
+    // which is its own Graph API round trip) — a flood gets dropped
+    // silently rather than answered, since replying to it also bills a
+    // conversation under WhatsApp's per-message pricing (plan §10).
+    if (await tooManyInboundMessages(sessionKey)) {
+      console.warn("WhatsApp rate limit: too many inbound messages", { sessionKey });
+      continue;
+    }
 
     const event = await toInboundEvent(message);
     if (!event) {
