@@ -25,8 +25,13 @@
  */
 
 import { CATALOG_FULL, getProduct, formatPrice, type FullProduct } from "@/lib/catalog";
-import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.functions";
-import { curatePackages } from "@/lib/curate.functions";
+import {
+  parseChatInput,
+  runChatTurn as runChatCore,
+  type ChatMessageInput,
+  type RenderRequest,
+} from "@/lib/chat.functions";
+import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
 import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
@@ -247,7 +252,7 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
 
   let packages = buildPackages(budget, needsFor(stations));
   try {
-    const curated = await curatePackages({ data: { brief: text, stations, budget } });
+    const curated = await runCuratePackages(parseCurateInput({ brief: text, stations, budget }));
     if (curated.packages.length) packages = curated.packages;
   } catch {
     /* the local packer is the fallback, not an error worth showing */
@@ -371,7 +376,9 @@ async function runChatTurn(
 
   let res;
   try {
-    res = await chat({ data: { messages: payload, hasRoomPhoto: room !== null, plan } });
+    res = await runChatCore(
+      parseChatInput({ messages: payload, hasRoomPhoto: room !== null, plan }),
+    );
   } catch (err) {
     console.error("wa-runtime: chat failed", err);
     return {

@@ -31,8 +31,13 @@ import {
   shouldRetry,
   type Verdict,
 } from "@/lib/render-qa";
-import { inspectRender } from "@/lib/render-qa.functions";
-import { visualizeStart, visualizeStatus } from "@/lib/visualize.functions";
+import { parseInspectRender, runInspectRender } from "@/lib/render-qa.functions";
+import {
+  parseVisualizeStart,
+  parseVisualizeStatus,
+  runVisualizeStart,
+  runVisualizeStatus,
+} from "@/lib/visualize.functions";
 import type { VisualizeMode } from "@/lib/visualize-prompt";
 import { sendImage, sendText } from "@/lib/wa-client.server";
 import { rehostRender } from "@/lib/wa-media.server";
@@ -199,7 +204,7 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
   const expected = expectedForJob(job);
   let verdict: Verdict;
   try {
-    verdict = await inspectRender({ data: { imageUrl, expected } });
+    verdict = await runInspectRender(parseInspectRender({ imageUrl, expected }));
   } catch {
     verdict = { ok: true, faults: [] };
   }
@@ -207,8 +212,8 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
   if (shouldRetry(verdict, job.attempt)) {
     try {
       const roomImageBase64 = job.room_url ? await base64FromUrl(job.room_url) : "";
-      const retried = await visualizeStart({
-        data: {
+      const retried = await runVisualizeStart(
+        parseVisualizeStart({
           productIds: job.product_ids,
           roomImageBase64,
           mode: job.mode,
@@ -219,8 +224,8 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
             ? { quantities: job.quantities }
             : {}),
           ...(roomFor(job) ? { room: roomFor(job) } : {}),
-        },
-      });
+        }),
+      );
       if (retried.imageUrl) {
         await deliverImage(job, retried.imageUrl, verdict, job.attempt + 1);
         return;
@@ -246,8 +251,8 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
 async function startJob(job: RenderJobRow): Promise<void> {
   try {
     const roomImageBase64 = job.room_url ? await base64FromUrl(job.room_url) : "";
-    const started = await visualizeStart({
-      data: {
+    const started = await runVisualizeStart(
+      parseVisualizeStart({
         productIds: job.product_ids,
         roomImageBase64,
         mode: job.mode,
@@ -257,8 +262,8 @@ async function startJob(job: RenderJobRow): Promise<void> {
           ? { quantities: job.quantities }
           : {}),
         ...(roomFor(job) ? { room: roomFor(job) } : {}),
-      },
-    });
+      }),
+    );
 
     if (started.imageUrl) {
       await finishJob(job, started.imageUrl);
@@ -283,7 +288,7 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
   if (!job.kie_task_id) return "pending";
 
   try {
-    const res = await visualizeStatus({ data: { taskId: job.kie_task_id } });
+    const res = await runVisualizeStatus(parseVisualizeStatus({ taskId: job.kie_task_id }));
     if (res.done && res.imageUrl) {
       await finishJob(job, res.imageUrl);
       return "done";

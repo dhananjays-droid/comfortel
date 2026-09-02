@@ -172,13 +172,25 @@ export type CuratedResult = {
   curated: boolean;
 };
 
-export const curatePackages = createServerFn({ method: "POST" })
-  .validator((input: { brief?: string; stations: number; budget: number }) => {
+/**
+ * Plain-function core, plus a thin server-function wrapper.
+ *
+ * The WhatsApp webhook is a raw route with no TanStack request context, so
+ * calling the server function from there throws "No Start context found in
+ * AsyncLocalStorage". The logic lives in a normal function both callers share.
+ */
+export function parseCurateInput(input: { brief?: string; stations: number; budget: number }) {
+  {
     const stations = Math.max(1, Math.min(20, Math.round(input?.stations ?? 4)));
     const budget = Math.max(500, Math.round(input?.budget ?? 15000));
     return { brief: (input?.brief ?? "").slice(0, 800), stations, budget };
-  })
-  .handler(async ({ data }): Promise<CuratedResult> => {
+  }
+}
+
+export type CurateInput = ReturnType<typeof parseCurateInput>;
+
+export async function runCuratePackages(data: CurateInput): Promise<CuratedResult> {
+  {
     const fallback = (): CuratedResult => ({
       packages: buildPackages(data.budget, needsFor(data.stations)),
       curated: false,
@@ -296,4 +308,10 @@ export const curatePackages = createServerFn({ method: "POST" })
       console.error("curate: failed", err);
       return fallback();
     }
-  });
+  }
+}
+
+/** The browser's entry point. Same validation, same logic. */
+export const curatePackages = createServerFn({ method: "POST" })
+  .validator(parseCurateInput)
+  .handler(async ({ data }): Promise<CuratedResult> => runCuratePackages(data));

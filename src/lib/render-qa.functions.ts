@@ -100,71 +100,82 @@ function askFor(expected: Expected[]): string {
 /** The plan can hold ten lines, so the count list cannot be longer. */
 const MAX_EXPECTED = 10;
 
-export const inspectRender = createServerFn({ method: "POST" })
-  .validator((input: { imageUrl: string; expected?: Expected[] }) => {
-    const url = String(input?.imageUrl ?? "");
-    // Only ever fetch renders from where our generator puts them.
-    const allowed = /^https:\/\/[\w.-]*(aiquickdraw\.com|redpandaai\.co)\//i.test(url);
-    if (!allowed) throw new Error("unexpected render host");
+/**
+ * Plain-function core, plus a thin server-function wrapper — same reason as
+ * visualizeStart above: raw routes have no TanStack request context.
+ */
+export function parseInspectRender(input: { imageUrl: string; expected?: Expected[] }) {
+  const url = String(input?.imageUrl ?? "");
+  // Only ever fetch renders from where our generator puts them.
+  const allowed = /^https:\/\/[\w.-]*(aiquickdraw\.com|redpandaai\.co)\//i.test(url);
+  if (!allowed) throw new Error("unexpected render host");
 
-    const expected: Expected[] = (Array.isArray(input?.expected) ? input.expected : [])
-      .filter((e) => typeof e?.name === "string" && e.name.trim().length > 0)
-      .map((e) => ({
-        name: e.name.trim().slice(0, 120),
-        qty: Math.min(20, Math.max(1, Math.round(Number(e.qty) || 1))),
-      }))
-      .slice(0, MAX_EXPECTED);
+  const expected: Expected[] = (Array.isArray(input?.expected) ? input.expected : [])
+    .filter((e) => typeof e?.name === "string" && e.name.trim().length > 0)
+    .map((e) => ({
+      name: e.name.trim().slice(0, 120),
+      qty: Math.min(20, Math.max(1, Math.round(Number(e.qty) || 1))),
+    }))
+    .slice(0, MAX_EXPECTED);
 
-    return { imageUrl: url, expected };
-  })
-  .handler(async ({ data }): Promise<Verdict> => {
-    const apiKey = process.env["ANTHROPIC_API_KEY"];
-    if (!apiKey) return PASS;
+  return { imageUrl: url, expected };
+}
 
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 512,
-          system: SYSTEM,
-          tool_choice: { type: "tool", name: TOOL.name },
-          tools: [TOOL],
-          messages: [
-            {
-              role: "user",
-              content: [
-                // A URL source keeps the image off our server entirely; kie's
-                // CDN is already public for the lifetime of the render.
-                { type: "image", source: { type: "url", url: data.imageUrl } },
-                { type: "text", text: askFor(data.expected) },
-              ],
-            },
-          ],
-        }),
-      });
+export type InspectRenderData = ReturnType<typeof parseInspectRender>;
 
-      if (!res.ok) {
-        console.error("inspect: anthropic error", res.status, await res.text());
-        return PASS;
-      }
+export async function runInspectRender(data: InspectRenderData): Promise<Verdict> {
+  const apiKey = process.env["ANTHROPIC_API_KEY"];
+  if (!apiKey) return PASS;
 
-      const json = (await res.json()) as {
-        content?: Array<{ type: string; name?: string; input?: unknown }>;
-      };
-      const call = json.content?.find((b) => b.type === "tool_use" && b.name === TOOL.name);
-      const verdict = readVerdict(call?.input);
-      if (!verdict.ok) {
-        console.warn(`inspect: ${verdict.faults.join(", ")} — ${verdict.note ?? "no detail"}`);
-      }
-      return verdict;
-    } catch (err) {
-      console.error("inspect: failed", err);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 512,
+        system: SYSTEM,
+        tool_choice: { type: "tool", name: TOOL.name },
+        tools: [TOOL],
+        messages: [
+          {
+            role: "user",
+            content: [
+              // A URL source keeps the image off our server entirely; kie's
+              // CDN is already public for the lifetime of the render.
+              { type: "image", source: { type: "url", url: data.imageUrl } },
+              { type: "text", text: askFor(data.expected) },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("inspect: anthropic error", res.status, await res.text());
       return PASS;
     }
-  });
+
+    const json = (await res.json()) as {
+      content?: Array<{ type: string; name?: string; input?: unknown }>;
+    };
+    const call = json.content?.find((b) => b.type === "tool_use" && b.name === TOOL.name);
+    const verdict = readVerdict(call?.input);
+    if (!verdict.ok) {
+      console.warn(`inspect: ${verdict.faults.join(", ")} — ${verdict.note ?? "no detail"}`);
+    }
+    return verdict;
+  } catch (err) {
+    console.error("inspect: failed", err);
+    return PASS;
+  }
+}
+
+/** Entry point for the browser. Same validation, same logic. */
+export const inspectRender = createServerFn({ method: "POST" })
+  .validator(parseInspectRender)
+  .handler(async ({ data }): Promise<Verdict> => runInspectRender(data));
