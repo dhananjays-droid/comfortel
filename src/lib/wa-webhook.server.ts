@@ -23,7 +23,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { tooManyInboundMessages } from "@/lib/wa-rate-limit.server";
 import { receiveRoomPhoto } from "@/lib/wa-media.server";
-import { sendButtons, sendList, sendText } from "@/lib/wa-client.server";
+import { sendButtons, sendImage, sendList, sendText } from "@/lib/wa-client.server";
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
 import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-runtime";
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
@@ -178,8 +178,11 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
       wa_message_id: waMessageId,
       direction: "outbound",
       session_key: sessionKey,
-      kind: turn.kind === "text" ? "text" : "interactive",
-      payload: { text: turn.text },
+      kind: turn.kind === "text" ? "text" : turn.kind === "product" ? "image" : "interactive",
+      payload:
+        turn.kind === "product"
+          ? { imageUrl: turn.imageUrl, caption: turn.caption }
+          : { text: turn.text },
     });
     if (error) console.error("logOutbound failed", error);
   } catch (err) {
@@ -190,13 +193,14 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
 async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise<void> {
   for (const turn of turns) {
     try {
-      const text = toWhatsAppMarkdown(turn.text);
       const waMessageId =
         turn.kind === "buttons"
-          ? await sendButtons(to, text, turn.action)
+          ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
           : turn.kind === "list"
-            ? await sendList(to, text, turn.action)
-            : await sendText(to, text);
+            ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
+            : turn.kind === "product"
+              ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
+              : await sendText(to, toWhatsAppMarkdown(turn.text));
       await logOutbound(waMessageId, sessionKey, turn);
     } catch (err) {
       // One turn failing to send (e.g. a rejected token) shouldn't stop the

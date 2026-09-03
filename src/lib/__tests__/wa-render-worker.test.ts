@@ -1,17 +1,40 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { handleRenderWorkerTick } from "@/lib/wa-render-worker.server";
+import { handleRenderWorkerTick, renderCta } from "@/lib/wa-render-worker.server";
+import { VISUALIZE_MODES } from "@/lib/visualize-prompt";
 
 /**
- * Only the cron-secret auth guard is unit-tested here — it's the one thing
- * in this file that's both security-relevant and exercisable without a live
- * kie.ai/Anthropic/Supabase call. The claim/start/poll/finish orchestration
- * wraps visualizeStart/visualizeStatus/inspectRender directly (same as
+ * Only the cron-secret auth guard and the pure renderCta() helper are
+ * unit-tested here. The claim/start/poll/finish orchestration wraps
+ * visualizeStart/visualizeStatus/inspectRender directly (same as
  * index.tsx's runRender/finish()), which this repo doesn't unit-test
  * anywhere else either (visualize.functions.ts and kie.server.ts have zero
  * automated coverage) — that path is verified manually against Meta's test
  * number per the implementation plan's testing section instead.
  */
+
+describe("renderCta", () => {
+  it("returns a non-empty, mode-appropriate line for every real mode", () => {
+    for (const mode of VISUALIZE_MODES) {
+      const cta = renderCta(mode);
+      expect(cta.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("suggests a plan/quote next step for whole-room modes", () => {
+    expect(renderCta("staged_room")).toContain("plan");
+    expect(renderCta("refit_room")).toContain("plan");
+  });
+
+  it("asks which option for a lineup, since several are shown at once", () => {
+    expect(renderCta("lineup").toLowerCase()).toContain("which");
+  });
+
+  it("gives placement modes a shorter, single-product nudge", () => {
+    expect(renderCta("add")).toBe(renderCta("replace"));
+    expect(renderCta("add")).toBe(renderCta("replace_all"));
+  });
+});
 
 const ORIGINAL_SECRET = process.env["CRON_SECRET"];
 afterEach(() => {

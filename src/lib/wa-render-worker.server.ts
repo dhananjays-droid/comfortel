@@ -174,6 +174,27 @@ async function deliverFailure(job: RenderJobRow, message: string): Promise<void>
   }
 }
 
+/**
+ * The one place a finished render actually reaches the customer — and, on
+ * WhatsApp, the chat model never gets a turn at delivery time to suggest
+ * anything, since this send happens later, asynchronously, from the render
+ * worker rather than from the reply that requested it. Without this, "here's
+ * your render" was a dead end: no invitation to act while they're actually
+ * looking at the result, which is the single highest-intent moment in the
+ * whole conversation. Short and mode-appropriate rather than one reused
+ * line, so a multi-image delivery (a zone split, a lineup) doesn't read as
+ * the same canned sentence copy-pasted under every photo.
+ */
+export function renderCta(mode: VisualizeMode): string {
+  if (mode === "staged_room" || mode === "refit_room") {
+    return "Like the direction? I can add these to your plan or get you a quote.";
+  }
+  if (mode === "lineup") {
+    return "See one you like? Tell me which and I'll add it to your plan.";
+  }
+  return "Want this added to your plan?";
+}
+
 async function deliverImage(
   job: RenderJobRow,
   imageUrl: string,
@@ -184,12 +205,14 @@ async function deliverImage(
   // the re-host fails — kie's own CDN survives long enough for one delivery.
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
   const note = shortfallNote(shortfallFrom(expectedForJob(job), verdict), verdict.elsewhere);
+  const cta = renderCta(job.mode);
+  const caption = note ? `${note}\n\n${cta}` : cta;
 
   await updateJob(job.id, { status: "done", result_url: durableUrl, attempt });
 
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendImage(phone, durableUrl, note || undefined);
+    await sendImage(phone, durableUrl, caption);
   } catch (err) {
     console.error("deliverImage: send failed", err);
     await updateJob(job.id, { status: "failed", error: "send failed" });

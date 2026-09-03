@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CATALOG_FULL } from "@/lib/catalog";
-import { handleInboundMessage } from "@/lib/wa-runtime";
+import { handleInboundMessage, productTurns } from "@/lib/wa-runtime";
 import { EMPTY_SESSION, type SessionState } from "@/lib/wa-session";
 
 /**
@@ -267,5 +267,40 @@ describe("handleInboundMessage — unsupported input", () => {
     });
     expect(turns).toHaveLength(1);
     expect(turns[0]?.kind).toBe("text");
+  });
+});
+
+describe("productTurns", () => {
+  it("turns a real product id into an image turn with name, price and link", () => {
+    const product = CATALOG_FULL[REAL_ID]!;
+    const turns = productTurns([REAL_ID]);
+    expect(turns).toHaveLength(1);
+    const turn = turns[0]!;
+    expect(turn.kind).toBe("product");
+    if (turn.kind === "product") {
+      expect(turn.imageUrl).toBe(product.images[0]);
+      expect(turn.caption).toContain(product.name);
+      expect(turn.caption).toContain(product.url);
+    }
+  });
+
+  it("drops an id that doesn't resolve against the real catalog", () => {
+    expect(productTurns(["not-a-real-id"])).toHaveLength(0);
+  });
+
+  it("drops a real product that has no photo rather than sending a broken image", () => {
+    const noPhotoId = Object.keys(CATALOG_FULL).find((id) => CATALOG_FULL[id]!.images.length === 0);
+    if (noPhotoId) expect(productTurns([noPhotoId])).toHaveLength(0);
+  });
+
+  it("preserves order and handles several ids", () => {
+    const ids = Object.keys(CATALOG_FULL)
+      .filter((id) => CATALOG_FULL[id]!.images.length > 0)
+      .slice(0, 3);
+    const turns = productTurns(ids);
+    expect(turns).toHaveLength(ids.length);
+    turns.forEach((turn, i) => {
+      if (turn.kind === "product") expect(turn.imageUrl).toBe(CATALOG_FULL[ids[i]!]!.images[0]);
+    });
   });
 });

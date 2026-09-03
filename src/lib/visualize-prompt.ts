@@ -366,6 +366,15 @@ function realismClauses(): Clause[] {
       `Add a soft floor reflection of each base and contact shadows consistent with the room's existing ones.`,
       DROP.polish,
     ),
+    // Targets the specific tell that makes an otherwise-correct render read as
+    // AI-generated rather than a real photo: surfaces too smooth and uniform,
+    // colour too saturated and even, no lens character. Kept separate from the
+    // closing "Photorealistic" line below — that line asks for the right
+    // OUTCOME, this one names the visual qualities that get it there.
+    opt(
+      `Render surfaces with real material texture, not a smooth CGI sheen — visible fabric weave or leather grain, metal that shows soft reflections of the room around it rather than a mirror-clean finish. Match the existing photo's exposure, white balance and slight lens softness; do not render the new pieces brighter, sharper or more saturated than the room they're standing in.`,
+      DROP.polish,
+    ),
     req(
       `Photorealistic — an unedited photograph of this salon with these products actually installed.`,
     ),
@@ -561,6 +570,14 @@ function buildStagedPrompt(
     ),
     opt(
       `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or salon lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
+    ),
+    // This mode alone has no existing photo to match, so composition is a
+    // free choice rather than fixed by the room clause in realismClauses() —
+    // the same "looks AI-generated" tell shows up here as a perfectly
+    // centred, symmetric studio shot instead of an ordinary photograph.
+    opt(
+      `Frame it like a real interiors photograph someone actually took, not a centred studio render: a natural, slightly off-centre angle, light falling the way it would in a real room rather than perfectly even studio lighting, and a touch of everyday imperfection rather than a showroom-clean scene.`,
+      DROP.polish,
     ),
     opt(
       `Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.`,

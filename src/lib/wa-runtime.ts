@@ -76,7 +76,27 @@ function wantsHandoff(text: string): boolean {
 export type WaTurn =
   | { kind: "text"; text: string }
   | { kind: "buttons"; text: string; action: WaAction & { kind: "buttons" } }
-  | { kind: "list"; text: string; action: WaAction & { kind: "list" } };
+  | { kind: "list"; text: string; action: WaAction & { kind: "list" } }
+  | { kind: "product"; imageUrl: string; caption: string };
+
+/**
+ * The web app shows a rich `ProductCard` (photo, price, buttons) for every
+ * id in `res.productIds` via `ProductStrip` — WhatsApp has no equivalent
+ * widget, so this was silently dropped in the initial port, and a customer
+ * asking "show me its images" got nothing. The nearest WhatsApp primitive is
+ * a plain image message; one per product, in order, each with the name,
+ * price and a link to the full listing as the caption.
+ */
+export function productTurns(productIds: string[]): WaTurn[] {
+  return productIds
+    .map((id) => getProduct(id))
+    .filter((p): p is FullProduct => p !== undefined && p.images.length > 0)
+    .map((p) => ({
+      kind: "product" as const,
+      imageUrl: p.images[0]!,
+      caption: [`*${p.name}*`, formatPrice(p.price), p.url].filter(Boolean).join("\n"),
+    }));
+}
 
 /** A real customer can legitimately hit the render rate limit (unlike a
  * message flood, which is dropped silently) — this gets an explanation
@@ -174,11 +194,13 @@ async function startRenderTurn(
   const contentText =
     mode === "refit_room"
       ? "Here is your salon refitted with those Comfortel pieces — I'll send it over shortly."
-      : mode === "lineup"
-        ? `Here they are in your space, left to right: ${names.join(", ")}. I'll send it over shortly.`
-        : groups.length > 1
-          ? `Here are ${groups.length} options rendered into your space — I'll send each one as it's ready.`
-          : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space — on its way.`;
+      : mode === "staged_room"
+        ? "Building your plan, staged in a salon — I'll send it over shortly."
+        : mode === "lineup"
+          ? `Here they are in your space, left to right: ${names.join(", ")}. I'll send it over shortly.`
+          : groups.length > 1
+            ? `Here are ${groups.length} options rendered into your space — I'll send each one as it's ready.`
+            : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space — on its way.`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -405,6 +427,11 @@ async function runChatTurn(
   } else {
     turns.push({ kind: "text", text: res.text });
   }
+
+  // The web app shows a ProductCard per id via ProductStrip; this is the
+  // WhatsApp equivalent — one image message per product, right after the
+  // reply that named them.
+  turns.push(...productTurns(res.productIds));
 
   if (res.render && (room || res.render.mode === "staged_room")) {
     const products = res.render.productIds
