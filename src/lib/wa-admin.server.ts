@@ -70,7 +70,11 @@ export async function handleAdminStatus(request: Request): Promise<Response> {
     });
   } catch (err) {
     console.error("handleAdminStatus failed", err);
-    return new Response(JSON.stringify({ error: "internal error" }), {
+    // Safe to expose here — this endpoint is already bearer-protected and
+    // developer-only, and a vague "internal error" is exactly what makes a
+    // diagnostic tool useless when it's the one thing failing.
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { "content-type": "application/json" },
     });
