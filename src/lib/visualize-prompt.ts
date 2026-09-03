@@ -366,6 +366,15 @@ function realismClauses(): Clause[] {
       `Add a soft floor reflection of each base and contact shadows consistent with the room's existing ones.`,
       DROP.polish,
     ),
+    // Targets the specific tell that makes an otherwise-correct render read as
+    // AI-generated rather than a real photo: surfaces too smooth and uniform,
+    // colour too saturated and even, no lens character. Kept separate from the
+    // closing "Photorealistic" line below — that line asks for the right
+    // OUTCOME, this one names the visual qualities that get it there.
+    opt(
+      `Render surfaces with real material texture, not a smooth CGI sheen — visible fabric weave or leather grain, metal that shows soft reflections of the room around it rather than a mirror-clean finish. Match the existing photo's exposure, white balance and slight lens softness; do not render the new pieces brighter, sharper or more saturated than the room they're standing in.`,
+      DROP.polish,
+    ),
     req(
       `Photorealistic — an unedited photograph of this salon with these products actually installed.`,
     ),
