@@ -61,6 +61,7 @@ type RenderJobRow = {
   scene: string | null;
   kie_task_id: string | null;
   attempt: number;
+  created_at: string;
   updated_at: string;
 };
 
@@ -300,6 +301,29 @@ async function startJob(job: RenderJobRow): Promise<void> {
   }
 }
 
+/**
+ * A render genuinely takes 30-90s once kie.ai accepts the task (GUIDE.md:
+ * measured 80-98s), on top of however long it sat waiting for a cron tick to
+ * claim it — long enough that a customer who was told "about half a minute"
+ * can reasonably start wondering if anything is happening. One reassurance,
+ * sent once. There's no "already nudged" column (avoids a schema change for
+ * this), so it's a time window instead: wide enough that one ~60s-cadence
+ * tick almost always lands inside it, narrow enough that a second tick
+ * usually doesn't. Not a hard guarantee against a rare double-send — a
+ * second gentle nudge is a far better failure mode than silence.
+ */
+const NUDGE_WINDOW_START_MS = 75 * 1000;
+const NUDGE_WINDOW_END_MS = 135 * 1000;
+
+async function nudgeStillWorking(job: RenderJobRow): Promise<void> {
+  try {
+    const phone = decryptPhone(job.customer_phone_enc);
+    await sendText(phone, "Still working on it — almost there.");
+  } catch (err) {
+    console.error("nudgeStillWorking failed", err);
+  }
+}
+
 async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"> {
   if (Date.now() - new Date(job.updated_at).getTime() > STALE_MS) {
     await deliverFailure(job, "That render is taking longer than expected — want me to try again?");
@@ -315,6 +339,10 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
     if (res.done && res.imageUrl) {
       await finishJob(job, res.imageUrl);
       return "done";
+    }
+    const elapsed = Date.now() - new Date(job.created_at).getTime();
+    if (elapsed >= NUDGE_WINDOW_START_MS && elapsed < NUDGE_WINDOW_END_MS) {
+      await nudgeStillWorking(job);
     }
     return "pending";
   } catch (err) {
