@@ -62,6 +62,12 @@ const RAW_ROUTES: Record<string, (request: Request) => Promise<Response>> = {
     const { handleRenderWorkerTick } = await import("./lib/wa-render-worker.server");
     return handleRenderWorkerTick(request);
   },
+  // Developer diagnostics: recent wa_render_jobs + wa_messages, bearer-checked
+  // against the same CRON_SECRET. GET /api/admin/wa-status?limit=25&session_key=...
+  "/api/admin/wa-status": async (request) => {
+    const { handleAdminStatus } = await import("./lib/wa-admin.server");
+    return handleAdminStatus(request);
+  },
 };
 
 export default {
