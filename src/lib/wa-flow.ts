@@ -78,7 +78,7 @@ const MENU_BUTTONS = [
 export function welcome(): WaReply {
   return {
     // Kept short on purpose: a welcome that scrolls is a welcome nobody reads.
-    text: "Hi — Comfortel here. We fit out salons, barbershops and spas, and we can show you any piece standing in a photo of your own room.\n\nWhat would you like to do?",
+    text: "Hi, Comfortel here. We fit out salons, barbershops and spas, and we can show you any piece standing in a photo of your own room.\n\nWhat would you like to do?",
     action: { kind: "buttons", buttons: MENU_BUTTONS.map((b) => ({ ...b })) },
   };
 }
@@ -112,7 +112,7 @@ function buildIntake(): WaReply {
 function visualizeIntake(): WaReply {
   return {
     text: [
-      "Send me a photo of the room — one wide shot is plenty — and tell me what you'd like to see in it.",
+      "Send me a photo of the room (one wide shot is plenty) and tell me what you'd like to see in it.",
       "",
       'Anything from "a black styling chair" to "four stations with mirrors and a trolley". If you\'re not sure, just send the photo and I\'ll suggest something.',
     ].join("\n"),
@@ -123,7 +123,7 @@ function visualizeIntake(): WaReply {
 
 function askIntake(): WaReply {
   return {
-    text: "Ask away — the range, prices, dimensions, finishes, lead times. If it's about fitting out a salon, I can probably help.",
+    text: "Ask away: the range, prices, dimensions, finishes, lead times. If it's about fitting out a salon, I can probably help.",
   };
 }
 
@@ -159,7 +159,8 @@ export function describeIntake(intake: Intake): string {
   if (!intake.budget) missing.push("budget");
 
   const parts = [read.length ? `Read from that: ${read.join(", ")}.` : ""];
-  if (missing.length) parts.push(`Not given: ${missing.join(", ")} — assume a sensible default.`);
+  if (missing.length)
+    parts.push(`Not given: ${missing.join(", ")}, so I'll assume a sensible default.`);
   return parts.filter(Boolean).join(" ");
 }
 

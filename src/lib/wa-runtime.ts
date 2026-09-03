@@ -67,7 +67,7 @@ const DEFAULT_BUDGET = 15000;
 const HANDOFF_PHRASE =
   /\b(talk to (a )?(person|human|agent)|speak to (a )?(person|human|agent)|real (person|human)|human please|agent please)\b/i;
 const HANDOFF_ACK =
-  "Got it — I'll get a person to pick this up from here. They'll reply in this chat shortly.";
+  "Got it, I'll get a person to pick this up from here. They'll reply in this chat shortly.";
 
 function wantsHandoff(text: string): boolean {
   return HANDOFF_PHRASE.test(text);
@@ -103,7 +103,7 @@ export function productTurns(productIds: string[]): WaTurn[] {
  * rather than a dropped request. See wa-rate-limit.server.ts. */
 const RATE_LIMITED_TURN: WaTurn = {
   kind: "text",
-  text: "That's a few renders in a row — give it a few minutes and ask again and I'll get started.",
+  text: "That's a few renders in a row, give it a few minutes and ask again and I'll get started.",
 };
 
 /** Sent instead of a false "rendering now" confirmation when
@@ -112,7 +112,7 @@ const RATE_LIMITED_TURN: WaTurn = {
  * so the customer would be told a render had started when it never had. */
 const RENDER_FAILED_TURN: WaTurn = {
   kind: "text",
-  text: "Sorry — something went wrong starting that render. Please try again in a moment.",
+  text: "Sorry, something went wrong starting that render. Please try again in a moment.",
 };
 
 export type InboundEvent =
@@ -208,14 +208,14 @@ async function startRenderTurn(
   const names = products.map((p) => p.name).filter(Boolean);
   const contentText =
     mode === "refit_room"
-      ? "Here is your salon refitted with those Comfortel pieces — I'll send it over shortly."
+      ? "Here is your salon refitted with those Comfortel pieces, I'll send it over shortly."
       : mode === "staged_room"
-        ? "Building your plan, staged in a salon — I'll send it over shortly."
+        ? "Building your plan, staged in a salon. I'll send it over shortly."
         : mode === "lineup"
           ? `Here they are in your space, left to right: ${names.join(", ")}. I'll send it over shortly.`
           : groups.length > 1
-            ? `Here are ${groups.length} options rendered into your space — I'll send each one as it's ready.`
-            : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space — on its way.`;
+            ? `Here are ${groups.length} options rendered into your space, I'll send each one as it's ready.`
+            : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space, on its way.`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -258,7 +258,7 @@ async function renderPlanByZoneTurn(
   if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
-  const contentText = `Rendering your space zone by zone — ${zones}. I'll send each one as it's ready.`;
+  const contentText = `Rendering your space zone by zone: ${zones}. I'll send each one as it's ready.`;
   const next = appendTranscript(session, "assistant", contentText);
   return { session: next, turns: [{ kind: "text", text: contentText }] };
 }
@@ -307,10 +307,10 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
   next = { ...next, offered };
 
   const replyText = [
-    `${note} Here are three ways to do it — each is the most you can get at its price.`,
+    `${note} Here are three ways to do it, each is the most you can get at its price.`,
     "",
     ...packages.map(
-      (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
+      (p) => `*${TIER_LABEL[p.tier]}*: ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
     ),
   ].join("\n");
   next = appendTranscript(next, "assistant", replyText);
@@ -350,7 +350,7 @@ function acceptPackageChoice(
   next = appendTranscript(next, "user", userContent);
 
   const replyText = [
-    `Here is the ${TIER_LABEL[pkg.tier].toLowerCase()} package — ${summary}.`,
+    `Here is the ${TIER_LABEL[pkg.tier].toLowerCase()} package, ${summary}.`,
     ...pkg.reasons,
     choice.byZone
       ? "Add a photo of your room and I'll render it zone by zone."
@@ -423,7 +423,7 @@ async function runChatTurn(
     console.error("wa-runtime: chat failed", err);
     return {
       session,
-      turns: [{ kind: "text", text: "Sorry — I couldn't get an answer just now. Try that again?" }],
+      turns: [{ kind: "text", text: "Sorry, I couldn't get an answer just now. Try that again?" }],
     };
   }
 
@@ -497,7 +497,7 @@ async function route(
       turns: [
         {
           kind: "text",
-          text: "Those options have expired — tell me again what you're after (stations, budget, look) and I'll put together fresh ones.",
+          text: "Those options have expired, tell me again what you're after (stations, budget, look) and I'll put together fresh ones.",
         },
       ],
     };
@@ -662,7 +662,7 @@ export async function handleInboundMessage(
       turns: [
         {
           kind: "text",
-          text: "I can read text, taps and photos of your space — could you try that again?",
+          text: "I can read text, taps and photos of your space. Could you try that again?",
         },
       ],
     };
