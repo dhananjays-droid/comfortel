@@ -831,12 +831,17 @@ function Index() {
         if (res.render && (photo || res.render.mode === "staged_room")) {
           // The plan's quantities travel with it: when the model renders the
           // plan — which is what it is told to do for "show me these" — the
-          // picture has to hold the number the tray and the quote say.
+          // picture has to hold the number the tray and the quote say. A
+          // count named right in this request ("three Oakley chairs") was
+          // never added to the plan, so it wins for any id it names.
+          const quantities = res.render.quantities
+            ? { ...planQtyRef.current, ...res.render.quantities }
+            : planQtyRef.current;
           const { message, entries } = buildRenderMessage(
             res.render.mode,
             res.render.productIds,
             res.render.mode === "staged_room" ? null : photo,
-            planQtyRef.current,
+            quantities,
           );
           if (entries.length) {
             next.push(message);

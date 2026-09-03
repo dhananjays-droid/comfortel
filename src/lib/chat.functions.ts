@@ -7,7 +7,15 @@ import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 export type ChatMessageInput = { role: "user" | "assistant"; content: string };
 
-export type RenderRequest = { mode: VisualizeMode; productIds: string[] };
+export type RenderRequest = {
+  mode: VisualizeMode;
+  productIds: string[];
+  /** Per-id counts named in the marker itself, e.g. "three Oakley chairs" in
+   * an ad-hoc render request that never went through the plan tray. Absent
+   * for a single-of-each request. visualizeStart's own readQuantities()
+   * still clamps and validates whatever lands here. */
+  quantities?: Record<string, number> | undefined;
+};
 
 /**
  * What came back about rendering.
@@ -72,6 +80,11 @@ The customer can attach a photo of their salon with the photo button in the mess
 You can render products yourself by adding a second marker line:
   [RENDER: mode, id1, id2]
 - mode is one of: replace, replace_all, add, lineup, refit_room, staged_room
+- To ask for more than one of the same piece (refit_room and staged_room only,
+  since those are the modes that furnish a room), write id:count instead of a
+  bare id, e.g. [RENDER: staged_room, 330276:3]. "Three Oakley chairs in an
+  empty salon" is 330276:3, not the id repeated three times. Leave off the
+  count for one of something.
 
   ONE image (cheap — always prefer these when they fit):
   replace_all  — every matching piece in the room becomes the SAME product. "Replace all my chairs with the Blake."
@@ -354,23 +367,37 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
         // fallback reply — a real production bug, not a hypothetical one.
         if (!data.hasRoomPhoto && mode !== "staged_room") continue;
         const first = isVisualizeMode(parts[0]) ? 1 : 0;
+        // id:count (staged_room, refit_room) names how many of that piece —
+        // "three Oakley chairs in an empty salon" with no plan built yet had
+        // nowhere else to carry that 3, so it silently rendered one.
+        const renderQuantities: Record<string, number> = {};
         const renderIds = Array.from(
           new Set(
             parts
               .slice(first)
-              .filter((id) => id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)),
+              .map((token) => {
+                const [id, count] = token.split(":").map((t) => t.trim());
+                return { id: id ?? "", count };
+              })
+              .filter((t) => t.id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, t.id))
+              .map(({ id, count }) => {
+                const n = count ? Number.parseInt(count, 10) : NaN;
+                if (Number.isFinite(n) && n > 1) renderQuantities[id] = n;
+                return id;
+              }),
           ),
         ).slice(0, MAX_RENDERS);
         if (renderIds.length) {
+          const quantities = Object.keys(renderQuantities).length ? renderQuantities : undefined;
           // The second gate, and the one that matters. The photo lasts the
           // whole session, so "is a photo attached" was true on every turn
           // from the first upload onwards — which billed for half of an
           // ordinary conversation about a picture the customer already had.
           // Asking for a render is now the customer's move, not the model's.
           if (wantsRender(lastUserTurn(data.messages))) {
-            render = { mode, productIds: renderIds };
+            render = { mode, productIds: renderIds, quantities };
           } else {
-            offer = { mode, productIds: renderIds };
+            offer = { mode, productIds: renderIds, quantities };
           }
           break; // one render request per reply
         }

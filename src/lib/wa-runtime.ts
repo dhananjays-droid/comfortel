@@ -456,6 +456,13 @@ async function runChatTurn(
       .map((id) => getProduct(id))
       .filter((p): p is FullProduct => Boolean(p));
     if (products.length) {
+      // The plan's saved quantities are the default source, but a count
+      // named right in this request ("three Oakley chairs") describes this
+      // render specifically and was never added to the plan, so it wins for
+      // any id it names.
+      const quantities = res.render.quantities
+        ? { ...session.plan.qty, ...res.render.quantities }
+        : session.plan.qty;
       const rendered = await startRenderTurn(
         next,
         sessionKey,
@@ -463,7 +470,7 @@ async function runChatTurn(
         products,
         res.render.mode,
         res.render.mode === "staged_room" ? null : room,
-        session.plan.qty,
+        quantities,
       );
       return { session: rendered.session, turns: [...turns, ...rendered.turns] };
     }
