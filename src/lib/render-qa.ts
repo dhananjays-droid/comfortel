@@ -155,7 +155,7 @@ export function shortfallNote(short: Shortfall[], elsewhere?: string | undefined
   const missing = short.reduce((sum, s) => sum + (s.asked - s.seen), 0);
   const where = elsewhere
     ? ` The remaining ${plural(missing, "piece")} would go ${elsewhere.replace(/^\s*(they|it)\s+(would|could|can)\s+go\s+/i, "")}.`
-    : ` The remaining ${plural(missing, "piece")} sit outside this frame — they're still in your plan and your quote.`;
+    : ` The remaining ${plural(missing, "piece")} sit outside this frame, but they're still in your plan and your quote.`;
 
   return `Your plan has ${parts.join("; ")}.${where}`;
 }

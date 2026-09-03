@@ -297,7 +297,7 @@ async function startJob(job: RenderJobRow): Promise<void> {
     await updateJob(job.id, { kie_task_id: started.taskId });
   } catch (err) {
     console.error("startJob failed", err);
-    await deliverFailure(job, "We couldn't start that render just now — want me to try again?");
+    await deliverFailure(job, "We couldn't start that render just now. Want me to try again?");
   }
 }
 
@@ -318,7 +318,7 @@ const NUDGE_WINDOW_END_MS = 135 * 1000;
 async function nudgeStillWorking(job: RenderJobRow): Promise<void> {
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendText(phone, "Still working on it — almost there.");
+    await sendText(phone, "Still working on it, almost there.");
   } catch (err) {
     console.error("nudgeStillWorking failed", err);
   }
@@ -326,7 +326,7 @@ async function nudgeStillWorking(job: RenderJobRow): Promise<void> {
 
 async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"> {
   if (Date.now() - new Date(job.updated_at).getTime() > STALE_MS) {
-    await deliverFailure(job, "That render is taking longer than expected — want me to try again?");
+    await deliverFailure(job, "That render is taking longer than expected. Want me to try again?");
     return "failed";
   }
   // A job read as "generating" before startJob's own kie_task_id write has

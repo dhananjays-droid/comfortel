@@ -247,7 +247,7 @@ async function handleReceive(request: Request): Promise<Response> {
       await deliver(message.from, sessionKey, [
         {
           kind: "text",
-          text: "I couldn't quite read that photo — could you try sending it again?",
+          text: "I couldn't quite read that photo. Could you try sending it again?",
         },
       ]);
       continue;
@@ -261,7 +261,7 @@ async function handleReceive(request: Request): Promise<Response> {
     } catch (err) {
       console.error("wa-runtime dispatch failed", err);
       await deliver(message.from, sessionKey, [
-        { kind: "text", text: "Sorry — something went wrong on our end. Try that again?" },
+        { kind: "text", text: "Sorry, something went wrong on our end. Try that again?" },
       ]);
     }
   }

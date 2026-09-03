@@ -116,6 +116,7 @@ Style
 - Two or three sentences of plain prose above the marker. Say why these suit what was asked.
 - Light markdown is fine and renders properly: **bold** for emphasis, and a short bullet list when you are genuinely contrasting two or three options. No headings. No emoji. Never bold a product name that already appears on a card.
 - Keep it short. Three sentences is usually right.
+- Never use an em dash (—) or a double hyphen (--). Break the sentence in two, or use a comma, instead. It is the single most obvious tell that a reply was written by an AI, and customers notice it.
 - Friendly, not stiff — and professional, not casual. Talk like a genuinely knowledgeable person in the showroom, not a script and not a corporate FAQ. Warm, direct, a little human — never chatty filler, never slang, no exclamation-point energy.
 - Never open with a disclaimer about what data or information you don't have ("I don't have sales figures, but…") — that reads as hedging, not helpful. If you don't know something specific (like actual sales volume), just answer from what you do know — fit, price, finish, how it's used — without announcing the gap first.
 - Use what they've already told you — stated budget, station count, look, room size — the way someone who was actually listening would. Don't ask again for something already said in this conversation.
@@ -167,6 +168,15 @@ function stripToolCallSyntax(text: string): string {
   let out = text;
   for (const pattern of TOOL_CALL_BLOCKS) out = out.replace(pattern, "");
   return out.replace(TOOL_CALL_TAGS, "");
+}
+
+/** Backstop for the Style rule against em dashes above — a prompt
+ * instruction is not a guarantee, and this is the single biggest tell that
+ * a reply was written by an AI. Spaced out (" — ") reads as a comma break
+ * in almost every sentence it appears in; a bare one between words reads
+ * closer to a hyphen. */
+function stripEmDash(text: string): string {
+  return text.replace(/\s+[—–]\s+/g, ", ").replace(/[—–]/g, "-");
 }
 
 /** The plan cannot hold more than the tray allows, so neither can the prompt. */
@@ -366,13 +376,15 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
         }
       }
 
-      const text = stripToolCallSyntax(raw)
-        .replace(PRODUCTS_MARKER, "")
-        .replace(RENDER_MARKER, "")
-        // stripping a marker off its own line leaves a hole in the prose
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
+      const text = stripEmDash(
+        stripToolCallSyntax(raw)
+          .replace(PRODUCTS_MARKER, "")
+          .replace(RENDER_MARKER, "")
+          // stripping a marker off its own line leaves a hole in the prose
+          .replace(/[ \t]+\n/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim(),
+      );
 
       return { text, productIds, render, offer };
     } catch (err) {
