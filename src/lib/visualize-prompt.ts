@@ -571,6 +571,14 @@ function buildStagedPrompt(
     opt(
       `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or salon lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
     ),
+    // This mode alone has no existing photo to match, so composition is a
+    // free choice rather than fixed by the room clause in realismClauses() —
+    // the same "looks AI-generated" tell shows up here as a perfectly
+    // centred, symmetric studio shot instead of an ordinary photograph.
+    opt(
+      `Frame it like a real interiors photograph someone actually took, not a centred studio render: a natural, slightly off-centre angle, light falling the way it would in a real room rather than perfectly even studio lighting, and a touch of everyday imperfection rather than a showroom-clean scene.`,
+      DROP.polish,
+    ),
     opt(
       `Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.`,
     ),
