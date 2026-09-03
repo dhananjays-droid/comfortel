@@ -326,37 +326,43 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
       }
       const productIds = Array.from(new Set(ids)).slice(0, 4);
 
-      // A render marker is only honoured when a photo actually exists, so a
+      // A render marker is only honoured when there is something to render
+      // into — a real photo, or staged_room building its own room, so a
       // stray one can never bill for a generation that has nothing to render.
       let render: RenderRequest | null = null;
       let offer: RenderRequest | null = null;
-      if (data.hasRoomPhoto) {
-        for (const match of raw.matchAll(RENDER_MARKER)) {
-          const parts = (match[1] ?? "").split(",").map((t) => t.trim());
-          // replace_all is the safe default: single-piece replacement needs
-          // instance tracking the image model does not do reliably.
-          const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace_all";
-          const first = isVisualizeMode(parts[0]) ? 1 : 0;
-          const renderIds = Array.from(
-            new Set(
-              parts
-                .slice(first)
-                .filter((id) => id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)),
-            ),
-          ).slice(0, MAX_RENDERS);
-          if (renderIds.length) {
-            // The second gate, and the one that matters. The photo lasts the
-            // whole session, so "is a photo attached" was true on every turn
-            // from the first upload onwards — which billed for half of an
-            // ordinary conversation about a picture the customer already had.
-            // Asking for a render is now the customer's move, not the model's.
-            if (wantsRender(lastUserTurn(data.messages))) {
-              render = { mode, productIds: renderIds };
-            } else {
-              offer = { mode, productIds: renderIds };
-            }
-            break; // one render request per reply
+      for (const match of raw.matchAll(RENDER_MARKER)) {
+        const parts = (match[1] ?? "").split(",").map((t) => t.trim());
+        // replace_all is the safe default: single-piece replacement needs
+        // instance tracking the image model does not do reliably.
+        const mode = isVisualizeMode(parts[0]) ? parts[0] : "replace_all";
+        // Every mode but staged_room needs a real photo — matches the system
+        // prompt's own instruction that staged_room is the only one usable
+        // with none attached. Gating the whole loop on hasRoomPhoto (as this
+        // used to) silently dropped every staged_room request from a
+        // customer who had never sent a photo, with no error and no
+        // fallback reply — a real production bug, not a hypothetical one.
+        if (!data.hasRoomPhoto && mode !== "staged_room") continue;
+        const first = isVisualizeMode(parts[0]) ? 1 : 0;
+        const renderIds = Array.from(
+          new Set(
+            parts
+              .slice(first)
+              .filter((id) => id && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)),
+          ),
+        ).slice(0, MAX_RENDERS);
+        if (renderIds.length) {
+          // The second gate, and the one that matters. The photo lasts the
+          // whole session, so "is a photo attached" was true on every turn
+          // from the first upload onwards — which billed for half of an
+          // ordinary conversation about a picture the customer already had.
+          // Asking for a render is now the customer's move, not the model's.
+          if (wantsRender(lastUserTurn(data.messages))) {
+            render = { mode, productIds: renderIds };
+          } else {
+            offer = { mode, productIds: renderIds };
           }
+          break; // one render request per reply
         }
       }
 
