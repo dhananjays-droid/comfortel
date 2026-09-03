@@ -183,47 +183,68 @@ const MODEL = "claude-haiku-4-5-20251001";
  */
 const CATALOG_BLOCK = JSON.stringify(CATALOG_SLIM);
 
-export const chat = createServerFn({ method: "POST" })
-  .validator(
-    (input: { messages: ChatMessageInput[]; hasRoomPhoto?: boolean; plan?: PlanLine[] }) => {
-      if (!input || !Array.isArray(input.messages)) throw new Error("messages required");
-      const messages = input.messages
-        .filter(
-          (m) =>
-            (m.role === "user" || m.role === "assistant") &&
-            typeof m.content === "string" &&
-            m.content.trim().length > 0,
-        )
-        .slice(-12)
-        .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
-      if (!messages.length) throw new Error("messages required");
+/**
+ * The validator and the handler, as plain functions.
+ *
+ * A createServerFn can only be invoked from inside TanStack's request context —
+ * it reads options out of AsyncLocalStorage — and the WhatsApp webhook is a raw
+ * route intercepted in server.ts, which has no such context. Calling `chat()`
+ * from there threw "No Start context found in AsyncLocalStorage" and every
+ * inbound message failed.
+ *
+ * So the logic lives here, callable from anywhere, and the server function
+ * below is a thin wrapper over it for the browser. Two callers, one
+ * implementation, and the validation runs for both — a raw route must not get
+ * a cheaper path into the model than the browser gets.
+ */
+export function parseChatInput(input: {
+  messages: ChatMessageInput[];
+  hasRoomPhoto?: boolean;
+  plan?: PlanLine[];
+}) {
+  {
+    if (!input || !Array.isArray(input.messages)) throw new Error("messages required");
+    const messages = input.messages
+      .filter(
+        (m) =>
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string" &&
+          m.content.trim().length > 0,
+      )
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
+    if (!messages.length) throw new Error("messages required");
 
-      // The plan arrives from the browser, so it is rebuilt from the catalogue
-      // rather than trusted: only ids that resolve survive, and the name and
-      // price come from our own data. A plan line the client invented cannot
-      // put a product that does not exist in front of the model.
-      const plan: PlanLine[] = (Array.isArray(input.plan) ? input.plan : [])
-        .map((line) => {
-          const id = typeof line?.id === "string" ? line.id : "";
-          const product = Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)
-            ? (CATALOG_FULL as Record<string, { name?: string; price?: number | null }>)[id]
-            : undefined;
-          if (!product) return null;
-          const qty = Number(line?.qty);
-          return {
-            id,
-            name: product.name ?? id,
-            qty: Number.isFinite(qty) ? Math.min(99, Math.max(1, Math.round(qty))) : 1,
-            price: product.price ?? null,
-          };
-        })
-        .filter((line): line is PlanLine => line !== null)
-        .slice(0, MAX_PLAN_LINES);
+    // The plan arrives from the browser, so it is rebuilt from the catalogue
+    // rather than trusted: only ids that resolve survive, and the name and
+    // price come from our own data. A plan line the client invented cannot
+    // put a product that does not exist in front of the model.
+    const plan: PlanLine[] = (Array.isArray(input.plan) ? input.plan : [])
+      .map((line) => {
+        const id = typeof line?.id === "string" ? line.id : "";
+        const product = Object.prototype.hasOwnProperty.call(CATALOG_FULL, id)
+          ? (CATALOG_FULL as Record<string, { name?: string; price?: number | null }>)[id]
+          : undefined;
+        if (!product) return null;
+        const qty = Number(line?.qty);
+        return {
+          id,
+          name: product.name ?? id,
+          qty: Number.isFinite(qty) ? Math.min(99, Math.max(1, Math.round(qty))) : 1,
+          price: product.price ?? null,
+        };
+      })
+      .filter((line): line is PlanLine => line !== null)
+      .slice(0, MAX_PLAN_LINES);
 
-      return { messages, hasRoomPhoto: input.hasRoomPhoto === true, plan };
-    },
-  )
-  .handler(async ({ data }): Promise<ChatReply> => {
+    return { messages, hasRoomPhoto: input.hasRoomPhoto === true, plan };
+  }
+}
+
+export type ChatInput = ReturnType<typeof parseChatInput>;
+
+export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
+  {
     try {
       const apiKey = process.env["ANTHROPIC_API_KEY"];
       if (!apiKey) throw new ChatError("CHAT_NOT_CONFIGURED");
@@ -353,4 +374,10 @@ export const chat = createServerFn({ method: "POST" })
       if (err instanceof ChatError) throw new Error(err.code);
       throw new Error("CHAT_FAILED");
     }
-  });
+  }
+}
+
+/** The browser's entry point. Same validation, same logic. */
+export const chat = createServerFn({ method: "POST" })
+  .validator(parseChatInput)
+  .handler(async ({ data }): Promise<ChatReply> => runChatTurn(data));

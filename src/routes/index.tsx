@@ -33,7 +33,15 @@ import { shareDesign } from "@/lib/design.functions";
 import { wantsZoneSplit } from "@/lib/render-intent";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
-import { TIER_LABEL, buildPackages, idsOf, needsFor, type Package } from "@/lib/packages";
+import {
+  TIER_LABEL,
+  buildPackages,
+  distinctPackages,
+  idsOf,
+  needsFor,
+  stationsForBudget,
+  type Package,
+} from "@/lib/packages";
 import { curatePackages } from "@/lib/curate.functions";
 import { genericCapacity } from "@/lib/room";
 import {
@@ -925,8 +933,11 @@ function Index() {
     const fromWall = intake.wallCm
       ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits
       : 0;
-    const stations = fromWall || intake.stations || DEFAULT_STATIONS;
+    // A budget with no station count implies a salon size. Defaulting to four
+    // made $50,000 buy the same room as $20,000, three times over.
     const budget = intake.budget || DEFAULT_BUDGET;
+    const stations =
+      fromWall || intake.stations || (intake.budget ? stationsForBudget(budget) : DEFAULT_STATIONS);
     const note = describeIntake(intake);
 
     const said: Message = {
@@ -942,15 +953,23 @@ function Index() {
     // Seeded locally so there is something correct on screen even with no
     // network, then replaced by the curated set if the round trip lands.
     let packages = buildPackages(budget, needsFor(stations));
+    // Whether the model actually chose these, or the deterministic packer did.
+    // Tracked rather than swallowed: a silent fallback looks identical to a
+    // working one, so a broken curate could sit there for weeks unnoticed.
+    let curated = false;
     try {
-      const curated = await curate({ data: { brief: text, stations, budget } });
-      if (curated.packages.length) packages = curated.packages;
+      const result = await curate({ data: { brief: text, stations, budget } });
+      if (result.packages.length) {
+        packages = result.packages;
+        curated = result.curated;
+      }
     } catch {
-      /* the local packer is the fallback, not an error worth showing */
+      /* the local packer is the floor — a worse package beats a broken screen */
     }
     setThinking(false);
     if (!packages.length) return;
 
+    packages = distinctPackages(packages);
     setOffered({
       packages,
       choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
@@ -962,7 +981,12 @@ function Index() {
         role: "assistant",
         kind: "text",
         content: [
-          `${note} Here are three ways to do it — each is the most you can get at its price.`,
+          packages.length > 1
+            ? `${note} Here are ${packages.length === 2 ? "two" : "three"} ways to do it — each is the most you can get at its price.`
+            : `${note} Here is the fullest ${stations}-station fit-out the range covers at that budget.`,
+          curated
+            ? ""
+            : "_Picked by catalogue rules this time — the assistant wasn't reachable, so these are matched on price band rather than on how they look together._",
           "",
           ...packages.map(
             (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,

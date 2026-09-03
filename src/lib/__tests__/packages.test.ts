@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { ROLE_LABEL, buildPackages, candidates, idsOf, needsFor, type Role } from "@/lib/packages";
+import {
+  MAX_STATIONS,
+  ROLE_LABEL,
+  buildPackages,
+  candidates,
+  distinctPackages,
+  idsOf,
+  needsFor,
+  stationsForBudget,
+  type Role,
+} from "@/lib/packages";
 
 const ROLES: Role[] = ["styling", "wash", "mirror", "stool", "trolley", "reception", "waiting"];
 
@@ -206,5 +216,44 @@ describe("tiers stay distinct and honestly described", () => {
       }
       expect(set[0]!.total).toBeLessThanOrEqual(set[1]!.total);
     }
+  });
+});
+
+describe("stationsForBudget", () => {
+  it("scales the salon to the money, rather than gold-plating four chairs", () => {
+    // The fault this prevents: a four-station salon saturates around $17k, so
+    // $30k, $50k and $100k all returned the same three identical packages.
+    const small = stationsForBudget(15000);
+    const big = stationsForBudget(50000);
+    expect(big).toBeGreaterThan(small);
+    expect(big).toBeGreaterThanOrEqual(10);
+  });
+
+  it("keeps the balanced package inside the budget it was given", () => {
+    for (const budget of [8000, 15000, 30000, 50000]) {
+      const n = stationsForBudget(budget);
+      const balanced = buildPackages(budget, needsFor(n))[1];
+      expect(balanced!.total).toBeLessThanOrEqual(budget);
+    }
+  });
+
+  it("never proposes a chain, and never proposes nothing", () => {
+    expect(stationsForBudget(1_000_000)).toBeLessThanOrEqual(MAX_STATIONS);
+    expect(stationsForBudget(100)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("distinctPackages", () => {
+  it("collapses tiers that converged on the same total", () => {
+    // Three identical totals under "Under budget", "On budget" and "Stretch"
+    // is one lie told three times.
+    const saturated = buildPackages(100000, needsFor(4));
+    expect(new Set(saturated.map((p) => p.total)).size).toBe(1);
+    expect(distinctPackages(saturated)).toHaveLength(1);
+  });
+
+  it("leaves genuinely different tiers alone", () => {
+    const spread = buildPackages(15000, needsFor(4));
+    expect(distinctPackages(spread)).toHaveLength(3);
   });
 });
