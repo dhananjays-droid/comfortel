@@ -20,6 +20,14 @@ describe("wantsRender — asks", () => {
     "I want to see it",
     "regenerate it again",
     "can you redo that",
+    "generate an image of a spa with the Gemini II Treatment Table in it",
+    "generate that for me",
+    "can you build a barbershop around these",
+    "stage an empty spa with these pieces",
+    "draw this in my salon",
+    "create a picture of these chairs",
+    "make me an image of it in a spa",
+    "I just want a visual",
   ];
   for (const text of asking) {
     it(`asks: ${text}`, () => expect(wantsRender(text)).toBe(true));
@@ -73,6 +81,20 @@ describe("wantsRender — not asks", () => {
   for (const text of chatting) {
     it(`chats: ${text || "(empty)"}`, () => expect(wantsRender(text)).toBe(false));
   }
+
+  /**
+   * "make" is too generic to trust bare — these are the exact phrases that
+   * would false-positive if it were treated the same as render/generate/draw.
+   */
+  const bareMake = [
+    "can you make it cheaper",
+    "what's this chair made of",
+    "can you make an exception",
+  ];
+  for (const text of bareMake) {
+    it(`does not treat bare "make" as a render: ${text}`, () =>
+      expect(wantsRender(text)).toBe(false));
+  }
 });
 
 describe("wantsRender — refusals beat asks", () => {
@@ -86,6 +108,10 @@ describe("wantsRender — refusals beat asks", () => {
     "can you explain it without rendering anything",
     "no renders please",
     "text only please",
+    "don't draw that, just tell me the price",
+    "no need for a visual",
+    "please don't redo it",
+    "stop regenerating that",
   ];
   for (const text of refusing) {
     it(`refuses: ${text}`, () => expect(wantsRender(text)).toBe(false));

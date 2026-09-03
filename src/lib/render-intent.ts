@@ -27,7 +27,12 @@
 /** Turns of phrase that mean "put this in front of me as a picture". */
 const ASKS = [
   // the verbs that only ever mean an image
-  /\b(?:render|renders|rendering|visuali[sz]e|visuali[sz]ed|mock\s?up|mocked\s?up|preview|regenerate[sd]?|regenerating|redo(?:ne|ing)?)\b/,
+  /\b(?:render|renders|rendering|visuali[sz]e|visuali[sz]ed|visual|mock\s?up|mocked\s?up|preview|regenerate[sd]?|regenerating|redo(?:ne|ing)?|generate[sd]?|generating|create[sd]?|creating|draw(?:s|ing)?)\b/,
+
+  // "make" is too generic to trust bare ("make it cheaper", "what's this made
+  // of" are not render requests), so it only counts paired with the thing
+  // being made.
+  /\bmake[sd]?\b[\s\S]{0,20}\b(?:image|picture|photo|render|mock\s?up|visual)\b/,
 
   // "what would it look like", "how does that look in here"
   /\b(?:what|how)\s+(?:would|will|does|do|might)\b[\s\S]{0,40}\blook\b/,
@@ -40,9 +45,12 @@ const ASKS = [
   /\bin\s+the\s+(?:photo|picture)\b/,
 
   // A room we invent is still a render, and asking for one should not be
-  // treated as idle chat just because no photograph is involved.
-  /\b(?:empty|blank|bare|imaginary|example|sample|generic|new|staged?)\s+(?:room|salon|space|studio|shop)\b/,
-  /\b(?:build|design|lay\s?out|furnish|stage|set\s?up|mock)\b[\s\S]{0,30}\b(?:room|salon|space|studio|shop|salon)\b/,
+  // treated as idle chat just because no photograph is involved. Comfortel
+  // serves salon, barber and spa customers alike (see chat.functions.ts's
+  // own opening line), so all three belong in every noun list here, not
+  // just the "in my ___" pattern above.
+  /\b(?:empty|blank|bare|imaginary|example|sample|generic|new|staged?)\s+(?:room|salon|space|studio|shop|spa|barbershop)\b/,
+  /\b(?:build|design|lay\s?out|furnish|stage|set\s?up|mock)\b[\s\S]{0,30}\b(?:room|salon|space|studio|shop|spa|barbershop)\b/,
   /\bfrom\s+scratch\b/,
 ];
 
@@ -66,7 +74,7 @@ const POINTS_AT = /\b(?:it|them|this|that|these|those)\b/;
  * strongest possible ask, which is the worst way to get it wrong.
  */
 const REFUSALS = [
-  /\b(?:don'?t|do\s+not|please\s+don'?t|no\s+need\s+to|not?\s+need|without|rather\s+not|stop)\b[\s\S]{0,30}\b(?:render|generat|visuali[sz]|show|creat|mak)/,
+  /\b(?:don'?t|do\s+not|please\s+don'?t|no\s+need\s+to|not?\s+need|without|rather\s+not|stop)\b[\s\S]{0,30}\b(?:render|generat|visual|show|creat|mak|draw|redo|regenerat)/,
   /\bno\s+(?:need\s+for\s+)?(?:image|images|render|renders|picture|pictures)\b/,
   /\bjust\s+(?:tell|answer|reply|say|explain)\b/,
   /\b(?:text|words)\s+only\b/,
