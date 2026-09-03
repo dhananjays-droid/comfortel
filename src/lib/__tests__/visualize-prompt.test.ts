@@ -442,3 +442,60 @@ describe("staged_room — no photograph", () => {
     }
   });
 });
+
+describe("staged_room — invents the right kind of room", () => {
+  it("defaults to a hair salon when there is no category to go on", () => {
+    const noCategoryProducts = [
+      { id: "a", name: "Harper Styling Chair", images: ["https://x/a.jpg"] },
+    ] as unknown as Parameters<typeof buildRenderRequest>[0];
+    const { prompt } = buildRenderRequest(noCategoryProducts, "staged_room");
+    expect(prompt).toMatch(/hair salon/i);
+  });
+
+  it("builds a spa when every product is a spa category", () => {
+    const spaProducts = [
+      {
+        id: "c",
+        name: "Gemini II Treatment Table",
+        images: ["https://x/c.jpg"],
+        category: "spa/treatment-tables",
+      },
+    ] as unknown as Parameters<typeof buildRenderRequest>[0];
+    const { prompt } = buildRenderRequest(spaProducts, "staged_room");
+    expect(prompt).toMatch(/spa treatment room/i);
+    expect(prompt).not.toMatch(/hair salon/i);
+  });
+
+  it("builds a barbershop when every product is a barbers category", () => {
+    const barberProducts = [
+      {
+        id: "d",
+        name: "Duke Barber Chair",
+        images: ["https://x/d.jpg"],
+        category: "barbers/barber-chairs",
+      },
+    ] as unknown as Parameters<typeof buildRenderRequest>[0];
+    const { prompt } = buildRenderRequest(barberProducts, "staged_room");
+    expect(prompt).toMatch(/barbershop/i);
+    expect(prompt).not.toMatch(/hair salon/i);
+  });
+
+  it("falls back to a salon when the plan mixes verticals", () => {
+    const mixedProducts = [
+      {
+        id: "c",
+        name: "Gemini II Treatment Table",
+        images: ["https://x/c.jpg"],
+        category: "spa/treatment-tables",
+      },
+      {
+        id: "a",
+        name: "Harper Styling Chair",
+        images: ["https://x/a.jpg"],
+        category: "salon/styling-chairs",
+      },
+    ] as unknown as Parameters<typeof buildRenderRequest>[0];
+    const { prompt } = buildRenderRequest(mixedProducts, "staged_room");
+    expect(prompt).toMatch(/hair salon/i);
+  });
+});
