@@ -143,7 +143,18 @@ describe("handleInboundMessage — the guided build flow", () => {
 });
 
 describe("handleInboundMessage — render request", () => {
-  it("enqueues a zone render once a promised photo arrives", async () => {
+  /**
+   * enqueueRenderJob has no Supabase credentials in this test environment
+   * (same as every other DB-touching path in this suite), so — correctly,
+   * since Phase 5's reliability fix — it fails even after its internal
+   * retries, and startRenderTurn/renderPlanByZoneTurn now report that
+   * honestly instead of sending a confirmation for a render that was never
+   * actually queued. These two tests assert on that honest failure path;
+   * the "real render actually gets queued" path needs a real database and
+   * is verified manually, same testing-boundary stance as the render
+   * worker's own orchestration.
+   */
+  it("reports honestly, rather than falsely confirming, when a zone render can't be enqueued", async () => {
     let state: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
@@ -171,16 +182,18 @@ describe("handleInboundMessage — render request", () => {
       url: "https://example.com/room.jpg",
     });
     state = result.session;
+    // pendingZoneRender is cleared and the room is recorded by handlePhoto()
+    // before the enqueue is even attempted, so both still hold regardless.
     expect(state.pendingZoneRender).toBe(false);
     expect(state.room?.url).toBe("https://example.com/room.jpg");
     expect(result.turns).toHaveLength(1);
     expect(result.turns[0]?.kind).toBe("text");
     if (result.turns[0]?.kind === "text") {
-      expect(result.turns[0].text.toLowerCase()).toContain("zone");
+      expect(result.turns[0].text.toLowerCase()).toContain("went wrong");
     }
-  });
+  }, 10_000);
 
-  it("renders a tapped 'see this in your space' offer against the room already on file", async () => {
+  it("reports honestly, rather than falsely confirming, when a tapped offer can't be enqueued", async () => {
     const withRoom: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
@@ -192,8 +205,10 @@ describe("handleInboundMessage — render request", () => {
     });
     expect(turns).toHaveLength(1);
     expect(turns[0]?.kind).toBe("text");
-    expect(session.transcript.some((m) => m.role === "user")).toBe(true);
-  });
+    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("went wrong");
+    // No phantom "here's your render" turn was recorded into history either.
+    expect(session.transcript).toEqual(withRoom.transcript);
+  }, 10_000);
 
   it("declines a placement-mode offer once the room photo has expired", async () => {
     const staleRoom: SessionState = {

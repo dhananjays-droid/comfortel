@@ -106,6 +106,15 @@ const RATE_LIMITED_TURN: WaTurn = {
   text: "That's a few renders in a row — give it a few minutes and ask again and I'll get started.",
 };
 
+/** Sent instead of a false "rendering now" confirmation when
+ * enqueueRenderJob couldn't actually write the job after retrying — a real
+ * production bug this replaces: the confirmation used to send unconditionally,
+ * so the customer would be told a render had started when it never had. */
+const RENDER_FAILED_TURN: WaTurn = {
+  kind: "text",
+  text: "Sorry — something went wrong starting that render. Please try again in a moment.",
+};
+
 export type InboundEvent =
   | { kind: "text"; text: string }
   | { kind: "button"; id: string }
@@ -169,16 +178,22 @@ async function startRenderTurn(
   const roomSpec = session.roomSpec ?? undefined;
   const groups: string[][] = isMultiReferenceMode(mode) ? [ids] : ids.map((id) => [id]);
 
+  let enqueued = 0;
   for (const groupIds of groups) {
     const qty = quantitiesFor(mode, groupIds, quantities);
-    await enqueueRenderJob(sessionKey, phone, {
+    const ok = await enqueueRenderJob(sessionKey, phone, {
       mode,
       productIds: groupIds,
       ...(qty ? { quantities: qty } : {}),
       ...(photo ? { roomUrl: photo.url } : {}),
       ...(roomSpec ? { roomWallCm: roomSpec.wallCm, roomDepthCm: roomSpec.depthCm } : {}),
     });
+    if (ok) enqueued++;
   }
+  // Every group failed to enqueue (already retried inside enqueueRenderJob) —
+  // tell the customer honestly rather than sending a confirmation for a
+  // render that was never actually queued.
+  if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const verb =
     mode === "add" ? "into" : mode === "replace_all" ? "throughout" : "in place of what's in";
@@ -226,10 +241,11 @@ async function renderPlanByZoneTurn(
   const roomSpec = session.roomSpec ?? undefined;
   const mode: VisualizeMode = photo ? "refit_room" : "staged_room";
 
+  let enqueued = 0;
   for (const group of groups) {
     const ids = group.products.map((p) => p.id);
     const qty = quantitiesFor(mode, ids, session.plan.qty);
-    await enqueueRenderJob(sessionKey, phone, {
+    const ok = await enqueueRenderJob(sessionKey, phone, {
       mode,
       productIds: ids,
       scene: group.scene,
@@ -237,7 +253,9 @@ async function renderPlanByZoneTurn(
       ...(photo ? { roomUrl: photo.url } : {}),
       ...(roomSpec ? { roomWallCm: roomSpec.wallCm, roomDepthCm: roomSpec.depthCm } : {}),
     });
+    if (ok) enqueued++;
   }
+  if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
   const contentText = `Rendering your space zone by zone — ${zones}. I'll send each one as it's ready.`;
