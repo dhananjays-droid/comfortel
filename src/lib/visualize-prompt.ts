@@ -236,6 +236,11 @@ export type VisualizeProduct = {
   replaces?: string | null;
   col?: string | null;
   colour?: string | null;
+  /** The catalogue's own "salon/…" / "barbers/…" / "spa/…" slug — the
+   * caller already has this on the underlying FullProduct record, it just
+   * was not part of this type. Used to name the invented room correctly in
+   * staged_room, which has no real photo to anchor it otherwise. */
+  category?: string | null;
   /**
    * Verified reference views, attached by the caller from product-views.json.
    * Optional so this module stays free of data imports — it is reachable from
@@ -527,6 +532,40 @@ function ft(cm: number): number {
   return Math.round(cm / 30.48);
 }
 
+/**
+ * What kind of room staged_room should invent.
+ *
+ * Comfortel sells into three verticals (see chat.functions.ts's own opening
+ * line), and this mode has no real photograph to anchor the room the way
+ * every other mode does — the label here is the only thing telling the
+ * model what to build. A day spa treatment table rendered into "a real
+ * working hair salon" is a mismatch a customer notices immediately.
+ * Defaults to salon, the majority case, whenever the plan mixes verticals
+ * or a product's category is missing rather than guessing at a blend.
+ */
+type RoomKind = "salon" | "barbershop" | "spa";
+
+function roomKindFor(products: VisualizeProduct[]): RoomKind {
+  const categories = products.map((p) => p.category ?? "");
+  if (categories.length && categories.every((c) => c.startsWith("spa/"))) return "spa";
+  if (categories.length && categories.every((c) => c.startsWith("barbers/"))) return "barbershop";
+  return "salon";
+}
+
+const ROOM_NAME: Record<RoomKind, string> = {
+  salon: "a real working hair salon",
+  barbershop: "a real working barbershop",
+  spa: "a real working day spa treatment room",
+};
+
+const ROOM_LAYOUT: Record<RoomKind, string> = {
+  salon:
+    "Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.",
+  barbershop:
+    "Lay the pieces out the way a barbershop actually works: chairs spaced along a mirrored wall, each station within easy reach of its tools, waiting seating near the entrance.",
+  spa: "Lay the pieces out the way a spa treatment room actually works: a calm, uncluttered space around each treatment table, soft ambient lighting, and any storage kept unobtrusive.",
+};
+
 function buildStagedPrompt(
   products: VisualizeProduct[],
   correction?: string,
@@ -545,6 +584,7 @@ function buildStagedPrompt(
     .join(". ");
 
   const tally = products.map((p) => `${qtyOf(p)} × ${p.name}`).join(", ");
+  const roomKind = roomKindFor(products);
 
   return assemble([
     req(
@@ -560,7 +600,7 @@ function buildStagedPrompt(
       `Where one product's images show it on more than one style of base or column, the seat and its upholstery are the product and the base is an option. Pick ONE base from those shown and give every copy of that product the same one.`,
     ),
     req(
-      `Build a photorealistic interior of a real working hair salon and install exactly these pieces in it: ${tally}. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
+      `Build a photorealistic interior of ${ROOM_NAME[roomKind]} and install exactly these pieces in it: ${tally}. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
     ),
     req(
       `COPY EACH PRODUCT EXACTLY — the most important requirement here. The room is yours to invent; the furniture is not. A beautiful salon containing the wrong chair is a failed render. Match each reference's silhouette, the profile of its ARMRESTS, its upholstery seams, and its BASE — shape, legs or disc, column and footrest.`,
@@ -569,7 +609,7 @@ function buildStagedPrompt(
       `Every copy of a product must be identical to the others: same silhouette, same armrests, same base, same seams, same finish. They may differ ONLY in size, angle and position, as perspective requires.`,
     ),
     opt(
-      `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or salon lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
+      `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or ${roomKind === "spa" ? "ambient spa" : "salon"} lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
     ),
     // This mode alone has no existing photo to match, so composition is a
     // free choice rather than fixed by the room clause in realismClauses() —
@@ -579,9 +619,7 @@ function buildStagedPrompt(
       `Frame it like a real interiors photograph someone actually took, not a centred studio render: a natural, slightly off-centre angle, light falling the way it would in a real room rather than perfectly even studio lighting, and a touch of everyday imperfection rather than a showroom-clean scene.`,
       DROP.polish,
     ),
-    opt(
-      `Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.`,
-    ),
+    opt(ROOM_LAYOUT[roomKind]),
     // Given a room size, the layout stops being a guess. Without it the model
     // composes a pleasant corner and quietly drops most of the plan.
     ...(room
