@@ -9,22 +9,37 @@
  *
  * Deviation from the original design intent, flagged rather than silently
  * shipped: `resize-image.ts` (1024px longest edge, JPEG q0.85) is
- * browser-only — FileReader/Image/canvas don't exist server-side, and there
- * is no native image library in this project (adding one like `sharp` would
- * risk breaking whatever edge/serverless runtime this ends up deployed to,
- * per the Cloudflare-preset note in the implementation plan). Inbound photos
- * are size-capped and re-hosted unresized instead. In practice WhatsApp's own
- * client already compresses photos before upload, and `visualizeStart`
- * itself still enforces a hard `MAX_BASE64_CHARS` ceiling downstream — so an
- * oversized image is rejected with a clear error there rather than silently
- * misbehaving, but the bandwidth/base64 savings resize-image.ts buys the web
- * app are not currently realized here.
+ * browser-only — FileReader/Image/canvas don't exist server-side. Inbound
+ * photos are size-capped and re-hosted unresized instead; WhatsApp's own
+ * client already compresses photos before upload, and `visualizeStart` itself
+ * still enforces a hard `MAX_BASE64_CHARS` ceiling downstream, so an
+ * oversized inbound photo is rejected with a clear error there rather than
+ * silently misbehaving.
+ *
+ * Outbound renders are a different story: kie.ai serves multi-reference modes
+ * (staged_room, lineup, refit_room) at 2K, which regularly lands at 6-9MB —
+ * comfortably fine for a browser tab, but over WhatsApp's 5MB image cap.
+ * That failure is silent and easy to miss: Meta's send API still returns a
+ * message id for an oversized link-based image (it queues the async fetch
+ * without validating the size up front), so the job in wa_render_jobs reads
+ * "done" while the customer never receives anything, and there is no
+ * delivery-status webhook wired up here to catch it after the fact. `sharp`
+ * re-encodes every render to a WhatsApp-safe JPEG before it is re-hosted, so
+ * this only touches the WA delivery path — the web app still fetches the
+ * original full-resolution PNG straight from kie.ai, untouched.
  */
+import sharp from "sharp";
 
 const GRAPH_API_VERSION = "v21.0";
 const BUCKET = "wa-media";
 /** Matches index.tsx's own MAX_PHOTO_BYTES client-side accept threshold. */
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** WhatsApp's hard cap is 5MB; Meta's own guidance is to stay well under
+ * that for reliable delivery, so this targets a comfortable margin rather
+ * than the ceiling itself. */
+const MAX_WHATSAPP_IMAGE_BYTES = 1.2 * 1024 * 1024;
+const MAX_LONGEST_EDGE = 1600;
 
 function accessToken(): string {
   const token = process.env["WHATSAPP_ACCESS_TOKEN"];
@@ -100,6 +115,27 @@ export async function receiveRoomPhoto(mediaId: string): Promise<string | null> 
   return uploadWaMedia(media.bytes, media.contentType, "rooms");
 }
 
+/** Re-encodes a render down to a size WhatsApp will actually deliver.
+ * Resizing first (renders rarely need to display larger than this on a
+ * phone) does most of the work; quality only steps down further if a
+ * genuinely dense image is still over budget after that. */
+async function compressForWhatsApp(bytes: ArrayBuffer): Promise<ArrayBuffer> {
+  const resized = sharp(Buffer.from(bytes)).resize({
+    width: MAX_LONGEST_EDGE,
+    height: MAX_LONGEST_EDGE,
+    fit: "inside",
+    withoutEnlargement: true,
+  });
+
+  let quality = 85;
+  let out = await resized.clone().jpeg({ quality }).toBuffer();
+  while (out.byteLength > MAX_WHATSAPP_IMAGE_BYTES && quality > 35) {
+    quality -= 15;
+    out = await resized.clone().jpeg({ quality }).toBuffer();
+  }
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+}
+
 /**
  * Outbound path: a finished kie.ai render, tempfile URL → durable URL. Called
  * from wa-render-worker.server.ts once a render completes.
@@ -109,8 +145,8 @@ export async function rehostRender(sourceUrl: string): Promise<string | null> {
     const res = await fetch(sourceUrl);
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
-    const contentType = res.headers.get("content-type") ?? "image/png";
-    return uploadWaMedia(bytes, contentType, "renders");
+    const compressed = await compressForWhatsApp(bytes);
+    return uploadWaMedia(compressed, "image/jpeg", "renders");
   } catch (err) {
     console.error("rehostRender failed", err);
     return null;
