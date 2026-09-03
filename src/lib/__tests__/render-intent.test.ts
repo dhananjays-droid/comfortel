@@ -18,6 +18,8 @@ describe("wantsRender — asks", () => {
     "put them in my room",
     "try it in the photo",
     "I want to see it",
+    "regenerate it again",
+    "can you redo that",
   ];
   for (const text of asking) {
     it(`asks: ${text}`, () => expect(wantsRender(text)).toBe(true));

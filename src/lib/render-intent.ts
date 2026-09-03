@@ -27,7 +27,7 @@
 /** Turns of phrase that mean "put this in front of me as a picture". */
 const ASKS = [
   // the verbs that only ever mean an image
-  /\b(?:render|renders|rendering|visuali[sz]e|visuali[sz]ed|mock\s?up|mocked\s?up|preview)\b/,
+  /\b(?:render|renders|rendering|visuali[sz]e|visuali[sz]ed|mock\s?up|mocked\s?up|preview|regenerate[sd]?|regenerating|redo(?:ne|ing)?)\b/,
 
   // "what would it look like", "how does that look in here"
   /\b(?:what|how)\s+(?:would|will|does|do|might)\b[\s\S]{0,40}\blook\b/,
