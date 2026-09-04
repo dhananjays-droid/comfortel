@@ -385,6 +385,27 @@ describe("handleInboundMessage — get a quote", () => {
     if (turns[0]?.kind === "text")
       expect(turns[0].text.toLowerCase()).toContain("didn't go through");
   });
+
+  it("accepts more than one email in the same reply", () => {
+    // Only checking that parsing a multi-email reply reaches the same
+    // enquiry-submission path as a single email, not the email content
+    // itself (submitEnquiry has no credentials in this test environment,
+    // per the file header comment, so it fails closed either way).
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "quote" },
+      pendingQuote: { productIds: [REAL_ID] },
+    };
+    return handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "Jamie Lee, jamie@lee.com, partner@biz.com",
+    }).then(({ turns }) => {
+      expect(turns).toHaveLength(1);
+      if (turns[0]?.kind === "text")
+        expect(turns[0].text.toLowerCase()).toContain("didn't go through");
+    });
+  });
 });
 
 describe("productTurns", () => {
