@@ -33,8 +33,15 @@ import {
 } from "@/lib/chat.functions";
 import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
 import { parseEnquiryInput, runSubmitEnquiry } from "@/lib/enquiry.functions";
-import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
-import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
+import {
+  buildPackages,
+  distinctPackages,
+  idsOf,
+  needsFor,
+  TIER_LABEL,
+  type Package,
+} from "@/lib/packages";
+import { expectedFrom, linesFrom, planPieces, planTotal, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
 import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
 import { genericCapacity } from "@/lib/room";
@@ -321,6 +328,15 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
   }
   if (!packages.length) return { session: next, turns: [] };
 
+  // Once a budget exceeds what a given station count can absorb, every
+  // tier converges on the same maximum set — offering three identical
+  // totals under three different names is confusing, not a real choice.
+  // Confirmed live: a customer saw "Under budget", "On budget" and
+  // "Stretch" all priced at the exact same total with the exact same
+  // reason. index.tsx already dedupes this; the WhatsApp port had missed
+  // the same call.
+  packages = distinctPackages(packages);
+
   const offered: SessionOffered = {
     packages,
     choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
@@ -328,8 +344,12 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
   };
   next = { ...next, offered };
 
+  const howMany =
+    packages.length > 1
+      ? `Here are ${packages.length === 2 ? "two" : "three"} ways to do it, each is the most you can get at its price.`
+      : `Here is the fullest ${stations}-station fit-out the range covers at that budget.`;
   const replyText = [
-    `${note} Here are three ways to do it, each is the most you can get at its price.`,
+    `${note} ${howMany}`,
     "",
     ...packages.map(
       (p) => `*${TIER_LABEL[p.tier]}*: ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
@@ -464,9 +484,20 @@ function addToPlanTurn(session: SessionState, tappedId: string): RuntimeResult {
     .map((i) => getProduct(i.id)?.name)
     .filter((n): n is string => Boolean(n))
     .join(", ");
-  const replyText = names
-    ? `Added ${names} to your plan. Want a quote, or should I keep going?`
-    : "Added to your plan.";
+  if (!names) {
+    return {
+      session: { ...session, plan },
+      turns: [{ kind: "text", text: "Added to your plan." }],
+    };
+  }
+
+  // A running total makes budget planning tangible — the customer sees
+  // their spend update in real time as they add things, rather than
+  // having to ask separately what their plan comes to.
+  const products = plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+  const lines = linesFrom(products, plan.qty);
+  const pieces = planPieces(lines);
+  const replyText = `Added ${names} to your plan, now ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Want a quote, or should I keep going?`;
   return { session: { ...session, plan }, turns: [{ kind: "text", text: replyText }] };
 }
 
@@ -484,22 +515,24 @@ function startQuoteTurn(session: SessionState, tappedId: string): RuntimeResult 
     turns: [
       {
         kind: "text",
-        text: 'What name and email should the quote go to? Send both together, like "Jamie Lee, jamie@lee.com".',
+        text: 'What name and email should the quote go to? Send both together, like "Jamie Lee, jamie@lee.com" — add more emails too if you want a partner cc\'d, e.g. "Jamie Lee, jamie@lee.com, partner@biz.com".',
       },
     ],
   };
 }
 
-const EMAIL_IN_TEXT = /[^\s@]+@[^\s@]+\.[^\s@]{2,}/;
+const EMAIL_IN_TEXT = /[^\s@,]+@[^\s@,]+\.[^\s@,]{2,}/g;
 
-/** Accepts the name and email in either order, since a reply to one
- * free-text prompt won't always lead with the same field. */
-function parseNameAndEmail(text: string): { name: string; email: string } | null {
-  const match = text.match(EMAIL_IN_TEXT);
-  if (!match) return null;
-  const email = match[0];
-  const name = text.replace(email, "").replace(/[,]/g, " ").trim();
-  return name ? { name, email } : null;
+/** Accepts the name and one or more emails in any order — a reply to one
+ * free-text prompt won't always lead with the same field, and a customer
+ * asking for a partner to be copied just adds a second address. */
+function parseNameAndEmails(text: string): { name: string; emails: string[] } | null {
+  const emails = Array.from(new Set(text.match(EMAIL_IN_TEXT) ?? []));
+  if (!emails.length) return null;
+  let name = text;
+  for (const email of emails) name = name.replace(email, "");
+  name = name.replace(/[,]/g, " ").trim();
+  return name ? { name, emails } : null;
 }
 
 /**
@@ -514,7 +547,7 @@ async function submitQuoteTurn(session: SessionState, text: string): Promise<Run
   const pending = session.pendingQuote;
   if (!pending) return { session: { ...session, flow: INITIAL }, turns: [] };
 
-  const parsed = parseNameAndEmail(text);
+  const parsed = parseNameAndEmails(text);
   if (!parsed) {
     return {
       session,
@@ -527,11 +560,17 @@ async function submitQuoteTurn(session: SessionState, text: string): Promise<Run
     };
   }
 
+  const [primaryEmail, ...additionalEmails] = parsed.emails;
   const references: string[] = [];
   for (const id of pending.productIds) {
     try {
       const result = await runSubmitEnquiry(
-        parseEnquiryInput({ productId: id, fullName: parsed.name, email: parsed.email }),
+        parseEnquiryInput({
+          productId: id,
+          fullName: parsed.name,
+          email: primaryEmail!,
+          additionalEmails,
+        }),
       );
       references.push(result.reference);
     } catch (err) {
@@ -552,10 +591,11 @@ async function submitQuoteTurn(session: SessionState, text: string): Promise<Run
     };
   }
 
+  const who = parsed.emails.join(", ");
   const replyText =
     references.length > 1
-      ? `Done, quote requests sent (references ${references.join(", ")}). Someone will follow up at ${parsed.email}.`
-      : `Done, quote request sent (reference ${references[0]}). Someone will follow up at ${parsed.email}.`;
+      ? `Done, quote requests sent (references ${references.join(", ")}). Someone will follow up at ${who}.`
+      : `Done, quote request sent (reference ${references[0]}). Someone will follow up at ${who}.`;
   return { session: next, turns: [{ kind: "text", text: replyText }] };
 }
 

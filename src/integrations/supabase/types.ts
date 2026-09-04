@@ -37,6 +37,7 @@ export type Database = {
       };
       enquiries: {
         Row: {
+          additional_emails: string[];
           business_name: string | null;
           created_at: string;
           email: string;
@@ -52,6 +53,7 @@ export type Database = {
           visualization_url: string | null;
         };
         Insert: {
+          additional_emails?: string[];
           business_name?: string | null;
           created_at?: string;
           email: string;
@@ -67,6 +69,7 @@ export type Database = {
           visualization_url?: string | null;
         };
         Update: {
+          additional_emails?: string[];
           business_name?: string | null;
           created_at?: string;
           email?: string;
