@@ -230,14 +230,14 @@ async function startRenderTurn(
   const names = products.map((p) => p.name).filter(Boolean);
   const contentText =
     mode === "refit_room"
-      ? "Here is your salon refitted with those Comfortel pieces, I'll send it over shortly."
+      ? "Refitting your salon with those Comfortel pieces now, please wait ⏳"
       : mode === "staged_room"
-        ? "Building your plan, staged in a salon. I'll send it over shortly."
+        ? "Building that now, please wait ⏳"
         : mode === "lineup"
-          ? `Here they are in your space, left to right: ${names.join(", ")}. I'll send it over shortly.`
+          ? `Placing ${names.join(", ")} side by side in your space, please wait ⏳`
           : groups.length > 1
-            ? `Here are ${groups.length} options rendered into your space, I'll send each one as it's ready.`
-            : `Here is the ${entryLabel(mode, groups[0]!)} rendered into your space, on its way.`;
+            ? `Rendering ${groups.length} options into your space, please wait ⏳`
+            : `Rendering the ${entryLabel(mode, groups[0]!)} into your space, please wait ⏳`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -280,7 +280,7 @@ async function renderPlanByZoneTurn(
   if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
-  const contentText = `Rendering your space zone by zone: ${zones}. I'll send each one as it's ready.`;
+  const contentText = `Rendering zone by zone: ${zones}, please wait ⏳`;
   const next = appendTranscript(session, "assistant", contentText);
   return { session: next, turns: [{ kind: "text", text: contentText }] };
 }
@@ -610,11 +610,6 @@ async function runChatTurn(
     turns.push({ kind: "text", text: res.text });
   }
 
-  // The web app shows a ProductCard per id via ProductStrip; this is the
-  // WhatsApp equivalent — one image message per product, right after the
-  // reply that named them.
-  turns.push(...productTurns(res.productIds));
-
   if (res.render && (room || res.render.mode === "staged_room")) {
     const products = res.render.productIds
       .map((id) => getProduct(id))
@@ -636,9 +631,19 @@ async function runChatTurn(
         res.render.mode === "staged_room" ? null : room,
         quantities,
       );
+      // No product cards here on purpose — a customer just told a render
+      // is starting, then immediately shown the same cards again, reads as
+      // "that's the whole response" rather than "a render is in progress",
+      // a real complaint from live testing. The reply text already named
+      // what's being built; the cards would only repeat it.
       return { session: rendered.session, turns: [...turns, ...rendered.turns] };
     }
   }
+
+  // The web app shows a ProductCard per id via ProductStrip; this is the
+  // WhatsApp equivalent — one image message per product, right after the
+  // reply that named them. Only reached when no render fired above.
+  turns.push(...productTurns(res.productIds));
 
   // Neither an offer nor a render already came with these cards — give the
   // customer a tap instead of leaving the next step to whatever they type.
