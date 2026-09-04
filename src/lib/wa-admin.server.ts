@@ -55,6 +55,12 @@ type LatestJob = {
   updatedAt: string;
 };
 
+type SessionIdentityRow = {
+  session_key: string;
+  customer_name: string | null;
+  phone_last4: string | null;
+};
+
 type SessionSummary = {
   sessionKey: string;
   lastActivity: string;
@@ -62,6 +68,10 @@ type SessionSummary = {
   lastMessagePreview: string;
   hasError: boolean;
   latestJob: LatestJob | null;
+  /** WhatsApp's own display name for this customer, when known — see
+   * wa-session.ts's customerName for where this comes from. */
+  customerName: string | null;
+  phoneLast4: string | null;
 };
 
 /** A one-line, human-readable gist of a message row — the raw payload shape
@@ -79,11 +89,19 @@ export function previewOf(m: WaMessageRow): string {
     return `${arrow} [image] ${caption.split("\n")[0]?.slice(0, 70) ?? ""}`;
   }
   if (m.kind === "interactive") {
+    // The button's own display text — what the customer actually saw and
+    // tapped ("Plan my salon") — is what a developer wants here, not the
+    // internal id ("build") it happened to be wired to.
+    const buttonReplyTitle =
+      typeof m.payload["buttonReplyTitle"] === "string"
+        ? (m.payload["buttonReplyTitle"] as string)
+        : null;
     const buttonReplyId =
       typeof m.payload["buttonReplyId"] === "string"
         ? (m.payload["buttonReplyId"] as string)
         : null;
     const text = typeof m.payload["text"] === "string" ? (m.payload["text"] as string) : "";
+    if (buttonReplyTitle) return `${arrow} [tapped: ${buttonReplyTitle}]`;
     return buttonReplyId ? `${arrow} [tapped: ${buttonReplyId}]` : `${arrow} ${text.slice(0, 100)}`;
   }
   return `${arrow} [${m.kind}]`;
@@ -112,25 +130,47 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
     // Scanned over a wider recent window than the number of sessions
     // returned, since a busy session can otherwise crowd a quiet one's
     // single message out of a small limit before grouping ever happens.
-    const [{ data: messages, error: messagesError }, { data: jobs, error: jobsError }] =
-      await Promise.all([
-        supabaseAdmin
-          .from("wa_messages")
-          .select("wa_message_id, direction, session_key, kind, payload, created_at")
-          .order("created_at", { ascending: false })
-          .limit(1000),
-        supabaseAdmin
-          .from("wa_render_jobs")
-          .select("session_key, status, mode, error, created_at, updated_at")
-          .order("created_at", { ascending: false })
-          .limit(500),
-      ]);
+    const [
+      { data: messages, error: messagesError },
+      { data: jobs, error: jobsError },
+      { data: identities, error: identitiesError },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("wa_messages")
+        .select("wa_message_id, direction, session_key, kind, payload, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1000),
+      supabaseAdmin
+        .from("wa_render_jobs")
+        .select("session_key, status, mode, error, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabaseAdmin
+        .from("sessions")
+        .select("session_key, customer_name, phone_last4")
+        .order("updated_at", { ascending: false })
+        .limit(500),
+    ]);
 
-    if (messagesError || jobsError) {
+    if (messagesError || jobsError || identitiesError) {
       return new Response(
-        JSON.stringify({ error: (messagesError ?? jobsError)?.message ?? "query failed" }),
+        JSON.stringify({
+          error: (messagesError ?? jobsError ?? identitiesError)?.message ?? "query failed",
+        }),
         { status: 500, headers: { "content-type": "application/json" } },
       );
+    }
+
+    const identityBySession = new Map<string, SessionIdentityRow>();
+    for (const i of (identities ?? []) as SessionIdentityRow[]) {
+      identityBySession.set(i.session_key, i);
+    }
+    function identityFor(sessionKey: string): {
+      customerName: string | null;
+      phoneLast4: string | null;
+    } {
+      const row = identityBySession.get(sessionKey);
+      return { customerName: row?.customer_name ?? null, phoneLast4: row?.phone_last4 ?? null };
     }
 
     const bySession = new Map<string, SessionSummary>();
@@ -148,6 +188,7 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
         lastMessagePreview: previewOf(m),
         hasError: false,
         latestJob: null,
+        ...identityFor(m.session_key),
       });
     }
 
@@ -168,6 +209,7 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
             createdAt: j.created_at,
             updatedAt: j.updated_at,
           },
+          ...identityFor(j.session_key),
         });
         continue;
       }
