@@ -221,9 +221,55 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
   }
 }
 
+/** How recent counts as "just sent this" — long enough to catch a genuine
+ * double-dispatch (confirmed live: the same confirmation text sent as two
+ * separate WhatsApp messages roughly a second apart, from a single inbound
+ * message with no webhook redelivery visible in the log — the exact
+ * mechanism wasn't pinned down by tracing the code, so this guards the one
+ * place that actually matters regardless of cause), short enough to never
+ * block a customer legitimately asking for the same thing again minutes
+ * later. */
+const DUPLICATE_SEND_WINDOW_MS = 15 * 1000;
+
+/** True when the exact same outbound content was already logged for this
+ * session within the last few seconds — checked against wa_messages
+ * itself, the same source of truth recordInboundIfNew already trusts for
+ * inbound idempotency, rather than trying to reason about why a second
+ * send might happen. Fails open (never blocks a real send) on any error,
+ * matching this codebase's resilience stance everywhere else. */
+async function wasJustSent(sessionKey: string, turn: WaTurn): Promise<boolean> {
+  if (turn.kind !== "text" && turn.kind !== "buttons") return false;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("wa_messages")
+      .select("kind, payload, created_at")
+      .eq("session_key", sessionKey)
+      .eq("direction", "outbound")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return false;
+
+    const last = data as { kind: string; payload: { text?: unknown }; created_at: string };
+    const expectedKind = turn.kind === "buttons" ? "interactive" : "text";
+    if (last.kind !== expectedKind || last.payload?.text !== turn.text) return false;
+
+    const elapsed = Date.now() - new Date(last.created_at).getTime();
+    return elapsed >= 0 && elapsed < DUPLICATE_SEND_WINDOW_MS;
+  } catch (err) {
+    console.error("wasJustSent failed", err);
+    return false;
+  }
+}
+
 async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise<void> {
   for (const turn of turns) {
     try {
+      if (await wasJustSent(sessionKey, turn)) {
+        console.warn("deliver: skipping a duplicate send", { sessionKey, kind: turn.kind });
+        continue;
+      }
       const waMessageId =
         turn.kind === "buttons"
           ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
