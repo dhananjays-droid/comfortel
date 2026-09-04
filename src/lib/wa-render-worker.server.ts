@@ -300,7 +300,15 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
     verdict = { ok: true, faults: [] };
   }
 
-  if (shouldRetry(verdict, job.attempt)) {
+  // A shortfall only earns a retry in staged_room: that room is invented,
+  // so there is no real wall it could genuinely have run out of. A refit
+  // (or any mode working from the customer's actual photo) can have a real
+  // physical limit, and retrying there just burns a render to relearn the
+  // same constraint — or worse, pressures the model into distorting a real
+  // room to force a count that never fit it.
+  const shortfall = job.mode === "staged_room" ? shortfallFrom(expected, verdict) : [];
+
+  if (shouldRetry(verdict, job.attempt, shortfall)) {
     try {
       const roomImageBase64 = job.room_url ? await base64FromUrl(job.room_url) : "";
       const retried = await runVisualizeStart(
@@ -309,7 +317,7 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
           roomImageBase64,
           mode: job.mode,
           aspectRatio: "3:2",
-          correction: correctionFor(verdict),
+          correction: correctionFor(verdict, shortfall),
           ...(job.scene ? { scene: job.scene } : {}),
           ...(job.quantities && Object.keys(job.quantities).length
             ? { quantities: job.quantities }

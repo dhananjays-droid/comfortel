@@ -163,17 +163,32 @@ export function shortfallNote(short: Shortfall[], elsewhere?: string | undefined
 /**
  * The correction appended to the prompt on a retry.
  *
- * Names the fault as an observed fact about the previous attempt rather than a
- * general rule — the general rules were already in the prompt and did not
- * prevent it, so repeating them louder is not the fix.
+ * Names the fault (and, separately, any shortfall) as an observed fact about
+ * the previous attempt rather than a general rule — the general rules were
+ * already in the prompt and did not prevent it, so repeating them louder is
+ * not the fix. Confirmed live: a customer asked for 10 mirrors and got 8 —
+ * a real gap this closes by telling the retry exactly what came up short,
+ * rather than the generic "install exactly N" instruction it already
+ * ignored once.
  */
-export function correctionFor(verdict: Verdict): string {
-  if (verdict.ok || !verdict.faults.length) return "";
+export function correctionFor(verdict: Verdict, shortfall: Shortfall[] = []): string {
+  const parts: string[] = [];
 
-  const described = verdict.faults.map((kind) => FAULTS[kind]).join("; ");
-  const where = verdict.note ? ` Specifically: ${verdict.note}` : "";
+  if (!verdict.ok && verdict.faults.length) {
+    const described = verdict.faults.map((kind) => FAULTS[kind]).join("; ");
+    const where = verdict.note ? ` Specifically: ${verdict.note}` : "";
+    parts.push(`The previous attempt at this render came back broken — ${described}.${where}`);
+  }
 
-  return `The previous attempt at this render came back broken — ${described}.${where} Fix that fault in this attempt while keeping everything else about the room and the products the same.`;
+  if (shortfall.length) {
+    const counted = shortfall.map((s) => `only ${s.seen} of ${s.asked} × ${s.name}`).join("; ");
+    parts.push(
+      `The previous attempt fit ${counted}. That count is a hard requirement, not a suggestion — fit every piece this time. Make the room larger or the framing wider if that is what it takes; do not leave any out.`,
+    );
+  }
+
+  if (!parts.length) return "";
+  return `${parts.join(" ")} Fix that in this attempt while keeping everything else about the room and the products the same.`;
 }
 
 /**
@@ -186,6 +201,21 @@ export function correctionFor(verdict: Verdict): string {
  */
 export const MAX_RETRIES = 1;
 
-export function shouldRetry(verdict: Verdict, attempt: number): boolean {
-  return !verdict.ok && attempt < MAX_RETRIES;
+/**
+ * A shortfall now earns the same one retry a fault does. It used to be
+ * deliberately excluded ("not a reason to re-render") on the theory that a
+ * room genuinely could not hold more — true for a refit against a real
+ * photographed room, but staged_room invents its own room and has no such
+ * excuse, so the exclusion was quietly absorbing what was actually a
+ * generation shortfall in an unconstrained space. One retry with the
+ * explicit count correction from correctionFor() gives the pipeline a real
+ * second attempt instead of just apologising to the customer.
+ */
+export function shouldRetry(
+  verdict: Verdict,
+  attempt: number,
+  shortfall: Shortfall[] = [],
+): boolean {
+  if (attempt >= MAX_RETRIES) return false;
+  return !verdict.ok || shortfall.length > 0;
 }
