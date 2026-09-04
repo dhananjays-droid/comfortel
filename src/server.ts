@@ -68,6 +68,12 @@ const RAW_ROUTES: Record<string, (request: Request) => Promise<Response>> = {
     const { handleAdminStatus } = await import("./lib/wa-admin.server");
     return handleAdminStatus(request);
   },
+  // Same bearer check, grouped by customer session rather than raw rows —
+  // what /admin/logs polls. GET /api/admin/wa-sessions?limit=50&errors=1
+  "/api/admin/wa-sessions": async (request) => {
+    const { handleAdminSessions } = await import("./lib/wa-admin.server");
+    return handleAdminSessions(request);
+  },
 };
 
 export default {
