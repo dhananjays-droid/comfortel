@@ -81,6 +81,14 @@ export type SessionState = {
   pendingZoneRender: boolean;
   pendingQuote: SessionPendingQuote | null;
   handoff: boolean;
+  /** WhatsApp's own contacts[].profile.name for this number — the display
+   * name the customer set in their own app, not something Comfortel asked
+   * for. For the admin dashboard only; never used in conversation logic. */
+  customerName: string | null;
+  /** Last 4 digits of the phone number, so a developer can recognise a
+   * customer without the full number ever being stored anywhere outside
+   * wa_render_jobs' encrypted column. */
+  phoneLast4: string | null;
 };
 
 export const EMPTY_SESSION: SessionState = {
@@ -93,6 +101,8 @@ export const EMPTY_SESSION: SessionState = {
   pendingZoneRender: false,
   pendingQuote: null,
   handoff: false,
+  customerName: null,
+  phoneLast4: null,
 };
 
 /** A room photo older than ROOM_TTL_MS is treated as gone — the customer has
@@ -262,6 +272,10 @@ export function sanitizePendingQuote(input: unknown): SessionPendingQuote | null
   return productIds.length ? { productIds } : null;
 }
 
+function sanitizeShortString(input: unknown, max: number): string | null {
+  return typeof input === "string" && input.trim() ? input.trim().slice(0, max) : null;
+}
+
 export function sanitizeSession(input: unknown): SessionState {
   const raw = input as Partial<Record<keyof SessionState, unknown>> | null | undefined;
   return {
@@ -274,5 +288,7 @@ export function sanitizeSession(input: unknown): SessionState {
     pendingZoneRender: raw?.pendingZoneRender === true,
     pendingQuote: sanitizePendingQuote(raw?.pendingQuote),
     handoff: raw?.handoff === true,
+    customerName: sanitizeShortString(raw?.customerName, 120),
+    phoneLast4: sanitizeShortString(raw?.phoneLast4, 4),
   };
 }

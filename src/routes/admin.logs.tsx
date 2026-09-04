@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Loader2, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * A live-updating view over what wa-admin.server.ts already exposes via
@@ -16,6 +16,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * localStorage the way a developer would otherwise keep it in a curl
  * command's history. Not linked from anywhere in the app; reachable only
  * by typing the URL.
+ *
+ * A two-pane layout on purpose, not a modal/drawer over the list: an
+ * overlay's close button turned out to be an easy way to introduce a bug
+ * (a stacking-context conflict with the sticky header ate the click), and
+ * a persistent pane sidesteps the whole class of problem — there is no
+ * "doesn't close" state, since picking a different session just replaces
+ * the pane's content, the same way any inbox works.
  */
 
 export const Route = createFileRoute("/admin/logs")({
@@ -43,6 +50,8 @@ type SessionSummary = {
   lastMessagePreview: string;
   hasError: boolean;
   latestJob: LatestJob | null;
+  customerName: string | null;
+  phoneLast4: string | null;
 };
 
 type JobRow = {
@@ -68,12 +77,61 @@ type MessageRow = {
   created_at: string;
 };
 
-/** A short, glanceable stand-in for the full session_key hash — enough to
- * recognise "is this the same customer as before" across a scrolling feed
- * without ever showing anything that reverses to a phone number. */
+/** One entry in the merged timeline — a message or a render job's current
+ * status, sorted together by when it happened. A job contributes up to two
+ * entries (started, then its current status once that differs), so
+ * "what's happening in the background" reads as part of the same
+ * continuous story as the conversation, not a separate disconnected list. */
+type TimelineEntry =
+  | { at: string; kind: "message"; message: MessageRow }
+  | { at: string; kind: "job-started"; job: JobRow }
+  | { at: string; kind: "job-status"; job: JobRow };
+
+function buildTimeline(messages: MessageRow[], jobs: JobRow[]): TimelineEntry[] {
+  const entries: TimelineEntry[] = messages.map((message) => ({
+    at: message.created_at,
+    kind: "message",
+    message,
+  }));
+  for (const job of jobs) {
+    entries.push({ at: job.created_at, kind: "job-started", job });
+    if (job.updated_at !== job.created_at) {
+      entries.push({ at: job.updated_at, kind: "job-status", job });
+    }
+  }
+  return entries.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
 function shortKey(sessionKey: string): string {
   const hex = sessionKey.replace(/^wa:/, "");
   return `${hex.slice(0, 6)}…${hex.slice(-4)}`;
+}
+
+/** The best available label for a customer — their WhatsApp display name,
+ * falling back to a masked phone number, falling back to the session hash
+ * only when neither is known yet (their very first message, before Meta's
+ * contact payload has been seen). */
+function identityOf(s: {
+  customerName: string | null;
+  phoneLast4: string | null;
+  sessionKey: string;
+}): {
+  primary: string;
+  secondary: string | null;
+} {
+  if (s.customerName)
+    return { primary: s.customerName, secondary: s.phoneLast4 ? `•••• ${s.phoneLast4}` : null };
+  if (s.phoneLast4) return { primary: `•••• ${s.phoneLast4}`, secondary: shortKey(s.sessionKey) };
+  return { primary: shortKey(s.sessionKey), secondary: null };
+}
+
+function initialsOf(label: string): string {
+  const parts = label.replace(/[•]/g, "").trim().split(/\s+/);
+  const initials = parts
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join("");
+  return (initials || label.slice(0, 2)).toUpperCase();
 }
 
 function timeAgo(iso: string): string {
@@ -90,19 +148,29 @@ function timeAgo(iso: string): string {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-zinc-500/15 text-zinc-300",
-  generating: "bg-amber-500/15 text-amber-300",
-  done: "bg-emerald-500/15 text-emerald-300",
-  failed: "bg-red-500/15 text-red-300",
+  pending: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+  generating: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  done: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  failed: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Queued",
+  generating: "Generating",
+  done: "Done",
+  failed: "Failed",
 };
 
 function StatusPill({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status] ?? "bg-zinc-500/15 text-zinc-300"}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status] ?? STATUS_STYLE["pending"]}`}
     >
       {status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
-      {status}
+      {status === "pending" && <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />}
+      {status === "done" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+      {status === "failed" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />}
+      {STATUS_LABEL[status] ?? status}
     </span>
   );
 }
@@ -124,17 +192,23 @@ function TokenGate({
 }) {
   const [value, setValue] = useState("");
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <form
-        className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-900 p-6"
+        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           if (value.trim()) onSubmit(value.trim());
         }}
       >
-        <h1 className="text-sm font-semibold text-zinc-100">Comfortel logs</h1>
-        <p className="mt-1 text-xs text-zinc-400">
-          Enter the CRON_SECRET value (same one used for /api/admin/wa-status).
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900">
+            <Sparkles className="h-4 w-4 text-white" />
+          </div>
+          <h1 className="text-sm font-semibold text-slate-900">Comfortel logs</h1>
+        </div>
+        <p className="mt-3 text-sm text-slate-500">
+          Enter the <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">CRON_SECRET</code>{" "}
+          value to connect.
         </p>
         <input
           type="password"
@@ -142,12 +216,12 @@ function TokenGate({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Bearer token"
-          className="mt-4 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-500"
+          className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-shadow focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
         />
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
         <button
           type="submit"
-          className="mt-4 w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
+          className="mt-4 w-full rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800"
         >
           Connect
         </button>
@@ -156,67 +230,102 @@ function TokenGate({
   );
 }
 
-function EventLine({ m }: { m: MessageRow }) {
+function messageText(m: MessageRow): { label: string; body: string } {
   const isIn = m.direction === "inbound";
-  const text =
-    typeof m.payload["text"] === "string"
-      ? (m.payload["text"] as string)
-      : typeof m.payload["caption"] === "string"
-        ? (m.payload["caption"] as string).split("\n")[0]
-        : typeof m.payload["buttonReplyId"] === "string"
-          ? `[tapped: ${m.payload["buttonReplyId"]}]`
-          : `[${m.kind}]`;
-  return (
-    <div className="flex gap-2 py-1.5 text-xs">
-      <span className="w-14 shrink-0 text-zinc-500">
-        {new Date(m.created_at).toLocaleTimeString()}
-      </span>
-      <span className={`w-16 shrink-0 font-medium ${isIn ? "text-sky-400" : "text-zinc-400"}`}>
-        {isIn ? "customer" : "bot"}
-      </span>
-      <span className="text-zinc-200">{text}</span>
-    </div>
-  );
+  if (
+    typeof m.payload["buttonReplyId"] === "string" ||
+    typeof m.payload["buttonReplyTitle"] === "string"
+  ) {
+    const title = m.payload["buttonReplyTitle"];
+    const id = m.payload["buttonReplyId"];
+    return {
+      label: isIn ? "customer tapped" : "bot",
+      body: `“${typeof title === "string" ? title : id}”`,
+    };
+  }
+  if (typeof m.payload["text"] === "string" && m.payload["text"]) {
+    return { label: isIn ? "customer" : "bot", body: m.payload["text"] as string };
+  }
+  if (typeof m.payload["caption"] === "string") {
+    return {
+      label: isIn ? "customer" : "bot",
+      body: (m.payload["caption"] as string).split("\n")[0] ?? "",
+    };
+  }
+  return { label: isIn ? "customer" : "bot", body: `[${m.kind}]` };
 }
 
-function JobLine({ j }: { j: JobRow }) {
-  return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2.5 text-xs">
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-zinc-200">
-          {j.mode} · {j.product_ids.join(", ")}
-        </span>
-        <StatusPill status={j.status} />
-      </div>
-      <div className="mt-1 text-zinc-500">
-        started {new Date(j.created_at).toLocaleTimeString()}, updated{" "}
-        {new Date(j.updated_at).toLocaleTimeString()}
-        {j.attempt > 0 ? `, retry ${j.attempt}` : ""}
-      </div>
-      {j.error && <div className="mt-1 text-red-400">{j.error}</div>}
-      {j.result_url && (
-        <a
-          href={j.result_url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 inline-block text-sky-400 underline"
+function TimelineRow({ entry }: { entry: TimelineEntry }) {
+  const time = new Date(entry.at).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  if (entry.kind === "message") {
+    const { label, body } = messageText(entry.message);
+    const isCustomer = label.startsWith("customer");
+    return (
+      <div className="flex gap-3 py-2">
+        <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-400">{time}</span>
+        <span
+          className={`w-20 shrink-0 pt-0.5 text-xs font-medium ${isCustomer ? "text-sky-600" : "text-slate-500"}`}
         >
-          view result
-        </a>
-      )}
+          {label}
+        </span>
+        {entry.message.kind === "image" && typeof entry.message.payload["imageUrl"] === "string" ? (
+          <div className="min-w-0 flex-1">
+            <img
+              src={entry.message.payload["imageUrl"] as string}
+              alt=""
+              className="mb-1 h-20 w-20 rounded-lg border border-slate-200 object-cover"
+            />
+            <p className="break-words text-sm text-slate-700">{body}</p>
+          </div>
+        ) : (
+          <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-slate-700">
+            {body}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const job = entry.job;
+  const isStart = entry.kind === "job-started";
+  return (
+    <div className="flex gap-3 rounded-lg bg-slate-50 py-2 pl-0 pr-2 ring-1 ring-slate-100">
+      <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-400">{time}</span>
+      <span className="w-20 shrink-0 pt-0.5 text-xs font-medium text-indigo-600">render</span>
+      <div className="min-w-0 flex-1">
+        {isStart ? (
+          <p className="text-sm text-slate-700">
+            Started <span className="font-medium">{job.mode}</span>
+            {job.product_ids.length ? ` — ${job.product_ids.join(", ")}` : ""}
+            {job.attempt > 0 ? ` (retry ${job.attempt})` : ""}
+          </p>
+        ) : (
+          <div className="flex items-center gap-2">
+            <StatusPill status={job.status} />
+            {job.error && <span className="text-sm text-rose-600">{job.error}</span>}
+            {job.result_url && (
+              <a
+                href={job.result_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-indigo-600 underline underline-offset-2"
+              >
+                view image
+              </a>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function SessionDetail({
-  sessionKey,
-  token,
-  onClose,
-}: {
-  sessionKey: string;
-  token: string;
-  onClose: () => void;
-}) {
+function SessionPane({ sessionKey, token }: { sessionKey: string; token: string }) {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -224,7 +333,7 @@ function SessionDetail({
   const load = useCallback(async () => {
     try {
       const data = await callAdmin<{ jobs: JobRow[]; messages: MessageRow[] }>(
-        `/api/admin/wa-status?limit=50&session_key=${encodeURIComponent(sessionKey)}`,
+        `/api/admin/wa-status?limit=80&session_key=${encodeURIComponent(sessionKey)}`,
         token,
       );
       setJobs(data.jobs ?? []);
@@ -235,52 +344,97 @@ function SessionDetail({
   }, [sessionKey, token]);
 
   useEffect(() => {
+    setLoading(true);
     void load();
     const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
   }, [load]);
 
-  return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md overflow-y-auto border-l border-zinc-800 bg-zinc-900 p-4 shadow-xl">
-      <div className="flex items-center justify-between">
-        <h2 className="font-mono text-sm text-zinc-200">{shortKey(sessionKey)}</h2>
-        <button onClick={onClose} className="rounded p-1 text-zinc-400 hover:bg-zinc-800">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+  const timeline = useMemo(() => buildTimeline(messages, jobs), [messages, jobs]);
+  const activeJob = jobs.find((j) => j.status === "pending" || j.status === "generating");
 
-      {loading ? (
-        <div className="mt-6 flex justify-center text-zinc-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-        </div>
-      ) : (
-        <>
-          {jobs.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Render jobs
-              </h3>
-              <div className="mt-2 space-y-2">
-                {jobs.map((j) => (
-                  <JobLine key={j.id} j={j} />
-                ))}
-              </div>
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+        <div>
+          <h2 className="font-mono text-xs text-slate-400">{shortKey(sessionKey)}</h2>
+          {activeJob && (
+            <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+              <Loader2 className="h-3 w-3 animate-spin" />A render is in progress
             </div>
           )}
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-300" />}
+      </div>
 
-          <div className="mt-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Conversation ({messages.length})
-            </h3>
-            <div className="mt-1 divide-y divide-zinc-800/60">
-              {[...messages].reverse().map((m) => (
-                <EventLine key={m.wa_message_id} m={m} />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {timeline.length === 0 && !loading && (
+          <p className="mt-8 text-center text-sm text-slate-400">
+            No activity in this session yet.
+          </p>
+        )}
+        <div className="divide-y divide-slate-100">
+          {timeline.map((entry, i) => (
+            <TimelineRow key={`${entry.kind}-${entry.at}-${i}`} entry={entry} />
+          ))}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function SessionCard({
+  session,
+  active,
+  onClick,
+}: {
+  session: SessionSummary;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const identity = identityOf(session);
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+        active
+          ? "border-slate-300 bg-white shadow-sm"
+          : session.hasError
+            ? "border-rose-200 bg-rose-50/60 hover:bg-rose-50"
+            : "border-transparent hover:bg-white hover:shadow-sm"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+            session.hasError ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-600"
+          }`}
+        >
+          {initialsOf(identity.primary)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-medium text-slate-900">{identity.primary}</span>
+            <span className="shrink-0 text-[11px] text-slate-400">
+              {timeAgo(session.lastActivity)}
+            </span>
+          </div>
+          {identity.secondary && (
+            <span className="text-[11px] text-slate-400">{identity.secondary}</span>
+          )}
+          <p className="mt-1 truncate text-xs text-slate-500">
+            {session.lastMessagePreview ||
+              (session.latestJob ? `${session.latestJob.mode} render` : "—")}
+          </p>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            {session.latestJob && <StatusPill status={session.latestJob.status} />}
+            {session.hasError && session.latestJob?.error && (
+              <span className="truncate text-[11px] text-rose-600">{session.latestJob.error}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -292,8 +446,6 @@ function AdminLogs() {
   const [loading, setLoading] = useState(false);
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
@@ -310,7 +462,6 @@ function AdminLogs() {
         );
         setSessions(data.sessions ?? []);
         setLoadError(null);
-        setLastFetched(new Date());
       } catch (err) {
         if (err instanceof Error && err.message === "UNAUTHORIZED") {
           window.localStorage.removeItem(TOKEN_KEY);
@@ -329,8 +480,8 @@ function AdminLogs() {
   useEffect(() => {
     if (!token) return;
     void load(token, true);
-    pollRef.current = setInterval(() => void load(token, false), POLL_MS);
-    return () => clearInterval(pollRef.current);
+    const id = setInterval(() => void load(token, false), POLL_MS);
+    return () => clearInterval(id);
   }, [token, load]);
 
   if (!token) {
@@ -349,84 +500,80 @@ function AdminLogs() {
   const errorCount = sessions.filter((s) => s.hasError).length;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <div>
-            <h1 className="text-sm font-semibold">Comfortel logs</h1>
-            <p className="text-xs text-zinc-500">
-              {sessions.length} active session{sessions.length === 1 ? "" : "s"}
-              {errorCount > 0 && <span className="text-red-400"> · {errorCount} with errors</span>}
-              {lastFetched && ` · updated ${timeAgo(lastFetched.toISOString())}`}
-            </p>
+    <div className="flex h-screen flex-col bg-slate-50 text-slate-900">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900">
+            <Sparkles className="h-3.5 w-3.5 text-white" />
           </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-zinc-400">
-              <input
-                type="checkbox"
-                checked={errorsOnly}
-                onChange={(e) => setErrorsOnly(e.target.checked)}
-                className="accent-red-500"
-              />
-              Errors only
-            </label>
-            <button
-              onClick={() => void load(token, true)}
-              className="rounded-md border border-zinc-700 p-1.5 text-zinc-300 hover:bg-zinc-800"
-              title="Refresh now"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
+          <h1 className="text-sm font-semibold text-slate-900">Comfortel logs</h1>
+          <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+            Live
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <input
+              type="checkbox"
+              checked={errorsOnly}
+              onChange={(e) => setErrorsOnly(e.target.checked)}
+              className="accent-rose-500"
+            />
+            Errors only
+          </label>
+          <button
+            onClick={() => void load(token, true)}
+            className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-50"
+            title="Refresh now"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-4">
-        {loadError && (
-          <div className="mb-4 flex items-center gap-2 rounded-md border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-300">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            {loadError}
-          </div>
-        )}
-
-        {sessions.length === 0 && !loading && !loadError && (
-          <p className="mt-12 text-center text-sm text-zinc-500">
-            {errorsOnly ? "No sessions with errors right now." : "No activity yet."}
-          </p>
-        )}
-
-        <div className="space-y-1.5">
-          {sessions.map((s) => (
-            <button
-              key={s.sessionKey}
-              onClick={() => setSelected(s.sessionKey)}
-              className={`block w-full rounded-md border px-3 py-2.5 text-left transition-colors ${
-                s.hasError
-                  ? "border-red-900/60 bg-red-950/30 hover:bg-red-950/50"
-                  : "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/70"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs text-zinc-400">{shortKey(s.sessionKey)}</span>
-                <div className="flex items-center gap-2">
-                  {s.latestJob && <StatusPill status={s.latestJob.status} />}
-                  <span className="text-xs text-zinc-500">{timeAgo(s.lastActivity)}</span>
-                </div>
-              </div>
-              <p className="mt-1 truncate text-sm text-zinc-200">
-                {s.lastMessagePreview || (s.latestJob ? `${s.latestJob.mode} render` : "—")}
-              </p>
-              {s.hasError && s.latestJob?.error && (
-                <p className="mt-1 truncate text-xs text-red-400">{s.latestJob.error}</p>
-              )}
-            </button>
-          ))}
+      {loadError && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-rose-100 bg-rose-50 px-6 py-2 text-xs text-rose-700">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {loadError}
         </div>
-      </main>
-
-      {selected && (
-        <SessionDetail sessionKey={selected} token={token} onClose={() => setSelected(null)} />
       )}
+
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-96 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
+          <div className="shrink-0 px-4 py-3 text-xs text-slate-500">
+            {sessions.length} session{sessions.length === 1 ? "" : "s"}
+            {errorCount > 0 && (
+              <span className="font-medium text-rose-600"> · {errorCount} with errors</span>
+            )}
+          </div>
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
+            {sessions.length === 0 && !loading && (
+              <p className="mt-8 px-2 text-center text-sm text-slate-400">
+                {errorsOnly ? "No sessions with errors right now." : "No activity yet."}
+              </p>
+            )}
+            {sessions.map((s) => (
+              <SessionCard
+                key={s.sessionKey}
+                session={s}
+                active={selected === s.sessionKey}
+                onClick={() => setSelected(s.sessionKey)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        <main className="min-h-0 flex-1 bg-white">
+          {selected ? (
+            <SessionPane sessionKey={selected} token={token} />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-slate-400">Select a session to see its full timeline.</p>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

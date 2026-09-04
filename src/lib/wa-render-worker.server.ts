@@ -165,11 +165,44 @@ async function updateJob(id: string, patch: Record<string, unknown>): Promise<vo
   }
 }
 
+/** Logs a render-worker send to wa_messages the same way
+ * wa-webhook.server.ts's own logOutbound does for a reply — without this,
+ * the admin dashboard's conversation timeline had a hole exactly where a
+ * generation was happening: the nudge, the final image and its buttons,
+ * and a failure message all went out over WhatsApp but never appeared in
+ * the log, since this worker runs on a separate cron tick from the
+ * webhook and never touched wa_messages at all. Never throws — a missed
+ * audit-log row is not a reason to treat an already-sent message as failed. */
+async function logOutbound(
+  sessionKey: string,
+  kind: "text" | "image" | "interactive",
+  payload: Record<string, string>,
+): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("wa_messages").insert({
+      // Render-worker sends have no Graph API message id captured here
+      // (sendText/sendImage/sendButtons return one, but this call site
+      // doesn't thread it through) — a random id keeps the column's
+      // uniqueness constraint satisfied without pretending to have one.
+      wa_message_id: `wa-worker:${crypto.randomUUID()}`,
+      direction: "outbound",
+      session_key: sessionKey,
+      kind,
+      payload,
+    });
+    if (error) console.error("logOutbound failed", error);
+  } catch (err) {
+    console.error("logOutbound failed", err);
+  }
+}
+
 async function deliverFailure(job: RenderJobRow, message: string): Promise<void> {
   await updateJob(job.id, { status: "failed", error: message });
   try {
     const phone = decryptPhone(job.customer_phone_enc);
     await sendText(phone, message);
+    await logOutbound(job.session_key, "text", { text: message });
   } catch (err) {
     console.error("deliverFailure: send failed", err);
   }
@@ -243,7 +276,11 @@ async function deliverImage(
   try {
     const phone = decryptPhone(job.customer_phone_enc);
     await sendImage(phone, durableUrl, caption);
-    if (buttons.length) await sendButtons(phone, cta, { kind: "buttons", buttons });
+    await logOutbound(job.session_key, "image", { imageUrl: durableUrl, caption });
+    if (buttons.length) {
+      await sendButtons(phone, cta, { kind: "buttons", buttons });
+      await logOutbound(job.session_key, "interactive", { text: cta });
+    }
   } catch (err) {
     console.error("deliverImage: send failed", err);
     await updateJob(job.id, { status: "failed", error: "send failed" });
@@ -348,7 +385,9 @@ const NUDGE_WINDOW_END_MS = 135 * 1000;
 async function nudgeStillWorking(job: RenderJobRow): Promise<void> {
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendText(phone, "Still working on it, almost there.");
+    const text = "Still working on it, almost there.";
+    await sendText(phone, text);
+    await logOutbound(job.session_key, "text", { text });
   } catch (err) {
     console.error("nudgeStillWorking failed", err);
   }
