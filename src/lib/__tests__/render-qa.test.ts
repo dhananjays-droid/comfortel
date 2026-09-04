@@ -81,6 +81,29 @@ describe("correctionFor", () => {
     // Without this a retry re-rolls the whole room and loses what was right.
     expect(correctionFor({ ok: false, faults: ["floating"] })).toMatch(/keeping everything else/);
   });
+
+  it("names a shortfall even when there is no fault", () => {
+    // Confirmed live: a customer asked for 10 mirrors and got 8 — a passing
+    // verdict (nothing was broken), but still worth a correction.
+    const text = correctionFor({ ok: true, faults: [] }, [
+      { name: "Circa LED Round Salon Mirror", asked: 10, seen: 8 },
+    ]);
+    expect(text).toContain("only 8 of 10");
+    expect(text).toContain("Circa LED Round Salon Mirror");
+    expect(text).toMatch(/hard requirement/);
+  });
+
+  it("describes both a fault and a shortfall together", () => {
+    const text = correctionFor({ ok: false, faults: ["intersecting"] }, [
+      { name: "Blake Styling Chair", asked: 4, seen: 3 },
+    ]);
+    expect(text).toContain(FAULTS.intersecting);
+    expect(text).toContain("only 3 of 4");
+  });
+
+  it("says nothing extra when the shortfall list is empty", () => {
+    expect(correctionFor({ ok: true, faults: [] }, [])).toBe("");
+  });
 });
 
 describe("shouldRetry", () => {
@@ -96,6 +119,28 @@ describe("shouldRetry", () => {
   it("stops after the cap, however broken", () => {
     expect(shouldRetry({ ok: false, faults: ["deformed"] }, MAX_RETRIES)).toBe(false);
     expect(shouldRetry({ ok: false, faults: ["deformed"] }, MAX_RETRIES + 5)).toBe(false);
+  });
+
+  it("retries a passing render that still came up short", () => {
+    // Used to be excluded on purpose ("not a reason to re-render") — right
+    // for a refit against a real room with a real limit, wrong for
+    // staged_room, which invents its own room and has no such excuse.
+    expect(
+      shouldRetry({ ok: true, faults: [] }, 0, [{ name: "Chloe Tan", asked: 10, seen: 8 }]),
+    ).toBe(true);
+  });
+
+  it("does not retry a passing render with nothing short", () => {
+    expect(shouldRetry({ ok: true, faults: [] }, 0, [])).toBe(false);
+    expect(shouldRetry({ ok: true, faults: [] }, 0)).toBe(false);
+  });
+
+  it("still stops a shortfall retry at the cap", () => {
+    expect(
+      shouldRetry({ ok: true, faults: [] }, MAX_RETRIES, [
+        { name: "Chloe Tan", asked: 10, seen: 8 },
+      ]),
+    ).toBe(false);
   });
 });
 

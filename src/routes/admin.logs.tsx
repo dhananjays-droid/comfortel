@@ -23,6 +23,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * a persistent pane sidesteps the whole class of problem — there is no
  * "doesn't close" state, since picking a different session just replaces
  * the pane's content, the same way any inbox works.
+ *
+ * Dark theme is a deliberate, fixed choice here, not a mode that follows
+ * the visitor's system preference — a developer-only console reads better
+ * dark, and unlike a customer-facing page there is no "meet people in
+ * their own preference" reason to make it configurable.
  */
 
 export const Route = createFileRoute("/admin/logs")({
@@ -148,10 +153,10 @@ function timeAgo(iso: string): string {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
-  generating: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  done: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  failed: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  pending: "bg-white/5 text-slate-300 ring-1 ring-white/10",
+  generating: "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20",
+  done: "bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/20",
+  failed: "bg-rose-400/10 text-rose-300 ring-1 ring-rose-400/20",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -168,8 +173,8 @@ function StatusPill({ status }: { status: string }) {
     >
       {status === "generating" && <Loader2 className="h-3 w-3 animate-spin" />}
       {status === "pending" && <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />}
-      {status === "done" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
-      {status === "failed" && <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />}
+      {status === "done" && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+      {status === "failed" && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
       {STATUS_LABEL[status] ?? status}
     </span>
   );
@@ -192,22 +197,23 @@ function TokenGate({
 }) {
   const [value, setValue] = useState("");
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0d14] px-4">
       <form
-        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12161f] p-8 shadow-2xl shadow-black/40"
         onSubmit={(e) => {
           e.preventDefault();
           if (value.trim()) onSubmit(value.trim());
         }}
       >
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
-          <h1 className="text-sm font-semibold text-slate-900">Comfortel logs</h1>
+          <h1 className="text-sm font-semibold text-slate-100">Comfortel logs</h1>
         </div>
-        <p className="mt-3 text-sm text-slate-500">
-          Enter the <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">CRON_SECRET</code>{" "}
+        <p className="mt-3 text-sm text-slate-400">
+          Enter the{" "}
+          <code className="rounded bg-white/5 px-1 py-0.5 text-xs text-slate-300">CRON_SECRET</code>{" "}
           value to connect.
         </p>
         <input
@@ -216,12 +222,12 @@ function TokenGate({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Bearer token"
-          className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-shadow focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+          className="mt-4 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-slate-100 outline-none transition-shadow placeholder:text-slate-600 focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-400/20"
         />
-        {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+        {error && <p className="mt-2 text-xs text-rose-400">{error}</p>}
         <button
           type="submit"
-          className="mt-4 w-full rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+          className="mt-4 w-full rounded-lg bg-indigo-500 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-400"
         >
           Connect
         </button>
@@ -267,9 +273,9 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
     const isCustomer = label.startsWith("customer");
     return (
       <div className="flex gap-3 py-2">
-        <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-400">{time}</span>
+        <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-500">{time}</span>
         <span
-          className={`w-20 shrink-0 pt-0.5 text-xs font-medium ${isCustomer ? "text-sky-600" : "text-slate-500"}`}
+          className={`w-20 shrink-0 pt-0.5 text-xs font-medium ${isCustomer ? "text-sky-400" : "text-slate-400"}`}
         >
           {label}
         </span>
@@ -278,12 +284,12 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
             <img
               src={entry.message.payload["imageUrl"] as string}
               alt=""
-              className="mb-1 h-20 w-20 rounded-lg border border-slate-200 object-cover"
+              className="mb-1 h-20 w-20 rounded-lg border border-white/10 object-cover"
             />
-            <p className="break-words text-sm text-slate-700">{body}</p>
+            <p className="break-words text-sm text-slate-200">{body}</p>
           </div>
         ) : (
-          <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-slate-700">
+          <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-slate-200">
             {body}
           </p>
         )}
@@ -294,26 +300,26 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
   const job = entry.job;
   const isStart = entry.kind === "job-started";
   return (
-    <div className="flex gap-3 rounded-lg bg-slate-50 py-2 pl-0 pr-2 ring-1 ring-slate-100">
-      <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-400">{time}</span>
-      <span className="w-20 shrink-0 pt-0.5 text-xs font-medium text-indigo-600">render</span>
+    <div className="flex gap-3 rounded-lg bg-white/[0.03] py-2 pl-0 pr-2 ring-1 ring-white/5">
+      <span className="w-20 shrink-0 pt-0.5 font-mono text-[11px] text-slate-500">{time}</span>
+      <span className="w-20 shrink-0 pt-0.5 text-xs font-medium text-indigo-400">render</span>
       <div className="min-w-0 flex-1">
         {isStart ? (
-          <p className="text-sm text-slate-700">
-            Started <span className="font-medium">{job.mode}</span>
+          <p className="text-sm text-slate-300">
+            Started <span className="font-medium text-slate-100">{job.mode}</span>
             {job.product_ids.length ? ` — ${job.product_ids.join(", ")}` : ""}
             {job.attempt > 0 ? ` (retry ${job.attempt})` : ""}
           </p>
         ) : (
           <div className="flex items-center gap-2">
             <StatusPill status={job.status} />
-            {job.error && <span className="text-sm text-rose-600">{job.error}</span>}
+            {job.error && <span className="text-sm text-rose-400">{job.error}</span>}
             {job.result_url && (
               <a
                 href={job.result_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-indigo-600 underline underline-offset-2"
+                className="text-sm text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
               >
                 view image
               </a>
@@ -355,25 +361,25 @@ function SessionPane({ sessionKey, token }: { sessionKey: string; token: string 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+      <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <div>
-          <h2 className="font-mono text-xs text-slate-400">{shortKey(sessionKey)}</h2>
+          <h2 className="font-mono text-xs text-slate-500">{shortKey(sessionKey)}</h2>
           {activeJob && (
-            <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+            <div className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-400">
               <Loader2 className="h-3 w-3 animate-spin" />A render is in progress
             </div>
           )}
         </div>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-300" />}
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-600" />}
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {timeline.length === 0 && !loading && (
-          <p className="mt-8 text-center text-sm text-slate-400">
+          <p className="mt-8 text-center text-sm text-slate-500">
             No activity in this session yet.
           </p>
         )}
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-white/5">
           {timeline.map((entry, i) => (
             <TimelineRow key={`${entry.kind}-${entry.at}-${i}`} entry={entry} />
           ))}
@@ -398,38 +404,38 @@ function SessionCard({
       onClick={onClick}
       className={`block w-full rounded-xl border px-3 py-3 text-left transition-colors ${
         active
-          ? "border-slate-300 bg-white shadow-sm"
+          ? "border-white/15 bg-white/[0.06] shadow-sm"
           : session.hasError
-            ? "border-rose-200 bg-rose-50/60 hover:bg-rose-50"
-            : "border-transparent hover:bg-white hover:shadow-sm"
+            ? "border-rose-400/20 bg-rose-400/[0.06] hover:bg-rose-400/10"
+            : "border-transparent hover:bg-white/[0.04]"
       }`}
     >
       <div className="flex items-start gap-3">
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-            session.hasError ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-600"
+            session.hasError ? "bg-rose-400/15 text-rose-300" : "bg-white/10 text-slate-300"
           }`}
         >
           {initialsOf(identity.primary)}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium text-slate-900">{identity.primary}</span>
-            <span className="shrink-0 text-[11px] text-slate-400">
+            <span className="truncate text-sm font-medium text-slate-100">{identity.primary}</span>
+            <span className="shrink-0 text-[11px] text-slate-500">
               {timeAgo(session.lastActivity)}
             </span>
           </div>
           {identity.secondary && (
-            <span className="text-[11px] text-slate-400">{identity.secondary}</span>
+            <span className="text-[11px] text-slate-500">{identity.secondary}</span>
           )}
-          <p className="mt-1 truncate text-xs text-slate-500">
+          <p className="mt-1 truncate text-xs text-slate-400">
             {session.lastMessagePreview ||
               (session.latestJob ? `${session.latestJob.mode} render` : "—")}
           </p>
           <div className="mt-1.5 flex items-center gap-1.5">
             {session.latestJob && <StatusPill status={session.latestJob.status} />}
             {session.hasError && session.latestJob?.error && (
-              <span className="truncate text-[11px] text-rose-600">{session.latestJob.error}</span>
+              <span className="truncate text-[11px] text-rose-400">{session.latestJob.error}</span>
             )}
           </div>
         </div>
@@ -500,31 +506,31 @@ function AdminLogs() {
   const errorCount = sessions.filter((s) => s.hasError).length;
 
   return (
-    <div className="flex h-screen flex-col bg-slate-50 text-slate-900">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-3.5">
+    <div className="flex h-screen flex-col bg-[#0a0d14] text-slate-100">
+      <header className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#0d1017] px-6 py-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500">
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </div>
-          <h1 className="text-sm font-semibold text-slate-900">Comfortel logs</h1>
-          <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+          <h1 className="text-sm font-semibold text-slate-100">Comfortel logs</h1>
+          <span className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-emerald-400/20">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
             Live
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
             <input
               type="checkbox"
               checked={errorsOnly}
               onChange={(e) => setErrorsOnly(e.target.checked)}
-              className="accent-rose-500"
+              className="accent-rose-400"
             />
             Errors only
           </label>
           <button
             onClick={() => void load(token, true)}
-            className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-50"
+            className="rounded-lg border border-white/10 p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
             title="Refresh now"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -533,23 +539,23 @@ function AdminLogs() {
       </header>
 
       {loadError && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-rose-100 bg-rose-50 px-6 py-2 text-xs text-rose-700">
+        <div className="flex shrink-0 items-center gap-2 border-b border-rose-400/20 bg-rose-400/10 px-6 py-2 text-xs text-rose-300">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           {loadError}
         </div>
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-96 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
-          <div className="shrink-0 px-4 py-3 text-xs text-slate-500">
+        <aside className="flex w-96 shrink-0 flex-col border-r border-white/10 bg-[#0d1017]">
+          <div className="shrink-0 px-4 py-3 text-xs text-slate-400">
             {sessions.length} session{sessions.length === 1 ? "" : "s"}
             {errorCount > 0 && (
-              <span className="font-medium text-rose-600"> · {errorCount} with errors</span>
+              <span className="font-medium text-rose-400"> · {errorCount} with errors</span>
             )}
           </div>
           <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
             {sessions.length === 0 && !loading && (
-              <p className="mt-8 px-2 text-center text-sm text-slate-400">
+              <p className="mt-8 px-2 text-center text-sm text-slate-500">
                 {errorsOnly ? "No sessions with errors right now." : "No activity yet."}
               </p>
             )}
@@ -564,12 +570,12 @@ function AdminLogs() {
           </div>
         </aside>
 
-        <main className="min-h-0 flex-1 bg-white">
+        <main className="min-h-0 flex-1 bg-[#0a0d14]">
           {selected ? (
             <SessionPane sessionKey={selected} token={token} />
           ) : (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-slate-400">Select a session to see its full timeline.</p>
+              <p className="text-sm text-slate-500">Select a session to see its full timeline.</p>
             </div>
           )}
         </main>
