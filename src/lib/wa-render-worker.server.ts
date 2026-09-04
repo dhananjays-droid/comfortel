@@ -39,7 +39,7 @@ import {
   runVisualizeStatus,
 } from "@/lib/visualize.functions";
 import type { VisualizeMode } from "@/lib/visualize-prompt";
-import { sendImage, sendText } from "@/lib/wa-client.server";
+import { sendButtons, sendImage, sendText } from "@/lib/wa-client.server";
 import { rehostRender } from "@/lib/wa-media.server";
 import { decryptPhone } from "@/lib/wa-phone-crypto.server";
 
@@ -196,6 +196,31 @@ export function renderCta(mode: VisualizeMode): string {
   return "Want this added to your plan?";
 }
 
+/**
+ * The real actions behind renderCta()'s text, sent as a follow-up buttons
+ * message since WhatsApp cannot attach interactive buttons to an image
+ * itself — a customer looking at their finished render is the highest-
+ * intent moment in the conversation, and typing "add these to my plan"
+ * correctly is not something to require of them. Button ids match
+ * wa-runtime.ts's `plan:add:id:qty,...` / `quote:id,...` conventions.
+ *
+ * Omitted for lineup: several DIFFERENT products are shown at once, and
+ * "which one" has no single-button mapping the way "add these" does for a
+ * whole-room render — it keeps its existing text-only CTA.
+ */
+export function renderCtaButtons(
+  mode: VisualizeMode,
+  productIds: string[],
+  quantities: Record<string, number> | null,
+): Array<{ id: string; title: string }> {
+  if (mode === "lineup" || !productIds.length) return [];
+  const idQty = productIds.map((id) => `${id}:${quantities?.[id] ?? 1}`).join(",");
+  return [
+    { id: `plan:add:${idQty}`, title: "Add to my plan" },
+    { id: `quote:${productIds.join(",")}`, title: "Get a quote" },
+  ];
+}
+
 async function deliverImage(
   job: RenderJobRow,
   imageUrl: string,
@@ -207,13 +232,18 @@ async function deliverImage(
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
   const note = shortfallNote(shortfallFrom(expectedForJob(job), verdict), verdict.elsewhere);
   const cta = renderCta(job.mode);
-  const caption = note ? `${note}\n\n${cta}` : cta;
+  const buttons = renderCtaButtons(job.mode, job.product_ids, job.quantities);
+  // The CTA moves into the follow-up buttons message when there is a real
+  // action to offer; lineup has none, so it stays in the caption exactly
+  // as before.
+  const caption = buttons.length ? note : note ? `${note}\n\n${cta}` : cta;
 
   await updateJob(job.id, { status: "done", result_url: durableUrl, attempt });
 
   try {
     const phone = decryptPhone(job.customer_phone_enc);
     await sendImage(phone, durableUrl, caption);
+    if (buttons.length) await sendButtons(phone, cta, { kind: "buttons", buttons });
   } catch (err) {
     console.error("deliverImage: send failed", err);
     await updateJob(job.id, { status: "failed", error: "send failed" });

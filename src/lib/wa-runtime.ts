@@ -32,6 +32,7 @@ import {
   type RenderRequest,
 } from "@/lib/chat.functions";
 import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
+import { parseEnquiryInput, runSubmitEnquiry } from "@/lib/enquiry.functions";
 import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
@@ -44,6 +45,8 @@ import {
   sanitizeRoomSpec,
   type SessionOffered,
   type SessionOfferedChoice,
+  type SessionPendingQuote,
+  type SessionPlan,
   type SessionRoomPhoto,
   type SessionState,
 } from "@/lib/wa-session";
@@ -96,6 +99,25 @@ export function productTurns(productIds: string[]): WaTurn[] {
       imageUrl: p.images[0]!,
       caption: [`*${p.name}*`, formatPrice(p.price), p.url].filter(Boolean).join("\n"),
     }));
+}
+
+/**
+ * The default next step whenever products were shown but the model did not
+ * already offer or trigger a render for them — a customer should never have
+ * to find the exact right phrasing to get a picture; a tap should always be
+ * on offer instead. staged_room is always the mode here since it is the one
+ * that works whether or not a room photo exists.
+ */
+export function proactiveOfferTurn(productIds: string[]): WaTurn | null {
+  if (!productIds.length) return null;
+  return {
+    kind: "buttons",
+    text: "Want to see it in your space?",
+    action: {
+      kind: "buttons",
+      buttons: [{ id: `offer:staged_room:${productIds.join(",")}`, title: "See it in your space" }],
+    },
+  };
 }
 
 /** A real customer can legitimately hit the render rate limit (unlike a
@@ -399,6 +421,145 @@ async function acceptOfferRequest(
 }
 
 // ---------------------------------------------------------------------------
+// add to plan / get a quote — buttons on a delivered render, new code (see
+// wa-render-worker.server.ts's renderCtaTurn), since a customer looking at
+// their finished picture is the highest-intent moment in the conversation
+// and typing "add these to my plan" correctly is not something to require.
+// ---------------------------------------------------------------------------
+
+/** id:qty tokens — same convention the RENDER marker itself uses (see
+ * chat.functions.ts), reused here since these buttons are built from the
+ * same render job's product ids and quantities. */
+function parseIdQtyList(raw: string): Array<{ id: string; qty: number }> {
+  return raw
+    .split(",")
+    .map((token) => {
+      const [id, qty] = token.split(":");
+      return { id: (id ?? "").trim(), qty: qty ? Number.parseInt(qty, 10) : 1 };
+    })
+    .filter(
+      (t): t is { id: string; qty: number } =>
+        Boolean(t.id) &&
+        Object.prototype.hasOwnProperty.call(CATALOG_FULL, t.id) &&
+        Number.isFinite(t.qty) &&
+        t.qty > 0,
+    );
+}
+
+function mergeIntoPlan(plan: SessionPlan, items: Array<{ id: string; qty: number }>): SessionPlan {
+  const ids = [...plan.ids];
+  const qty = { ...plan.qty };
+  for (const item of items) {
+    if (!ids.includes(item.id)) ids.push(item.id);
+    qty[item.id] = (qty[item.id] ?? 0) + item.qty;
+  }
+  return { ids, qty };
+}
+
+function addToPlanTurn(session: SessionState, tappedId: string): RuntimeResult {
+  const items = parseIdQtyList(tappedId.slice("plan:add:".length));
+  if (!items.length) return { session, turns: [] };
+  const plan = mergeIntoPlan(session.plan, items);
+  const names = items
+    .map((i) => getProduct(i.id)?.name)
+    .filter((n): n is string => Boolean(n))
+    .join(", ");
+  const replyText = names
+    ? `Added ${names} to your plan. Want a quote, or should I keep going?`
+    : "Added to your plan.";
+  return { session: { ...session, plan }, turns: [{ kind: "text", text: replyText }] };
+}
+
+/** Starts the guided quote intake — the same two fields the web's enquiry
+ * form asks for, collected in one message since WhatsApp has no form. */
+function startQuoteTurn(session: SessionState, tappedId: string): RuntimeResult {
+  const productIds = tappedId
+    .slice("quote:".length)
+    .split(",")
+    .filter((id) => Object.prototype.hasOwnProperty.call(CATALOG_FULL, id));
+  if (!productIds.length) return { session, turns: [] };
+  const pendingQuote: SessionPendingQuote = { productIds };
+  return {
+    session: { ...session, pendingQuote, flow: { awaiting: "quote" } },
+    turns: [
+      {
+        kind: "text",
+        text: 'What name and email should the quote go to? Send both together, like "Jamie Lee, jamie@lee.com".',
+      },
+    ],
+  };
+}
+
+const EMAIL_IN_TEXT = /[^\s@]+@[^\s@]+\.[^\s@]{2,}/;
+
+/** Accepts the name and email in either order, since a reply to one
+ * free-text prompt won't always lead with the same field. */
+function parseNameAndEmail(text: string): { name: string; email: string } | null {
+  const match = text.match(EMAIL_IN_TEXT);
+  if (!match) return null;
+  const email = match[0];
+  const name = text.replace(email, "").replace(/[,]/g, " ").trim();
+  return name ? { name, email } : null;
+}
+
+/**
+ * Ported concept, new code: the web's enquiry form collects a name and
+ * email on one screen and calls submitEnquiry() once per "Enquire" tap;
+ * this collects the same two fields in one WhatsApp message instead, then
+ * calls the exact same function — once per product, since its schema
+ * covers one product per submission and a staged_room render can hold
+ * several.
+ */
+async function submitQuoteTurn(session: SessionState, text: string): Promise<RuntimeResult> {
+  const pending = session.pendingQuote;
+  if (!pending) return { session: { ...session, flow: INITIAL }, turns: [] };
+
+  const parsed = parseNameAndEmail(text);
+  if (!parsed) {
+    return {
+      session,
+      turns: [
+        {
+          kind: "text",
+          text: 'I need both a name and an email to send that through. Could you send them together, like "Jamie Lee, jamie@lee.com"?',
+        },
+      ],
+    };
+  }
+
+  const references: string[] = [];
+  for (const id of pending.productIds) {
+    try {
+      const result = await runSubmitEnquiry(
+        parseEnquiryInput({ productId: id, fullName: parsed.name, email: parsed.email }),
+      );
+      references.push(result.reference);
+    } catch (err) {
+      console.error("wa-runtime: submitEnquiry failed", err);
+    }
+  }
+
+  const next: SessionState = { ...session, pendingQuote: null, flow: INITIAL };
+  if (!references.length) {
+    return {
+      session: next,
+      turns: [
+        {
+          kind: "text",
+          text: "Sorry, that didn't go through. Please try again in a moment, or ask to talk to a person.",
+        },
+      ],
+    };
+  }
+
+  const replyText =
+    references.length > 1
+      ? `Done, quote requests sent (references ${references.join(", ")}). Someone will follow up at ${parsed.email}.`
+      : `Done, quote request sent (reference ${references[0]}). Someone will follow up at ${parsed.email}.`;
+  return { session: next, turns: [{ kind: "text", text: replyText }] };
+}
+
+// ---------------------------------------------------------------------------
 // chat fallback
 // ---------------------------------------------------------------------------
 
@@ -437,7 +598,10 @@ async function runChatTurn(
       buttons: [
         {
           id: `offer:${offer.mode}:${offer.productIds.join(",")}`,
-          title: "See this in your space",
+          // Exactly WA.buttonTitle (20 chars) — "See this in your
+          // space" (22) was silently truncated by WhatsApp itself into
+          // "See this in your sp…", a real bug a customer flagged.
+          title: "See it in your space",
         },
       ],
     };
@@ -474,6 +638,13 @@ async function runChatTurn(
       );
       return { session: rendered.session, turns: [...turns, ...rendered.turns] };
     }
+  }
+
+  // Neither an offer nor a render already came with these cards — give the
+  // customer a tap instead of leaving the next step to whatever they type.
+  if (!res.offer && res.productIds.length) {
+    const offerTurn = proactiveOfferTurn(res.productIds);
+    if (offerTurn) turns.push(offerTurn);
   }
 
   return { session: next, turns };
@@ -514,9 +685,21 @@ async function route(
     return acceptOfferRequest(session, sessionKey, phone, tappedId);
   }
 
+  if (tappedId?.startsWith("plan:add:")) {
+    return addToPlanTurn(session, tappedId);
+  }
+
+  if (tappedId?.startsWith("quote:")) {
+    return startQuoteTurn(session, tappedId);
+  }
+
   const step = advance(session.flow, text);
 
   if (!step) {
+    if (session.flow.awaiting === "quote") {
+      return submitQuoteTurn(session, text);
+    }
+
     if (session.flow.awaiting === "build") {
       return offerPackages({ ...session, flow: INITIAL }, text);
     }

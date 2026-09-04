@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { handleRenderWorkerTick, renderCta } from "@/lib/wa-render-worker.server";
+import { handleRenderWorkerTick, renderCta, renderCtaButtons } from "@/lib/wa-render-worker.server";
 import { VISUALIZE_MODES } from "@/lib/visualize-prompt";
 
 /**
@@ -33,6 +33,37 @@ describe("renderCta", () => {
   it("gives placement modes a shorter, single-product nudge", () => {
     expect(renderCta("add")).toBe(renderCta("replace"));
     expect(renderCta("add")).toBe(renderCta("replace_all"));
+  });
+});
+
+describe("renderCtaButtons", () => {
+  it("offers add-to-plan and get-a-quote for a whole-room render", () => {
+    const buttons = renderCtaButtons("staged_room", ["a", "b"], { a: 3 });
+    expect(buttons).toEqual([
+      { id: "plan:add:a:3,b:1", title: "Add to my plan" },
+      { id: "quote:a,b", title: "Get a quote" },
+    ]);
+  });
+
+  it("defaults an unlisted product's quantity to 1", () => {
+    const buttons = renderCtaButtons("refit_room", ["a"], null);
+    expect(buttons[0]?.id).toBe("plan:add:a:1");
+  });
+
+  it("offers nothing for a lineup — no single button maps to 'which one'", () => {
+    expect(renderCtaButtons("lineup", ["a", "b"], null)).toEqual([]);
+  });
+
+  it("offers nothing with no products", () => {
+    expect(renderCtaButtons("staged_room", [], null)).toEqual([]);
+  });
+
+  it("every button title fits WhatsApp's 20-character cap", () => {
+    for (const mode of VISUALIZE_MODES) {
+      for (const button of renderCtaButtons(mode, ["a"], null)) {
+        expect(button.title.length).toBeLessThanOrEqual(20);
+      }
+    }
   });
 });
 

@@ -27,6 +27,7 @@ type SessionRow = {
   room_spec_depth_cm: number | null;
   offered: unknown;
   pending_zone_render: boolean;
+  pending_quote: unknown;
   handoff: boolean;
 };
 
@@ -41,7 +42,7 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
     const { data, error } = await supabaseAdmin
       .from("sessions")
       .select(
-        "transcript, plan, flow, room_url, room_at, room_spec_wall_cm, room_spec_depth_cm, offered, pending_zone_render, handoff",
+        "transcript, plan, flow, room_url, room_at, room_spec_wall_cm, room_spec_depth_cm, offered, pending_zone_render, pending_quote, handoff",
       )
       .eq("session_key", sessionKey)
       .maybeSingle();
@@ -66,6 +67,7 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
       room,
       offered: row.offered,
       pendingZoneRender: row.pending_zone_render,
+      pendingQuote: row.pending_quote,
       handoff: row.handoff,
     });
   } catch (err) {
@@ -91,6 +93,7 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
         room_spec_depth_cm: clean.roomSpec?.depthCm ?? null,
         offered: clean.offered,
         pending_zone_render: clean.pendingZoneRender,
+        pending_quote: clean.pendingQuote,
         handoff: clean.handoff,
         updated_at: new Date().toISOString(),
       },

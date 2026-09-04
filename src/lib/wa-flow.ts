@@ -46,7 +46,7 @@ export type WaReply = {
  * at a time. Five questions in a row is how a business number gets muted, and
  * on WhatsApp there is no form to fall back on.
  */
-export type Await = "visualize" | "build" | "wall" | "photo";
+export type Await = "visualize" | "build" | "wall" | "photo" | "quote";
 
 export type FlowState = { awaiting?: Await | undefined };
 
@@ -78,7 +78,10 @@ const MENU_BUTTONS = [
 export function welcome(): WaReply {
   return {
     // Kept short on purpose: a welcome that scrolls is a welcome nobody reads.
-    text: "Hi, Comfortel here. We fit out salons, barbershops and spas, and we can show you any piece standing in a photo of your own room.\n\nWhat would you like to do?",
+    // One emoji, once, on the very first hello — the rest of the
+    // conversation leaves that warmth to the model's own judgment call
+    // rather than baking a fixed emoji into a template sent every time.
+    text: "Hi 👋, Comfortel here. We fit out salons, barbershops and spas, and we can show you any piece standing in a photo of your own room.\n\nWhat would you like to do?",
     action: { kind: "buttons", buttons: MENU_BUTTONS.map((b) => ({ ...b })) },
   };
 }

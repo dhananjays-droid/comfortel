@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CATALOG_FULL } from "@/lib/catalog";
-import { handleInboundMessage, productTurns } from "@/lib/wa-runtime";
+import { handleInboundMessage, proactiveOfferTurn, productTurns } from "@/lib/wa-runtime";
 import { EMPTY_SESSION, type SessionState } from "@/lib/wa-session";
 
 /**
@@ -285,6 +285,108 @@ describe("handleInboundMessage — unsupported input", () => {
   });
 });
 
+describe("handleInboundMessage — add to plan", () => {
+  it("adds the tapped product to an empty plan, with its named quantity", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: `plan:add:${REAL_ID}:3`,
+    });
+    expect(session.plan.ids).toEqual([REAL_ID]);
+    expect(session.plan.qty[REAL_ID]).toBe(3);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.kind).toBe("text");
+    if (turns[0]?.kind === "text") expect(turns[0].text).toContain(CATALOG_FULL[REAL_ID]!.name);
+  });
+
+  it("adds to an existing quantity rather than overwriting it", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      plan: { ids: [REAL_ID], qty: { [REAL_ID]: 2 } },
+    };
+    const { session } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: `plan:add:${REAL_ID}:1`,
+    });
+    expect(session.plan.qty[REAL_ID]).toBe(3);
+  });
+
+  it("ignores a tap naming no real product", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "plan:add:not-a-real-id:2",
+    });
+    expect(turns).toHaveLength(0);
+    expect(session.plan.ids).toEqual([]);
+  });
+});
+
+describe("handleInboundMessage — get a quote", () => {
+  it("starts the guided intake and remembers which products it is for", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: `quote:${REAL_ID}`,
+    });
+    expect(session.flow.awaiting).toBe("quote");
+    expect(session.pendingQuote?.productIds).toEqual([REAL_ID]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.kind).toBe("text");
+    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("email");
+  });
+
+  it("re-prompts rather than guessing when the reply has no email in it", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "quote" },
+      pendingQuote: { productIds: [REAL_ID] },
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "Jamie Lee",
+    });
+    expect(session.flow.awaiting).toBe("quote");
+    expect(session.pendingQuote?.productIds).toEqual([REAL_ID]);
+    expect(turns).toHaveLength(1);
+    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("email");
+  });
+
+  it("reports honestly, rather than falsely confirming, when the enquiry can't be submitted", async () => {
+    // No SUPABASE_SERVICE_ROLE_KEY in this test environment (see the file
+    // header comment), so runSubmitEnquiry fails closed the same way
+    // enqueueRenderJob does — this asserts that failure surfaces to the
+    // customer rather than a phony "done" reply going out regardless.
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "quote" },
+      pendingQuote: { productIds: [REAL_ID] },
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "Jamie Lee, jamie@lee.com",
+    });
+    expect(session.flow.awaiting).toBeUndefined();
+    expect(session.pendingQuote).toBeNull();
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.kind).toBe("text");
+    if (turns[0]?.kind === "text")
+      expect(turns[0].text.toLowerCase()).toContain("didn't go through");
+  });
+});
+
 describe("productTurns", () => {
   it("turns a real product id into an image turn with name, price and link", () => {
     const product = CATALOG_FULL[REAL_ID]!;
@@ -317,5 +419,24 @@ describe("productTurns", () => {
     turns.forEach((turn, i) => {
       if (turn.kind === "product") expect(turn.imageUrl).toBe(CATALOG_FULL[ids[i]!]!.images[0]);
     });
+  });
+});
+
+describe("proactiveOfferTurn", () => {
+  it("offers a staged_room button carrying every id shown", () => {
+    const turn = proactiveOfferTurn([REAL_ID, "another-id"]);
+    expect(turn?.kind).toBe("buttons");
+    if (turn?.kind === "buttons") {
+      expect(turn.action.buttons).toHaveLength(1);
+      expect(turn.action.buttons[0]?.id).toBe(`offer:staged_room:${REAL_ID},another-id`);
+      // WhatsApp's own 20-char button-title cap — a title over this silently
+      // gets truncated by WhatsApp itself, a real bug a customer flagged
+      // ("See this in your space" was 22 chars).
+      expect(turn.action.buttons[0]?.title.length).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it("offers nothing when there is nothing to point the button at", () => {
+    expect(proactiveOfferTurn([])).toBeNull();
   });
 });

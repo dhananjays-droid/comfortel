@@ -7,6 +7,7 @@ import {
   liveRoom,
   sanitizeFlow,
   sanitizeOffered,
+  sanitizePendingQuote,
   sanitizePlan,
   sanitizeRoom,
   sanitizeRoomSpec,
@@ -172,6 +173,27 @@ describe("sanitizeFlow", () => {
   });
 });
 
+describe("sanitizePendingQuote", () => {
+  it("keeps real catalogue ids", () => {
+    expect(sanitizePendingQuote({ productIds: [REAL_ID] })).toEqual({ productIds: [REAL_ID] });
+  });
+
+  it("drops ids that don't resolve against the catalogue", () => {
+    expect(sanitizePendingQuote({ productIds: [REAL_ID, "not-a-real-id"] })).toEqual({
+      productIds: [REAL_ID],
+    });
+  });
+
+  it("becomes null once every id is dropped", () => {
+    expect(sanitizePendingQuote({ productIds: ["not-a-real-id"] })).toBeNull();
+  });
+
+  it("tolerates a hostile payload", () => {
+    expect(sanitizePendingQuote(null)).toBeNull();
+    expect(sanitizePendingQuote({ productIds: "not-an-array" })).toBeNull();
+  });
+});
+
 describe("sanitizeRoom", () => {
   it("keeps a well-formed room photo", () => {
     const out = sanitizeRoom({ url: "https://x/y.jpg", at: 123 });
@@ -262,6 +284,7 @@ describe("sanitizeSession", () => {
       room: { url: "https://x/y.jpg", at: 1 },
       offered: null,
       pendingZoneRender: true,
+      pendingQuote: { productIds: [REAL_ID] },
       handoff: true,
     };
     expect(sanitizeSession(session)).toEqual(session);

@@ -32,7 +32,7 @@ const MAX_QTY = 99;
 /** Matches visualize.functions.ts's room-dimension clamp. */
 const MIN_ROOM_CM = 100;
 const MAX_ROOM_CM = 3000;
-const AWAIT_VALUES: readonly Await[] = ["visualize", "build", "wall", "photo"];
+const AWAIT_VALUES: readonly Await[] = ["visualize", "build", "wall", "photo", "quote"];
 
 export type SessionPlan = { ids: string[]; qty: Record<string, number> };
 
@@ -63,6 +63,12 @@ export type SessionOffered = {
   at: number;
 };
 
+/** Which products a tapped "Get a quote" button was for — held while
+ * flow.awaiting is "quote" and the customer's name and email are collected,
+ * since submitEnquiry needs both per product and neither travels with a
+ * button tap. */
+export type SessionPendingQuote = { productIds: string[] };
+
 export type SessionState = {
   transcript: ChatMessageInput[];
   plan: SessionPlan;
@@ -73,6 +79,7 @@ export type SessionState = {
   /** A dimensions run promised zone renders and is only waiting on a photo —
    * matches index.tsx's `pendingZoneRender` state. */
   pendingZoneRender: boolean;
+  pendingQuote: SessionPendingQuote | null;
   handoff: boolean;
 };
 
@@ -84,6 +91,7 @@ export const EMPTY_SESSION: SessionState = {
   room: null,
   offered: null,
   pendingZoneRender: false,
+  pendingQuote: null,
   handoff: false,
 };
 
@@ -242,6 +250,18 @@ export function sanitizeOffered(input: unknown): SessionOffered | null {
   return { packages, choice, at: Number.isFinite(at) ? at : Date.now() };
 }
 
+export function sanitizePendingQuote(input: unknown): SessionPendingQuote | null {
+  const raw = input as { productIds?: unknown } | null | undefined;
+  if (!raw || !Array.isArray(raw.productIds)) return null;
+  const productIds = raw.productIds
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id),
+    )
+    .slice(0, MAX_PLAN_LINES);
+  return productIds.length ? { productIds } : null;
+}
+
 export function sanitizeSession(input: unknown): SessionState {
   const raw = input as Partial<Record<keyof SessionState, unknown>> | null | undefined;
   return {
@@ -252,6 +272,7 @@ export function sanitizeSession(input: unknown): SessionState {
     room: sanitizeRoom(raw?.room),
     offered: sanitizeOffered(raw?.offered),
     pendingZoneRender: raw?.pendingZoneRender === true,
+    pendingQuote: sanitizePendingQuote(raw?.pendingQuote),
     handoff: raw?.handoff === true,
   };
 }
