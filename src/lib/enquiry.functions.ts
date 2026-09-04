@@ -31,63 +31,69 @@ function makeReference(): string {
   return `CF-${out}`;
 }
 
-export const submitEnquiry = createServerFn({ method: "POST" })
-  .validator((input: EnquiryInput) => {
-    const productId = trim(input?.productId, 32);
-    const fullName = trim(input?.fullName, 120);
-    const email = trim(input?.email, 200);
+export function parseEnquiryInput(input: EnquiryInput) {
+  const productId = trim(input?.productId, 32);
+  const fullName = trim(input?.fullName, 120);
+  const email = trim(input?.email, 200);
 
-    if (!productId) throw new Error("productId required");
-    if (fullName.length < 2) throw new Error("NAME_REQUIRED");
-    if (!EMAIL.test(email)) throw new Error("EMAIL_INVALID");
+  if (!productId) throw new Error("productId required");
+  if (fullName.length < 2) throw new Error("NAME_REQUIRED");
+  if (!EMAIL.test(email)) throw new Error("EMAIL_INVALID");
 
-    const quantity = Number(input?.quantity);
-    return {
-      productId,
-      fullName,
-      email,
-      phone: trim(input?.phone, 40),
-      businessName: trim(input?.businessName, 160),
-      notes: trim(input?.notes, 2000),
-      visualizationUrl: trim(input?.visualizationUrl, 2000),
-      quantity: Number.isFinite(quantity) ? Math.min(999, Math.max(1, Math.round(quantity))) : 1,
-    };
-  })
-  .handler(async ({ data }): Promise<EnquiryResult> => {
-    const catalog = catalogFull as unknown as Record<
-      string,
-      { name: string; url: string } | undefined
-    >;
-    const product = catalog[data.productId];
-    if (!product) throw new Error("PRODUCT_NOT_FOUND");
+  const quantity = Number(input?.quantity);
+  return {
+    productId,
+    fullName,
+    email,
+    phone: trim(input?.phone, 40),
+    businessName: trim(input?.businessName, 160),
+    notes: trim(input?.notes, 2000),
+    visualizationUrl: trim(input?.visualizationUrl, 2000),
+    quantity: Number.isFinite(quantity) ? Math.min(999, Math.max(1, Math.round(quantity))) : 1,
+  };
+}
 
-    try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+export type EnquiryData = ReturnType<typeof parseEnquiryInput>;
 
-      // The reference is random, so a collision is a retry rather than an error.
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const reference = makeReference();
-        const { error } = await supabaseAdmin.from("enquiries").insert({
-          reference,
-          product_id: data.productId,
-          product_name: product.name,
-          product_url: product.url ?? null,
-          quantity: data.quantity,
-          full_name: data.fullName,
-          email: data.email,
-          phone: data.phone || null,
-          business_name: data.businessName || null,
-          notes: data.notes || null,
-          visualization_url: data.visualizationUrl || null,
-        });
+export async function runSubmitEnquiry(data: EnquiryData): Promise<EnquiryResult> {
+  const catalog = catalogFull as unknown as Record<
+    string,
+    { name: string; url: string } | undefined
+  >;
+  const product = catalog[data.productId];
+  if (!product) throw new Error("PRODUCT_NOT_FOUND");
 
-        if (!error) return { reference, productName: product.name };
-        // 23505 = unique_violation on `reference`
-        if (error.code !== "23505") throw error;
-      }
-      throw new Error("could not allocate a reference");
-    } catch (err) {
-      console.error("submitEnquiry failed", err);
-      throw new Error("ENQUIRY_FAILED");
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // The reference is random, so a collision is a retry rather than an error.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const reference = makeReference();
+      const { error } = await supabaseAdmin.from("enquiries").insert({
+        reference,
+        product_id: data.productId,
+        product_name: product.name,
+        product_url: product.url ?? null,
+        quantity: data.quantity,
+        full_name: data.fullName,
+        email: data.email,
+        phone: data.phone || null,
+        business_name: data.businessName || null,
+        notes: data.notes || null,
+        visualization_url: data.visualizationUrl || null,
+      });
+
+      if (!error) return { reference, productName: product.name };
+      // 23505 = unique_violation on `reference`
+      if (error.code !== "23505") throw error;
     }
-  });
+    throw new Error("could not allocate a reference");
+  } catch (err) {
+    console.error("submitEnquiry failed", err);
+    throw new Error("ENQUIRY_FAILED");
+  }
+}
+
+export const submitEnquiry = createServerFn({ method: "POST" })
+  .validator(parseEnquiryInput)
+  .handler(async ({ data }): Promise<EnquiryResult> => runSubmitEnquiry(data));

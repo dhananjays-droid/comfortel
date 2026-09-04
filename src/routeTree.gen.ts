@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as AdminLogsRouteImport } from './routes/admin.logs'
 import { Route as DCodeRouteImport } from './routes/d.$code'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminLogsRoute = AdminLogsRouteImport.update({
+  id: '/admin/logs',
+  path: '/admin/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DCodeRoute = DCodeRouteImport.update({
   id: '/d/$code',
   path: '/d/$code',
@@ -32,30 +38,34 @@ const DCodeRoute = DCodeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/d/$code': typeof DCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/d/$code': typeof DCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/privacy': typeof PrivacyRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/d/$code': typeof DCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/privacy' | '/d/$code'
+  fullPaths: '/' | '/privacy' | '/admin/logs' | '/d/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/privacy' | '/d/$code'
-  id: '__root__' | '/' | '/privacy' | '/d/$code'
+  to: '/' | '/privacy' | '/admin/logs' | '/d/$code'
+  id: '__root__' | '/' | '/privacy' | '/admin/logs' | '/d/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PrivacyRoute: typeof PrivacyRoute
+  AdminLogsRoute: typeof AdminLogsRoute
   DCodeRoute: typeof DCodeRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/logs': {
+      id: '/admin/logs'
+      path: '/admin/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AdminLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/d/$code': {
       id: '/d/$code'
       path: '/d/$code'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PrivacyRoute: PrivacyRoute,
+  AdminLogsRoute: AdminLogsRoute,
   DCodeRoute: DCodeRoute,
 }
 export const routeTree = rootRouteImport

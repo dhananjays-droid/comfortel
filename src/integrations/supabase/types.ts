@@ -92,6 +92,7 @@ export type Database = {
           handoff: boolean;
           id: string;
           offered: Json | null;
+          pending_quote: Json | null;
           pending_zone_render: boolean;
           plan: Json;
           room_at: string | null;
@@ -110,6 +111,7 @@ export type Database = {
           handoff?: boolean;
           id?: string;
           offered?: Json | null;
+          pending_quote?: Json | null;
           pending_zone_render?: boolean;
           plan?: Json;
           room_at?: string | null;
@@ -128,6 +130,7 @@ export type Database = {
           handoff?: boolean;
           id?: string;
           offered?: Json | null;
+          pending_quote?: Json | null;
           pending_zone_render?: boolean;
           plan?: Json;
           room_at?: string | null;
