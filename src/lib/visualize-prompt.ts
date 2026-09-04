@@ -600,7 +600,7 @@ function buildStagedPrompt(
       `Where one product's images show it on more than one style of base or column, the seat and its upholstery are the product and the base is an option. Pick ONE base from those shown and give every copy of that product the same one.`,
     ),
     req(
-      `Build a photorealistic interior of ${ROOM_NAME[roomKind]} and install exactly these pieces in it: ${tally}. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
+      `Build a photorealistic interior of ${ROOM_NAME[roomKind]} and install EXACTLY this many of each, no fewer: ${tally}. The count in each line is a hard requirement, not a suggestion, and this room has no real walls to run out of, so there is no legitimate reason to install fewer than asked. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
     ),
     req(
       `COPY EACH PRODUCT EXACTLY — the most important requirement here. The room is yours to invent; the furniture is not. A beautiful salon containing the wrong chair is a failed render. Match each reference's silhouette, the profile of its ARMRESTS, its upholstery seams, and its BASE — shape, legs or disc, column and footrest.`,
@@ -633,8 +633,12 @@ function buildStagedPrompt(
       : []),
     ...realismClauses(),
     ...correctionClauses(correction),
+    // Unlike a refit or a zone render, this room does not exist yet, so
+    // "it wouldn't fit" is never a legitimate reason to install fewer than
+    // asked — make the room bigger instead. Never shrink a piece, overlap
+    // two, or sink one into a wall to force the count in either direction.
     req(
-      `Never shrink a piece, overlap two, or sink one into a wall to make the count fit. If ${tally} genuinely cannot be arranged in one plausible room, install as many as fit correctly and leave the rest out rather than distorting anything.`,
+      `Every count above must be met in full — ${tally}. If a natural composition feels tight, make the room larger or the framing wider; do not leave any piece out. This is the one mode where the room is entirely invented, so there is no real floor to run out of, unlike a photo of the customer's actual space.`,
     ),
   ]);
 }

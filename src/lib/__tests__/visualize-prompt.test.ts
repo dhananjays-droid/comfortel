@@ -441,6 +441,22 @@ describe("staged_room — no photograph", () => {
       expect(needsRoomPhoto(mode)).toBe(true);
     }
   });
+
+  it("treats the count as a hard requirement, not a suggestion", () => {
+    // Confirmed live: a customer asked for 10 chairs and got 8, because the
+    // prompt licensed the model to leave pieces out "if it doesn't fit" —
+    // a real excuse for a refit against a real photographed room, but not
+    // for a room this mode invents from nothing.
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).toMatch(/EXACTLY this many/i);
+    expect(prompt).toMatch(/hard requirement, not a suggestion/i);
+  });
+
+  it("does not license leaving pieces out the way a refit does", () => {
+    const { prompt } = buildRenderRequest(products, "staged_room");
+    expect(prompt).not.toMatch(/leave the rest out/i);
+    expect(prompt).not.toMatch(/install as many as fit correctly and leave/i);
+  });
 });
 
 describe("staged_room — invents the right kind of room", () => {
