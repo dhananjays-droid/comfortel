@@ -33,8 +33,15 @@ import {
 } from "@/lib/chat.functions";
 import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
 import { parseEnquiryInput, runSubmitEnquiry } from "@/lib/enquiry.functions";
-import { buildPackages, idsOf, needsFor, TIER_LABEL, type Package } from "@/lib/packages";
-import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
+import {
+  buildPackages,
+  distinctPackages,
+  idsOf,
+  needsFor,
+  TIER_LABEL,
+  type Package,
+} from "@/lib/packages";
+import { expectedFrom, linesFrom, planPieces, planTotal, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
 import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
 import { genericCapacity } from "@/lib/room";
@@ -321,6 +328,15 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
   }
   if (!packages.length) return { session: next, turns: [] };
 
+  // Once a budget exceeds what a given station count can absorb, every
+  // tier converges on the same maximum set — offering three identical
+  // totals under three different names is confusing, not a real choice.
+  // Confirmed live: a customer saw "Under budget", "On budget" and
+  // "Stretch" all priced at the exact same total with the exact same
+  // reason. index.tsx already dedupes this; the WhatsApp port had missed
+  // the same call.
+  packages = distinctPackages(packages);
+
   const offered: SessionOffered = {
     packages,
     choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
@@ -328,8 +344,12 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
   };
   next = { ...next, offered };
 
+  const howMany =
+    packages.length > 1
+      ? `Here are ${packages.length === 2 ? "two" : "three"} ways to do it, each is the most you can get at its price.`
+      : `Here is the fullest ${stations}-station fit-out the range covers at that budget.`;
   const replyText = [
-    `${note} Here are three ways to do it, each is the most you can get at its price.`,
+    `${note} ${howMany}`,
     "",
     ...packages.map(
       (p) => `*${TIER_LABEL[p.tier]}*: ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
@@ -464,9 +484,20 @@ function addToPlanTurn(session: SessionState, tappedId: string): RuntimeResult {
     .map((i) => getProduct(i.id)?.name)
     .filter((n): n is string => Boolean(n))
     .join(", ");
-  const replyText = names
-    ? `Added ${names} to your plan. Want a quote, or should I keep going?`
-    : "Added to your plan.";
+  if (!names) {
+    return {
+      session: { ...session, plan },
+      turns: [{ kind: "text", text: "Added to your plan." }],
+    };
+  }
+
+  // A running total makes budget planning tangible — the customer sees
+  // their spend update in real time as they add things, rather than
+  // having to ask separately what their plan comes to.
+  const products = plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
+  const lines = linesFrom(products, plan.qty);
+  const pieces = planPieces(lines);
+  const replyText = `Added ${names} to your plan, now ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Want a quote, or should I keep going?`;
   return { session: { ...session, plan }, turns: [{ kind: "text", text: replyText }] };
 }
 

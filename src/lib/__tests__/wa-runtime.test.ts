@@ -102,6 +102,30 @@ describe("handleInboundMessage — the guided build flow", () => {
     expect(result.turns[0]?.kind).toBe("text");
   });
 
+  it("collapses to one option rather than offering three identical prices", async () => {
+    // Confirmed live: a customer with a budget far beyond what one station
+    // needs saw "Under budget", "On budget" and "Stretch" all priced
+    // identically — every tier converges once there is nothing left to
+    // spend more on. index.tsx already dedupes this (distinctPackages);
+    // the WhatsApp port had missed the same call.
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "build" },
+    };
+    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "1 station, budget $1,000,000",
+    });
+    expect(session.offered?.packages).toHaveLength(1);
+    expect(turns[0]?.kind).toBe("buttons");
+    if (turns[0]?.kind === "buttons") {
+      expect(turns[0].action.buttons).toHaveLength(1);
+      expect(turns[0].text.toLowerCase()).toContain("fullest");
+      expect(turns[0].text.toLowerCase()).not.toContain("three ways");
+    }
+  });
+
   it("re-curates rather than crashing on a tap against an expired offer", async () => {
     const withStaleOffer: SessionState = {
       ...fresh(),
@@ -299,7 +323,14 @@ describe("handleInboundMessage — add to plan", () => {
     expect(session.plan.qty[REAL_ID]).toBe(3);
     expect(turns).toHaveLength(1);
     expect(turns[0]?.kind).toBe("text");
-    if (turns[0]?.kind === "text") expect(turns[0].text).toContain(CATALOG_FULL[REAL_ID]!.name);
+    if (turns[0]?.kind === "text") {
+      expect(turns[0].text).toContain(CATALOG_FULL[REAL_ID]!.name);
+      // The running total makes budget planning tangible turn by turn,
+      // rather than the customer having to ask separately what the plan
+      // comes to.
+      expect(turns[0].text).toContain("3 pieces");
+      expect(turns[0].text).toMatch(/\$[\d,]+/);
+    }
   });
 
   it("adds to an existing quantity rather than overwriting it", async () => {
