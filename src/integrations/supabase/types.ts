@@ -87,6 +87,7 @@ export type Database = {
         Row: {
           channel: string;
           created_at: string;
+          customer_name: string | null;
           expires_at: string;
           flow: Json;
           handoff: boolean;
@@ -94,6 +95,7 @@ export type Database = {
           offered: Json | null;
           pending_quote: Json | null;
           pending_zone_render: boolean;
+          phone_last4: string | null;
           plan: Json;
           room_at: string | null;
           room_spec_depth_cm: number | null;
@@ -106,6 +108,7 @@ export type Database = {
         Insert: {
           channel?: string;
           created_at?: string;
+          customer_name?: string | null;
           expires_at?: string;
           flow?: Json;
           handoff?: boolean;
@@ -113,6 +116,7 @@ export type Database = {
           offered?: Json | null;
           pending_quote?: Json | null;
           pending_zone_render?: boolean;
+          phone_last4?: string | null;
           plan?: Json;
           room_at?: string | null;
           room_spec_depth_cm?: number | null;
@@ -125,6 +129,7 @@ export type Database = {
         Update: {
           channel?: string;
           created_at?: string;
+          customer_name?: string | null;
           expires_at?: string;
           flow?: Json;
           handoff?: boolean;
@@ -132,6 +137,7 @@ export type Database = {
           offered?: Json | null;
           pending_quote?: Json | null;
           pending_zone_render?: boolean;
+          phone_last4?: string | null;
           plan?: Json;
           room_at?: string | null;
           room_spec_depth_cm?: number | null;

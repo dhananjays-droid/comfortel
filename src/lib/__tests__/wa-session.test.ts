@@ -286,6 +286,8 @@ describe("sanitizeSession", () => {
       pendingZoneRender: true,
       pendingQuote: { productIds: [REAL_ID] },
       handoff: true,
+      customerName: "Jamie Lee",
+      phoneLast4: "4567",
     };
     expect(sanitizeSession(session)).toEqual(session);
   });

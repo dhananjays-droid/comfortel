@@ -35,6 +35,10 @@ type InboundMessage = {
   kind: "text" | "interactive" | "image" | "unsupported";
   text?: string;
   buttonReplyId?: string;
+  /** The button/list row's own display text — what the customer actually
+   * saw and tapped. Logged alongside buttonReplyId so a developer reading
+   * the log sees "Plan my salon", not the internal id "build". */
+  buttonReplyTitle?: string;
   imageId?: string;
   imageCaption?: string;
 };
@@ -67,20 +71,24 @@ function handleVerify(url: URL): Response {
 
 /**
  * Meta's webhook envelope, narrowed to what this app reads. Fields not named
- * here (statuses, contacts.profile, etc.) are ignored rather than typed.
+ * here (statuses, etc.) are ignored rather than typed. contacts[].profile.name
+ * is read (for the admin dashboard only, see wa-session.ts's customerName) —
+ * it is the display name the customer set in their own WhatsApp app, not
+ * something Comfortel asked for or that conversation logic depends on.
  */
 type WebhookEnvelope = {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
         messages?: Array<{
           id?: string;
           from?: string;
           type?: string;
           text?: { body?: string };
           interactive?: {
-            button_reply?: { id?: string };
-            list_reply?: { id?: string };
+            button_reply?: { id?: string; title?: string };
+            list_reply?: { id?: string; title?: string };
           };
           image?: { id?: string; caption?: string };
         }>;
@@ -99,9 +107,15 @@ function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
         if (m.type === "text" && m.text?.body) {
           out.push({ ...base, kind: "text", text: m.text.body });
         } else if (m.type === "interactive") {
-          const id = m.interactive?.button_reply?.id ?? m.interactive?.list_reply?.id;
-          if (id) out.push({ ...base, kind: "interactive", buttonReplyId: id });
-          else out.push({ ...base, kind: "unsupported" });
+          const reply = m.interactive?.button_reply ?? m.interactive?.list_reply;
+          if (reply?.id) {
+            out.push({
+              ...base,
+              kind: "interactive",
+              buttonReplyId: reply.id,
+              ...(reply.title ? { buttonReplyTitle: reply.title } : {}),
+            });
+          } else out.push({ ...base, kind: "unsupported" });
         } else if (m.type === "image" && m.image?.id) {
           out.push({
             ...base,
@@ -116,6 +130,22 @@ function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
     }
   }
   return out;
+}
+
+/** wa_id → the customer's own WhatsApp display name, for every contact
+ * named anywhere in this delivery. Meta includes this on essentially every
+ * message, but treating it as occasionally absent (rather than assuming
+ * it) costs nothing and avoids overwriting a known name with nothing. */
+function extractContactNames(envelope: WebhookEnvelope): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const entry of envelope.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const c of change.value?.contacts ?? []) {
+        if (c.wa_id && c.profile?.name) names.set(c.wa_id, c.profile.name);
+      }
+    }
+  }
+  return names;
 }
 
 /**
@@ -138,6 +168,7 @@ async function recordInboundIfNew(message: InboundMessage, sessionKey: string): 
       payload: {
         text: message.text ?? null,
         buttonReplyId: message.buttonReplyId ?? null,
+        buttonReplyTitle: message.buttonReplyTitle ?? null,
         imageId: message.imageId ?? null,
       },
     });
@@ -228,6 +259,8 @@ async function handleReceive(request: Request): Promise<Response> {
     return new Response("OK", { status: 200 });
   }
 
+  const contactNames = extractContactNames(envelope);
+
   for (const message of extractMessages(envelope)) {
     const sessionKey = waSessionKey(message.from);
     const isNew = await recordInboundIfNew(message, sessionKey);
@@ -256,7 +289,15 @@ async function handleReceive(request: Request): Promise<Response> {
     try {
       const session = await loadSession(sessionKey);
       const result = await handleInboundMessage(session, sessionKey, message.from, event);
-      await saveSession(sessionKey, result.session);
+      // Identity for the admin dashboard only — never used by conversation
+      // logic. A known name is never overwritten with an absence of one
+      // (Meta doesn't send profile info on every single delivery).
+      const digits = message.from.replace(/\D/g, "");
+      await saveSession(sessionKey, {
+        ...result.session,
+        customerName: contactNames.get(message.from) ?? result.session.customerName,
+        phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
+      });
       await deliver(message.from, sessionKey, result.turns);
     } catch (err) {
       console.error("wa-runtime dispatch failed", err);
