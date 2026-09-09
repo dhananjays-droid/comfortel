@@ -268,6 +268,34 @@ export type VisualizeProduct = {
   qty?: number | undefined;
 };
 
+/** True when one of the products actually being installed is itself a
+ * Comfortel mirror unit — used to decide whether a whole-room render
+ * (refit_room, staged_room) can use the real product at every station or
+ * has to invent a plain, unbranded one instead. See mirrorClause() below. */
+function hasMirrorProduct(products: VisualizeProduct[]): boolean {
+  return products.some((p) => (p.salon_placement || p.placement) === "mirror_unit");
+}
+
+/**
+ * A complete salon build (refit_room, staged_room) gives every styling or
+ * barber chair its own mirror — real salons don't have chairs with nothing
+ * in front of them, and refit_room's own Step 1 strips every existing
+ * mirror before Step 2 rebuilds the room, so without this a plan that
+ * never included a mirror SKU would come back with chairs and no mirrors
+ * at all. Not used by the single-piece placement modes (add/replace/
+ * replace_all) or lineup — there, whichever mirrors the customer's actual
+ * uploaded photo already shows (or doesn't) is left exactly as it is,
+ * matching "Preserve everything else exactly" — a customer placing one
+ * chair into their real room is not asking for the room to be redesigned.
+ */
+function mirrorClause(products: VisualizeProduct[]): Clause {
+  return req(
+    hasMirrorProduct(products)
+      ? `Every styling or barber chair gets its own mirror directly in front of it — use the Comfortel mirror product from the references at each station that needs one. A complete salon never has a chair with nothing in front of it.`
+      : `Every styling or barber chair gets its own mirror directly in front of it. No mirror product was chosen for this plan, so add a plain, unbranded wall mirror at standard station height for each one that needs it — simple glass in a thin frame, nothing that reads as a specific product, and nothing branded. A complete salon never has a chair with nothing in front of it.`,
+  );
+}
+
 const PLACEMENT: Record<string, string> = {
   styling_chair: `Position it facing the mirror station at a stylist's working distance.`,
   shampoo_unit: `Position it against the wall at the wash bay, basin oriented away from the wall.`,
@@ -551,6 +579,7 @@ function buildRefitPrompt(
     req(
       `Step 2 — INSTALL: fit the Comfortel pieces into the room, each where its type belongs — styling chairs at the mirror stations, each one facing its mirror square-on so the customer sits looking at their own reflection, back toward the room; mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
     ),
+    mirrorClause(products),
     // The counts, as their own required clause. The customer is buying a
     // quantity, not a product: a package of four chairs rendered as one chair
     // contradicts the total sitting directly underneath it.
@@ -699,6 +728,7 @@ function buildStagedPrompt(
     req(
       `Build a photorealistic interior of ${ROOM_NAME[roomKind]} and install EXACTLY this many of each, no fewer: ${tally}. The count in each line is a hard requirement, not a suggestion, and this room has no real walls to run out of, so there is no legitimate reason to install fewer than asked. Nothing else branded, and no extra furniture beyond what a room like this genuinely needs.`,
     ),
+    mirrorClause(products),
     req(
       `COPY EACH PRODUCT EXACTLY — the most important requirement here. The room is yours to invent; the furniture is not. A beautiful salon containing the wrong chair is a failed render. Match each reference's silhouette, the profile of its ARMRESTS, its upholstery seams, and its BASE — shape, legs or disc, column and footrest.`,
     ),
