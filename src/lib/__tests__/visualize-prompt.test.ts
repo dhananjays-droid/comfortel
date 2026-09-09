@@ -459,6 +459,50 @@ describe("staged_room — no photograph", () => {
   });
 });
 
+describe("a complete salon always gives every chair a mirror", () => {
+  const chair = product({
+    id: "c",
+    name: "Oakley Styling Chair",
+    salon_placement: "styling_chair",
+  });
+  const mirror = product({
+    id: "m",
+    name: "Nero Pole-Frame Mirror",
+    salon_placement: "mirror_unit",
+  });
+
+  it("staged_room invents a plain mirror when the plan has no mirror product", () => {
+    const { prompt } = buildRenderRequest([chair], "staged_room");
+    expect(prompt).toMatch(/gets its own mirror directly in front of it/i);
+    expect(prompt).toMatch(/No mirror product was chosen/i);
+  });
+
+  it("staged_room uses the real mirror product when one is in the plan", () => {
+    const { prompt } = buildRenderRequest([chair, mirror], "staged_room");
+    expect(prompt).toMatch(/use the Comfortel mirror product from the references/i);
+    expect(prompt).not.toMatch(/No mirror product was chosen/i);
+  });
+
+  it("refit_room invents a plain mirror when the plan has no mirror product", () => {
+    // Step 1 strips every existing mirror before Step 2 rebuilds the room,
+    // so without this a plan with no mirror SKU would come back with
+    // chairs and nothing in front of them.
+    const { prompt } = buildRenderRequest([chair], "refit_room");
+    expect(prompt).toMatch(/gets its own mirror directly in front of it/i);
+    expect(prompt).toMatch(/No mirror product was chosen/i);
+  });
+
+  it("does not force a mirror on a single-piece placement (add/replace/lineup)", () => {
+    // A customer placing one chair into their real, uploaded room is not
+    // asking for a mirror to be invented — whatever the photo shows (or
+    // doesn't) is left exactly as it is.
+    for (const mode of ["replace", "replace_all", "add", "lineup"] as const) {
+      const { prompt } = buildRenderRequest([chair], mode);
+      expect(prompt).not.toMatch(/gets its own mirror directly in front of it/i);
+    }
+  });
+});
+
 describe("staged_room — invents the right kind of room", () => {
   it("defaults to a hair salon when there is no category to go on", () => {
     const noCategoryProducts = [
