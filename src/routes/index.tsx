@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { chat, type ChatMessageInput, type RenderRequest } from "@/lib/chat.functions";
 import { shareDesign } from "@/lib/design.functions";
 import { wantsZoneSplit } from "@/lib/render-intent";
+import { sleepOrWake } from "@/lib/render-wake";
 import { formatLength, planSummary, type RoomSpec } from "@/lib/room";
 import { expectedFrom, linesFrom, planPieces, quantitiesFor } from "@/lib/plan";
 import {
@@ -752,7 +753,10 @@ function Index() {
         // and shouldRetry compared that against MAX_RETRIES of 1. The check ran
         // on every image and the retry could never once fire.
         for (let poll = 0; poll < MAX_POLLS; poll++) {
-          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          // Wakeable: a phone locked or backgrounded mid-render resumes
+          // checking the instant it's foregrounded again, instead of sitting
+          // on whatever tick was already queued.
+          await sleepOrWake(POLL_INTERVAL_MS);
           const res = await pollVisualize({ data: { taskId: started.taskId } });
           if (res.done && res.imageUrl) {
             await finish(entry, res.imageUrl, attempt);

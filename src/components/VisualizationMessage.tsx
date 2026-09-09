@@ -33,13 +33,37 @@ export type VisualizationState = {
   note?: string | undefined;
 };
 
+/**
+ * One tick every 5s. A whole-room refit with several pieces genuinely runs
+ * 1-3 minutes, but the old list ran out after 20s and then repeated "Almost
+ * there..." unchanged for the rest of the wait — indistinguishable, to
+ * someone watching it, from a hung render. This keeps saying something new
+ * for a couple of minutes before it has to repeat anything.
+ */
 const STATUS_MESSAGES = [
   "Reading your space...",
   "Removing what's there...",
+  "Fitting your pieces in...",
   "Matching the lighting...",
   "Checking the mirrors...",
+  "Refining the details...",
+  "Still working — pieces with several products can take a couple of minutes...",
   "Almost there...",
 ];
+
+/**
+ * Real progress from kie.ai can sit near zero for a while during queueing,
+ * which reads as stuck even though the render is genuinely still coming.
+ * Blending in a synthetic climb keyed off elapsed time keeps the bar
+ * visibly alive without ever claiming to be further along than it is —
+ * capped well short of 100 so it never says "done" before the real image
+ * lands.
+ */
+function displayProgress(realFraction: number, tick: number): number {
+  const real = Math.round(realFraction * 100);
+  const synthetic = Math.min(92, 4 + tick * 4);
+  return Math.max(4, real, synthetic);
+}
 
 /**
  * One render, or a comparison set. A single render gets the full column width
@@ -119,8 +143,14 @@ function RenderCard({
   const frame = compact ? "w-full" : "max-w-[440px]";
 
   if (state.status === "loading") {
-    const message = STATUS_MESSAGES[Math.min(tick, STATUS_MESSAGES.length - 1)];
-    const progress = Math.max(4, Math.round((state.progress ?? 0) * 100));
+    // Past the last scripted message, alternate the final two instead of
+    // freezing on one string — a render that's still genuinely working
+    // shouldn't look identical to one that's stopped.
+    const message =
+      tick < STATUS_MESSAGES.length
+        ? STATUS_MESSAGES[tick]
+        : STATUS_MESSAGES[STATUS_MESSAGES.length - (tick % 2 === 0 ? 2 : 1)];
+    const progress = displayProgress(state.progress ?? 0, tick);
     return (
       <div className={cn("overflow-hidden rounded-2xl border border-border bg-surface2", frame)}>
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
