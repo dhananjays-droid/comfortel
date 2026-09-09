@@ -953,8 +953,10 @@ function Index() {
     // A budget with no station count implies a salon size. Defaulting to four
     // made $50,000 buy the same room as $20,000, three times over.
     const budget = intake.budget || DEFAULT_BUDGET;
+    // An explicit count wins over what the wall physically fits — see
+    // wa-runtime.ts's identical fix and describeIntake's new mismatch note.
     const stations =
-      fromWall || intake.stations || (intake.budget ? stationsForBudget(budget) : DEFAULT_STATIONS);
+      intake.stations || fromWall || (intake.budget ? stationsForBudget(budget) : DEFAULT_STATIONS);
     const note = describeIntake(intake);
 
     const said: Message = {

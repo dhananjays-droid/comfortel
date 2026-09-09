@@ -1,4 +1,5 @@
 import { readIntake, type Intake } from "@/lib/brief";
+import { genericCapacity } from "@/lib/room";
 import { WA, truncate } from "@/lib/whatsapp";
 
 /**
@@ -164,6 +165,20 @@ export function describeIntake(intake: Intake): string {
   const parts = [read.length ? `Read from that: ${read.join(", ")}.` : ""];
   if (missing.length)
     parts.push(`Not given: ${missing.join(", ")}, so I'll assume a sensible default.`);
+
+  // A stated count always wins over what the wall physically fits (see
+  // offerPackages in both index.tsx and wa-runtime.ts) — but a customer who
+  // asked for more than a wall that size typically holds deserves to be
+  // told, not just handed a tighter-than-usual layout with no explanation.
+  if (intake.stations && intake.wallCm) {
+    const fits = genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits;
+    if (fits && fits < intake.stations) {
+      parts.push(
+        `Heads up: a wall that length typically fits about ${fits} station${fits === 1 ? "" : "s"} at comfortable spacing — pricing all ${intake.stations} anyway, but the layout will be tighter than usual.`,
+      );
+    }
+  }
+
   return parts.filter(Boolean).join(" ");
 }
 

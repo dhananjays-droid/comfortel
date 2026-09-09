@@ -43,6 +43,22 @@ import { sendButtons, sendImage, sendText } from "@/lib/wa-client.server";
 import { rehostRender } from "@/lib/wa-media.server";
 import { decryptPhone } from "@/lib/wa-phone-crypto.server";
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * A media message is slower for Meta's own servers to fetch and process
+ * than a plain interactive message — confirmed live: the image and its
+ * "Add to my plan" / "Get a quote" buttons were sent in that order (image
+ * first, per deliverImage below) and still arrived on the customer's
+ * device with the buttons showing ABOVE the image. Our own send order
+ * only controls when we handed each message to Meta's API, not when Meta
+ * finishes processing and delivering either one — so this buys the image
+ * a head start before the (much faster) buttons message goes out.
+ */
+const IMAGE_DELIVERY_HEAD_START_MS = 2500;
+
 const BATCH_SIZE = 5;
 /** Roughly matches index.tsx's own ~5-minute ceiling (100 polls x 3s),
  * rounded up for cron-tick granularity rather than a tight poll loop. */
@@ -279,6 +295,7 @@ async function deliverImage(
     await sendImage(phone, durableUrl, caption);
     await logOutbound(job.session_key, "image", { imageUrl: durableUrl, caption });
     if (buttons.length) {
+      await delay(IMAGE_DELIVERY_HEAD_START_MS);
       await sendButtons(phone, cta, { kind: "buttons", buttons });
       await logOutbound(job.session_key, "interactive", { text: cta });
     }

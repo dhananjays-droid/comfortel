@@ -350,7 +350,13 @@ async function offerPackages(
   }
 
   const fromWall = intake.wallCm ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits : 0;
-  const stations = fromWall || intake.stations || DEFAULT_STATIONS;
+  // An explicit count wins over what the wall physically fits — a customer
+  // who said "5 stations" gets priced for 5, not silently downgraded to
+  // whatever a stated wall length happens to hold at typical spacing.
+  // Confirmed live: "How many styling stations - 5" alongside a 10ft wall
+  // came back as a 3-station package with no mention 5 was ever asked for,
+  // because this used to check the wall-derived figure first.
+  const stations = intake.stations || fromWall || DEFAULT_STATIONS;
   const budget = intake.budget || DEFAULT_BUDGET;
   const note = describeIntake(intake);
 

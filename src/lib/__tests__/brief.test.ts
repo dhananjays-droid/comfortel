@@ -18,6 +18,18 @@ describe("readBrief — stations", () => {
   it("returns nothing when no count is given", () => {
     expect(readBrief("somewhere warm and modern").stations).toBeUndefined();
   });
+
+  it("reads the count when the keyword comes before the number", () => {
+    // Confirmed live: a customer answering the guided prompts inline —
+    // "How many styling stations - 5" — parsed a budget and a wall length
+    // out of the same message but silently missed the station count,
+    // because the old pattern only matched number-then-keyword. The
+    // package this drove ended up sized for whatever a 10ft wall happens
+    // to physically fit (3) rather than the 5 actually asked for.
+    expect(readBrief("How many styling stations - 5").stations).toBe(5);
+    expect(readBrief("styling stations: 6").stations).toBe(6);
+    expect(readBrief("chairs - four").stations).toBe(4);
+  });
 });
 
 describe("readBrief — budget", () => {
