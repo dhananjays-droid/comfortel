@@ -111,6 +111,8 @@ type VisualizeJob = {
   quantities?: Record<string, number> | undefined;
   /** The customer's stated room size, when they gave one. */
   room?: { wallCm: number; depthCm?: number } | undefined;
+  /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
+  note?: string | undefined;
 };
 
 /** One render inside a visualization message. A comparison set holds several. */
@@ -367,6 +369,8 @@ function buildRenderMessage(
   photo: RoomPhoto | null,
   quantities?: Record<string, number> | undefined,
   room?: { wallCm: number; depthCm?: number } | undefined,
+  /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
+  note?: string | undefined,
 ): { message: Message; entries: RenderEntry[] } {
   const base = {
     base64: photo?.image.base64 ?? "",
@@ -374,6 +378,7 @@ function buildRenderMessage(
     // 3:2 reads as a room seen wide, which is what a built salon should be.
     aspectRatio: photo?.image.aspectRatio ?? "3:2",
     ...(room ? { room } : {}),
+    ...(note ? { note } : {}),
   };
 
   // refit_room and lineup are ONE image built from several references. Every
@@ -739,6 +744,7 @@ function Index() {
             ...(job.correction ? { correction: job.correction } : {}),
             ...(job.quantities ? { quantities: job.quantities } : {}),
             ...(job.room ? { room: job.room } : {}),
+            ...(job.note ? { note: job.note } : {}),
           },
         });
 
@@ -846,6 +852,8 @@ function Index() {
             res.render.productIds,
             res.render.mode === "staged_room" ? null : photo,
             quantities,
+            undefined,
+            res.render.note,
           );
           if (entries.length) {
             next.push(message);

@@ -200,6 +200,8 @@ async function startRenderTurn(
   mode: VisualizeMode,
   photo: SessionRoomPhoto | null,
   quantities: Record<string, number> | undefined,
+  /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
+  note?: string | undefined,
 ): Promise<RuntimeResult> {
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
@@ -216,6 +218,7 @@ async function startRenderTurn(
       ...(qty ? { quantities: qty } : {}),
       ...(photo ? { roomUrl: photo.url } : {}),
       ...(roomSpec ? { roomWallCm: roomSpec.wallCm, roomDepthCm: roomSpec.depthCm } : {}),
+      ...(note ? { note } : {}),
     });
     if (ok) enqueued++;
   }
@@ -670,6 +673,7 @@ async function runChatTurn(
         res.render.mode,
         res.render.mode === "staged_room" ? null : room,
         quantities,
+        res.render.note,
       );
       // No product cards here on purpose — a customer just told a render
       // is starting, then immediately shown the same cards again, reads as

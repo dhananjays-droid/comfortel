@@ -33,7 +33,12 @@ type StartInput = {
    * the same photograph four times and spend fidelity on nothing.
    */
   quantities?: Record<string, number>;
+  /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
+  note?: string;
 };
+
+/** Rides straight into an image-generation prompt — short and plain. */
+const MAX_NOTE_CHARS = 300;
 
 /** ~1024px longest edge at JPEG q0.85 lands well under this; anything larger is a client bug. */
 const MAX_BASE64_CHARS = 8_000_000;
@@ -174,6 +179,13 @@ export function parseVisualizeStart(input: StartInput) {
         ? input.correction
         : undefined,
     quantities: readQuantities(input.quantities),
+    // Truncated rather than rejected: a note a little over the cap still
+    // deserves to reach the prompt in shortened form, rather than being
+    // silently dropped entirely for one detail the customer cannot see.
+    note:
+      typeof input.note === "string" && input.note.trim()
+        ? input.note.trim().replace(/\s+/g, " ").slice(0, MAX_NOTE_CHARS)
+        : undefined,
   };
 }
 
@@ -213,6 +225,7 @@ export async function runVisualizeStart(
       data.scene,
       data.correction,
       data.room,
+      data.note,
     );
 
     const { uploadToKie, createVisualizeTask, resolutionFor } = await import("@/lib/kie.server");
@@ -236,6 +249,10 @@ export async function runVisualizeStart(
         quantityKey(data.quantities) +
         // The stated room size changes the prompt, so it changes the image.
         `${data.room?.wallCm ?? ""}x${data.room?.depthCm ?? ""}` +
+        // The note changes the prompt too — without it, a re-render asking
+        // for something different in the setting would collide with the
+        // one before it and serve back the wrong style.
+        (data.note ?? "") +
         // The resolution tier is derived from the mode, which is already in
         // the key — but the mapping itself can change, and an override can
         // change it without the mode moving. Left out, every render cached

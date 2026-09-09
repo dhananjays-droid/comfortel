@@ -99,6 +99,15 @@ const DROP = {
   polish: 3,
   /** Any other elaboration on an instruction already given. */
   detail: 4,
+  /**
+   * The customer's own note. Protected longer than every other optional
+   * clause — on a large enough plan, the required clauses alone (one per
+   * product, per mode) can approach MAX_PROMPT_CHARS on their own, and
+   * this is the one optional clause that must not be the first casualty of
+   * that squeeze, since it is the only place a customer's own words reach
+   * the render at all.
+   */
+  note: 5,
 } as const;
 
 const req = (text: string): Clause => ({ text, drop: 0 });
@@ -342,6 +351,60 @@ function correctionClauses(correction?: string): Clause[] {
   return trimmed ? [req(trimmed)] : [];
 }
 
+/**
+ * The customer's own words for this request, carried into the image prompt
+ * itself.
+ *
+ * Before this, anything a customer typed beyond product names and counts —
+ * "make it modern", "with plants", "keep it bright" — never reached the
+ * render at all: only mode, product ids and quantities made it as far as
+ * kie.ai. Quoted rather than paraphrased, and explicitly subordinated to the
+ * hard rules already stated above it, so a customer's stylistic wish can
+ * shape the render without ever excusing a wrong product, a wrong count, or
+ * an altered room.
+ */
+function noteClause(note?: string): Clause[] {
+  const trimmed = note?.trim();
+  if (!trimmed) return [];
+  return [
+    // Optional rather than required: on a big enough plan the per-product
+    // required clauses alone can approach the prompt's character budget,
+    // and assemble() only ever drops from the optional pool. Ranked at
+    // DROP.note — the last optional clause standing — so it survives
+    // every other trim before it is ever at risk.
+    opt(
+      `The customer's own words for this request: "${trimmed}". Honour anything specific it says about the setting, mood, style or placement. It never overrides an instruction above about which products to install, how many of each, or preserving the room exactly as photographed.`,
+      DROP.note,
+    ),
+  ];
+}
+
+/**
+ * States the tie-break order once, up front, rather than leaving the model
+ * to guess which instruction wins when two of them pull in different
+ * directions — e.g. a customer's styling request ("make it bigger") against
+ * a room that cannot actually hold that many pieces.
+ */
+function priorityClause(preservesRoom: boolean): Clause {
+  const ranked = [
+    "install the exact quantity of each product stated below — never more, never fewer",
+    "match every product to its reference photos exactly — shape, upholstery, base, hardware",
+    ...(preservesRoom
+      ? ["leave the customer's uploaded room exactly as photographed, changing only the furniture"]
+      : []),
+    "honour anything specific the customer asked for about the setting or style",
+    "make the final image the highest-quality, most realistic, most modern-looking render you can produce",
+  ];
+  // Optional, not required: it restates an order every one of these rules
+  // already implies individually (each is a req() clause of its own
+  // elsewhere), so losing it under real budget pressure costs a summary,
+  // not a rule.
+  return opt(
+    `If any instruction below ever conflicts with another, resolve it in this order of priority, highest first: ${ranked.map((r, i) => `(${i + 1}) ${r}`).join("; ")}. Never sacrifice a higher priority for a lower one.`,
+    DROP.detail,
+  );
+}
+
 function realismClauses(): Clause[] {
   return [
     req(
@@ -383,6 +446,15 @@ function realismClauses(): Clause[] {
     req(
       `Photorealistic — an unedited photograph of this salon with these products actually installed.`,
     ),
+    // General quality bar, stated once and shared by every mode. Never in
+    // tension with "keep the room untouched" — this is about how well the
+    // image is rendered, not about changing anything in it. Optional: it
+    // elaborates on the "Photorealistic" req() line just above rather than
+    // stating a new rule, so it is safe to trim under real budget pressure.
+    opt(
+      `Render this at the highest quality you are capable of: sharp, in-focus detail on every product, clean edges with no warping or duplicated limbs on any piece, coherent shadows and reflections, and the crisp, well-exposed look of a professional interior photograph — not a soft, hazy or low-fidelity draft.`,
+      DROP.detail,
+    ),
   ];
 }
 
@@ -414,6 +486,7 @@ function buildRefitPrompt(
   products: VisualizeProduct[],
   scene?: string,
   correction?: string,
+  note?: string,
 ): string {
   const blocks = allocateReferences(products);
 
@@ -438,6 +511,7 @@ function buildRefitPrompt(
     req(
       `The first image is a photograph of a real hair salon. The images after it are Comfortel product references, grouped by product. ${list}.`,
     ),
+    priorityClause(true),
     ...(grouped
       ? [
           req(
@@ -501,6 +575,7 @@ function buildRefitPrompt(
       `Keep the room itself untouched: walls, flooring, ceiling, windows, plumbing, wash basins, lighting, signage, plants and any people stay exactly as they are. Only the furniture changes.`,
     ),
     ...realismClauses(),
+    ...noteClause(note),
     ...correctionClauses(correction),
     req(
       `Before you finish, check: none of the salon's original furniture is still present, every visible piece is a Comfortel product from the references, and you have installed as many of each as the quantities above ask for — or, where the room could not take them, fewer, properly spaced, rather than crammed.`,
@@ -583,6 +658,7 @@ function buildStagedPrompt(
   products: VisualizeProduct[],
   correction?: string,
   room?: RoomSize,
+  note?: string,
 ): string {
   const blocks = allocateReferences(products, 1);
 
@@ -603,6 +679,7 @@ function buildStagedPrompt(
     req(
       `Every image here is a Comfortel product reference, grouped by product. There is NO photograph of a room — you are building the room. ${list}.`,
     ),
+    priorityClause(false),
     req(
       `There are exactly ${blocks.length} DIFFERENT products in these references, no more. Where several images show one product, they are the same physical piece from different sides — study them together to get its shape right, and do not treat them as separate products.`,
     ),
@@ -647,6 +724,7 @@ function buildStagedPrompt(
         ]
       : []),
     ...realismClauses(),
+    ...noteClause(note),
     ...correctionClauses(correction),
     // Unlike a refit or a zone render, this room does not exist yet, so
     // "it wouldn't fit" is never a legitimate reason to install fewer than
@@ -658,7 +736,11 @@ function buildStagedPrompt(
   ]);
 }
 
-function buildLineupPrompt(products: VisualizeProduct[], correction?: string): string {
+function buildLineupPrompt(
+  products: VisualizeProduct[],
+  correction?: string,
+  note?: string,
+): string {
   const subject = products[0]?.replaces ?? "unit";
   const assignments = products
     .map((p, i) => `Image ${i + 2} is a ${describe(p)} — put this one at position ${i + 1}`)
@@ -668,6 +750,7 @@ function buildLineupPrompt(products: VisualizeProduct[], correction?: string): s
     req(
       `The first image is a photograph of a real hair salon. The images after it are ${products.length} DIFFERENT Comfortel products.`,
     ),
+    priorityClause(true),
     req(
       `Step 1 — REMOVE: delete the salon's existing ${subject}s, all of them. Erase each completely — base, hydraulic column, footrest and castors — and rebuild the floor behind where each stood.`,
     ),
@@ -687,6 +770,7 @@ function buildLineupPrompt(products: VisualizeProduct[], correction?: string): s
       `Keep the room itself untouched: walls, flooring, ceiling, windows, mirrors, wash basins, lighting, signage, plants and any people stay exactly as they are.`,
     ),
     ...realismClauses(),
+    ...noteClause(note),
     ...correctionClauses(correction),
     req(
       `Before you finish, check: each position holds a visibly different product matching its own reference, and none of the salon's original ${subject}s remain.`,
@@ -712,12 +796,15 @@ export function buildSalonPrompt(
   correction?: string,
   /** The customer's stated room size, when they gave one. */
   room?: RoomSize,
+  /** The customer's own words for this request — see noteClause(). */
+  note?: string,
 ): string {
   if (mode === "refit_room")
-    return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene, correction);
-  if (mode === "lineup") return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction);
+    return buildRefitPrompt(products.slice(0, MAX_REFERENCES), scene, correction, note);
+  if (mode === "lineup")
+    return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction, note);
   if (mode === "staged_room")
-    return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction, room);
+    return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction, room, note);
 
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
@@ -735,6 +822,7 @@ export function buildSalonPrompt(
         ? `The first image is a photograph of a real hair salon. The ${views.length} images after it are ALL the same product — a ${product.name} — photographed from different angles: ${viewList}. Study every one before you draw it.`
         : `The first image is a photograph of a real hair salon. The second image is a product reference showing a ${product.name}.`,
     ),
+    priorityClause(true),
   );
 
   if (replacing) {
@@ -826,6 +914,7 @@ export function buildSalonPrompt(
   }
 
   clauses.push(...realismClauses());
+  clauses.push(...noteClause(note));
   clauses.push(...correctionClauses(correction));
   clauses.push(
     opt(
@@ -922,8 +1011,9 @@ export function buildRenderRequest(
   scene?: string,
   correction?: string,
   room?: RoomSize,
+  note?: string,
 ): { prompt: string; imageUrls: string[] } {
-  const prompt = buildSalonPrompt(products, mode, scene, correction, room);
+  const prompt = buildSalonPrompt(products, mode, scene, correction, room, note);
 
   const imageUrls = isMultiReferenceMode(mode)
     ? // several views per product, sharing the slots the API leaves free — all

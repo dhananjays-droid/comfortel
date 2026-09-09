@@ -11,6 +11,8 @@ export type RenderJobInput = {
   roomDepthCm?: number | undefined;
   /** Which part of the salon this render covers, on a zone render. */
   scene?: string | undefined;
+  /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
+  note?: string | undefined;
 };
 
 /** Transient Supabase/network blips shouldn't cost a customer their render —
@@ -41,6 +43,7 @@ async function insertRow(
     room_wall_cm: job.roomWallCm ?? null,
     room_depth_cm: job.roomDepthCm ?? null,
     scene: job.scene ?? null,
+    note: job.note ?? null,
     ...(error ? { error } : {}),
   });
   return !insertError;
