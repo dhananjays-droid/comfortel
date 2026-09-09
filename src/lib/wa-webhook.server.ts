@@ -312,16 +312,30 @@ async function handleReceive(request: Request): Promise<Response> {
     const isNew = await recordInboundIfNew(message, sessionKey);
     if (!isNew) continue;
 
-    // Checked before doing any real work (including resolving a photo,
-    // which is its own Graph API round trip) — a flood gets dropped
-    // silently rather than answered, since replying to it also bills a
-    // conversation under WhatsApp's per-message pricing (plan §10).
-    if (await tooManyInboundMessages(sessionKey)) {
+    // These three don't depend on one another's result, so they run
+    // concurrently rather than one after another — on the common path
+    // (not rate-limited, a real event, no error) this saves two whole
+    // round trips off every single reply's latency, which is otherwise
+    // entirely serial: rate-limit check, then resolve the message (a real
+    // Graph API round trip for a photo), then load the session, then the
+    // chat/curate call, then save, then send. A rate-limited or
+    // unreadable message still discards the other two results cleanly —
+    // a session load or a media fetch that turns out to be unneeded is a
+    // wasted read, never a wasted write.
+    const [tooMany, event, session] = await Promise.all([
+      tooManyInboundMessages(sessionKey),
+      toInboundEvent(message),
+      loadSession(sessionKey),
+    ]);
+
+    // Checked first — a flood gets dropped silently rather than answered,
+    // since replying to it also bills a conversation under WhatsApp's
+    // per-message pricing (plan §10).
+    if (tooMany) {
       console.warn("WhatsApp rate limit: too many inbound messages", { sessionKey });
       continue;
     }
 
-    const event = await toInboundEvent(message);
     if (!event) {
       await deliver(message.from, sessionKey, [
         {
@@ -333,7 +347,6 @@ async function handleReceive(request: Request): Promise<Response> {
     }
 
     try {
-      const session = await loadSession(sessionKey);
       const result = await handleInboundMessage(session, sessionKey, message.from, event);
       // Identity for the admin dashboard only — never used by conversation
       // logic. A known name is never overwritten with an absence of one

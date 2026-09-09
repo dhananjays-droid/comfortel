@@ -300,12 +300,46 @@ async function renderPlanByZoneTurn(
 // ---------------------------------------------------------------------------
 
 /**
+ * Sent immediately, before the package-curation call below — that call is a
+ * real Claude Sonnet round trip reading ~80 candidate products (a few
+ * seconds, not the sub-second reply a plain chat question gets), and unlike
+ * a render it had no interim message at all: a customer asking for a budget
+ * plan just watched the chat go quiet. Mirrors the render flow's own
+ * "please wait" pattern. Best-effort and fire-and-forget in spirit — sent
+ * directly rather than through wa-webhook.server.ts's `deliver()` since
+ * this is a genuine mid-turn message, not part of the turn's own reply;
+ * never allowed to block or fail the real answer that follows.
+ */
+async function nudgeCurating(phone: string, sessionKey: string): Promise<void> {
+  try {
+    const { sendText } = await import("@/lib/wa-client.server");
+    const text = "Good, let me put a couple of options together for you ⏳";
+    const waMessageId = await sendText(phone, text);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("wa_messages").insert({
+      wa_message_id: waMessageId,
+      direction: "outbound",
+      session_key: sessionKey,
+      kind: "text",
+      payload: { text },
+    });
+  } catch (err) {
+    console.error("nudgeCurating failed", err);
+  }
+}
+
+/**
  * Ported from `offerPackages`. Same logic (`readIntake` → local `buildPackages`
  * fallback → `curatePackages()` best-effort), but the offered set is
  * persisted on the session row instead of `useState`, since the next message
  * may arrive minutes later against a cold request.
  */
-async function offerPackages(session: SessionState, text: string): Promise<RuntimeResult> {
+async function offerPackages(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  text: string,
+): Promise<RuntimeResult> {
   const intake = readIntake(text);
   let next = session;
   if (intake.wallCm) {
@@ -324,7 +358,10 @@ async function offerPackages(session: SessionState, text: string): Promise<Runti
 
   let packages = buildPackages(budget, needsFor(stations));
   try {
-    const curated = await runCuratePackages(parseCurateInput({ brief: text, stations, budget }));
+    const [curated] = await Promise.all([
+      runCuratePackages(parseCurateInput({ brief: text, stations, budget })),
+      nudgeCurating(phone, sessionKey),
+    ]);
     if (curated.packages.length) packages = curated.packages;
   } catch {
     /* the local packer is the fallback, not an error worth showing */
@@ -750,7 +787,7 @@ async function route(
     }
 
     if (session.flow.awaiting === "build") {
-      return offerPackages({ ...session, flow: INITIAL }, text);
+      return offerPackages({ ...session, flow: INITIAL }, sessionKey, phone, text);
     }
 
     if (session.flow.awaiting === "visualize") {
