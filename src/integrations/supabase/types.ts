@@ -218,6 +218,7 @@ export type Database = {
           id: string;
           kie_task_id: string | null;
           mode: string;
+          note: string | null;
           product_ids: string[];
           quantities: Json;
           result_url: string | null;
@@ -237,6 +238,7 @@ export type Database = {
           id?: string;
           kie_task_id?: string | null;
           mode: string;
+          note?: string | null;
           product_ids: string[];
           quantities?: Json;
           result_url?: string | null;
@@ -256,6 +258,7 @@ export type Database = {
           id?: string;
           kie_task_id?: string | null;
           mode?: string;
+          note?: string | null;
           product_ids?: string[];
           quantities?: Json;
           result_url?: string | null;

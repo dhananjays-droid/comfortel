@@ -15,7 +15,24 @@ export type RenderRequest = {
    * for a single-of-each request. visualizeStart's own readQuantities()
    * still clamps and validates whatever lands here. */
   quantities?: Record<string, number> | undefined;
+  /**
+   * The customer's own words for the turn that asked for this render,
+   * length-capped. Forwarded all the way into the image prompt
+   * (visualize-prompt.ts's noteClause) so anything they said about the
+   * setting or style — "make it modern", "with plants" — gets a chance to
+   * be honoured, on top of whatever the plan/quantities already encode.
+   */
+  note?: string | undefined;
 };
+
+const MAX_NOTE_CHARS = 300;
+
+/** Collapsed to one line and length-capped — this rides straight into an
+ * image-generation prompt, not a chat reply, so it stays short and plain. */
+function noteFrom(text: string): string | undefined {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  return trimmed ? trimmed.slice(0, MAX_NOTE_CHARS) : undefined;
+}
 
 /**
  * What came back about rendering.
@@ -405,15 +422,17 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
         ).slice(0, MAX_RENDERS);
         if (renderIds.length) {
           const quantities = Object.keys(renderQuantities).length ? renderQuantities : undefined;
+          const userTurn = lastUserTurn(data.messages);
+          const note = noteFrom(userTurn);
           // The second gate, and the one that matters. The photo lasts the
           // whole session, so "is a photo attached" was true on every turn
           // from the first upload onwards — which billed for half of an
           // ordinary conversation about a picture the customer already had.
           // Asking for a render is now the customer's move, not the model's.
-          if (wantsRender(lastUserTurn(data.messages))) {
-            render = { mode, productIds: renderIds, quantities };
+          if (wantsRender(userTurn)) {
+            render = { mode, productIds: renderIds, quantities, note };
           } else {
-            offer = { mode, productIds: renderIds, quantities };
+            offer = { mode, productIds: renderIds, quantities, note };
           }
           break; // one render request per reply
         }

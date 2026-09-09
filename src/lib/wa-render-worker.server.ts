@@ -59,6 +59,7 @@ type RenderJobRow = {
   room_wall_cm: number | null;
   room_depth_cm: number | null;
   scene: string | null;
+  note: string | null;
   kie_task_id: string | null;
   attempt: number;
   created_at: string;
@@ -319,6 +320,7 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
           aspectRatio: "3:2",
           correction: correctionFor(verdict, shortfall),
           ...(job.scene ? { scene: job.scene } : {}),
+          ...(job.note ? { note: job.note } : {}),
           ...(job.quantities && Object.keys(job.quantities).length
             ? { quantities: job.quantities }
             : {}),
@@ -357,6 +359,7 @@ async function startJob(job: RenderJobRow): Promise<void> {
         mode: job.mode,
         aspectRatio: "3:2",
         ...(job.scene ? { scene: job.scene } : {}),
+        ...(job.note ? { note: job.note } : {}),
         ...(job.quantities && Object.keys(job.quantities).length
           ? { quantities: job.quantities }
           : {}),
