@@ -566,6 +566,19 @@ const ROOM_LAYOUT: Record<RoomKind, string> = {
   spa: "Lay the pieces out the way a spa treatment room actually works: a calm, uncluttered space around each treatment table, soft ambient lighting, and any storage kept unobtrusive.",
 };
 
+/**
+ * The finish this room is built in. Left generic on purpose — this names
+ * materials and lighting, never brand elements, logos, screen content or
+ * signage, which stays covered by the "nothing else branded" rule above.
+ */
+const ROOM_FINISH: Record<RoomKind, string> = {
+  salon:
+    "a premium, editorial-quality fit-out: a bold accent-lit mirror wall (a backlit panel or an LED strip along its edge), a striking floor finish such as polished stone or marble-look tile, a clean modern ceiling, and a little tasteful greenery — the kind of room a salon would actually pay a photographer to shoot for its own marketing.",
+  barbershop:
+    "a premium, editorial-quality fit-out: a bold accent-lit mirror wall (a backlit panel or an LED strip along its edge), a striking floor finish such as polished stone or marble-look tile, a dark, clean modern ceiling, and a little tasteful greenery — the kind of room a barbershop would actually pay a photographer to shoot for its own marketing.",
+  spa: "a premium, editorial-quality fit-out: soft accent lighting, warm natural materials (wood, stone, linen), a calm neutral palette, and a little tasteful greenery — the kind of room a spa would actually pay a photographer to shoot for its own marketing.",
+};
+
 function buildStagedPrompt(
   products: VisualizeProduct[],
   correction?: string,
@@ -608,15 +621,17 @@ function buildStagedPrompt(
     req(
       `Every copy of a product must be identical to the others: same silhouette, same armrests, same base, same seams, same finish. They may differ ONLY in size, angle and position, as perspective requires.`,
     ),
-    opt(
-      `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and daylight or ${roomKind === "spa" ? "ambient spa" : "salon"} lighting bright enough to read every piece clearly. Style it simply — a neutral, contemporary fit-out that lets the furniture read.`,
+    req(
+      `Make it a plausible room: one wide interior view at standing eye level, an even floor, walls the pieces can stand against, and lighting bright enough to read every piece clearly. Build it in ${ROOM_FINISH[roomKind]}`,
     ),
     // This mode alone has no existing photo to match, so composition is a
     // free choice rather than fixed by the room clause in realismClauses() —
     // the same "looks AI-generated" tell shows up here as a perfectly
-    // centred, symmetric studio shot instead of an ordinary photograph.
+    // centred, symmetric studio shot instead of an ordinary photograph. That
+    // is a composition note, not licence to make the room itself look worse
+    // — the finish above should still read as camera-ready, not unfinished.
     opt(
-      `Frame it like a real interiors photograph someone actually took, not a centred studio render: a natural, slightly off-centre angle, light falling the way it would in a real room rather than perfectly even studio lighting, and a touch of everyday imperfection rather than a showroom-clean scene.`,
+      `Frame it like a real interiors photograph someone actually took for this business, not a centred studio render: a natural, slightly off-centre angle, light falling the way it would in a real room rather than perfectly even studio lighting.`,
       DROP.polish,
     ),
     opt(ROOM_LAYOUT[roomKind]),
