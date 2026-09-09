@@ -419,6 +419,13 @@ function realismClauses(): Clause[] {
       `Nothing may pass through anything solid. Every piece stands wholly inside the room, in clear floor space, with its whole footprint on the floor — no part of any piece may intersect, embed into or disappear behind a wall, partition, counter, basin or another piece. If a position has too little clearance, move the piece into open floor rather than sinking it into the surface behind it.`,
     ),
     req(`Match the salon's lighting direction, intensity and colour temperature.`),
+    // Stated once, universally, on top of the per-mode placement wording
+    // (buildRefitPrompt's Step 2, staged_room's ROOM_LAYOUT, and the
+    // single-piece PLACEMENT map already say this too) so it holds even in
+    // a mode without its own explicit layout instruction, like lineup.
+    req(
+      `Any styling or barber chair standing at a mirror station faces that mirror square-on — seat toward the mirror, back toward the room, the way a customer actually sits to have their hair done. A chair facing away from its mirror, side-on to it, or facing the camera instead is a failed render. Exception: if there is a real photograph of this room and it already shows a station's chair facing some other way, match the photograph rather than override it — preserving the real room always outranks this rule.`,
+    ),
     // Clearing stale reflections works and is kept. Making the model DRAW a
     // reflection of the inserted piece does not: two escalating instructions
     // were tested live — "show that piece from the angle that mirror sees" and
@@ -542,7 +549,7 @@ function buildRefitPrompt(
       `Step 1 — REMOVE: strip out the salon's existing furniture — every styling chair, stool, trolley, mirror unit, reception desk and waiting seat visible. Remove each completely, including bases, hydraulic columns and footrests.`,
     ),
     req(
-      `Step 2 — INSTALL: fit the Comfortel pieces into the room, each where its type belongs — styling chairs at the mirror stations, mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
+      `Step 2 — INSTALL: fit the Comfortel pieces into the room, each where its type belongs — styling chairs at the mirror stations, each one facing its mirror square-on so the customer sits looking at their own reflection, back toward the room; mirrors on the wall above the benches, trolleys within arm's reach of a station, reception furniture by the entrance.`,
     ),
     // The counts, as their own required clause. The customer is buying a
     // quantity, not a product: a package of four chairs rendered as one chair
@@ -635,9 +642,9 @@ const ROOM_NAME: Record<RoomKind, string> = {
 
 const ROOM_LAYOUT: Record<RoomKind, string> = {
   salon:
-    "Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.",
+    "Lay the pieces out the way a salon actually works: styling chairs spaced along a wall with mirrors above them, each chair facing its mirror square-on so the customer sits looking at their own reflection, wash units grouped together, trolleys beside the stations they serve, reception and retail near the entrance.",
   barbershop:
-    "Lay the pieces out the way a barbershop actually works: chairs spaced along a mirrored wall, each station within easy reach of its tools, waiting seating near the entrance.",
+    "Lay the pieces out the way a barbershop actually works: chairs spaced along a mirrored wall, each one facing its mirror square-on so the customer sits looking at their own reflection, each station within easy reach of its tools, waiting seating near the entrance.",
   spa: "Lay the pieces out the way a spa treatment room actually works: a calm, uncluttered space around each treatment table, soft ambient lighting, and any storage kept unobtrusive.",
 };
 
