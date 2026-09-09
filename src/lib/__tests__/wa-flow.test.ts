@@ -164,4 +164,18 @@ describe("describeIntake", () => {
     expect(describeIntake({})).not.toContain("Read from that");
     expect(describeIntake({})).toContain("Not given");
   });
+
+  it("flags when a stated count exceeds what the wall physically fits, without dropping it", () => {
+    // 10ft (305cm) typically fits about 3 stations — a customer asking for
+    // 5 should be told the layout will be tight, not silently downgraded.
+    const out = describeIntake({ stations: 5, budget: 15000, wallCm: 305 });
+    expect(out).toContain("5 stations");
+    expect(out).toContain("Heads up");
+    expect(out).toContain("pricing all 5 anyway");
+  });
+
+  it("says nothing extra when the stated count comfortably fits the wall", () => {
+    const out = describeIntake({ stations: 2, budget: 15000, wallCm: 305 });
+    expect(out).not.toContain("Heads up");
+  });
 });

@@ -47,11 +47,25 @@ export type Intake = Brief & {
   depthCm?: number | undefined;
 };
 
-/** Station counts read from "four chairs", "4-chair", "6 stations". */
+/**
+ * Station counts read from "four chairs", "4-chair", "6 stations" — and,
+ * just as often, the reversed order the guided prompts themselves invite:
+ * someone answering "How many styling stations - 5" line by line writes the
+ * keyword first and the number after it, which the number-first pattern
+ * alone never matched. Confirmed live: that exact phrasing parsed a budget
+ * and a wall length out of the same message but silently missed the station
+ * count, and the flow fell back to whatever a 10ft wall physically fits (3)
+ * with no sign the customer's own "5" was ever seen. Mirrors readBudget's
+ * own "keyword ... number" contextual fallback below.
+ */
 function readStations(text: string): number | undefined {
   const words = Object.keys(WORD_NUMBER).join("|");
-  const re = new RegExp(`(\\d{1,2}|${words})[\\s-]*(?:chair|station|seat|styling)`, "i");
-  const match = text.match(re);
+  const numberFirst = new RegExp(`(\\d{1,2}|${words})[\\s-]*(?:chair|station|seat|styling)`, "i");
+  const keywordFirst = new RegExp(
+    `(?:chair|station|seat|styling)[^\\n\\d]{0,20}(\\d{1,2}|${words})\\b`,
+    "i",
+  );
+  const match = text.match(numberFirst) ?? text.match(keywordFirst);
   if (!match?.[1]) return undefined;
 
   const raw = match[1].toLowerCase();
