@@ -390,10 +390,21 @@ async function startJob(job: RenderJobRow): Promise<void> {
 const NUDGE_WINDOW_START_MS = 75 * 1000;
 const NUDGE_WINDOW_END_MS = 135 * 1000;
 
-async function nudgeStillWorking(job: RenderJobRow): Promise<void> {
+/**
+ * A second, later nudge. Without it, a render that's slower than usual (a
+ * whole-room refit with several pieces, say) goes quiet from the first
+ * nudge at ~2 minutes all the way to either the image or the 6-minute
+ * timeout message — four minutes of silence that reads as abandoned rather
+ * than "still working." Same time-window trick as the first nudge (no
+ * "already sent" column), placed comfortably before STALE_MS so it lands
+ * before the hard stop rather than racing it.
+ */
+const NUDGE2_WINDOW_START_MS = 4 * 60 * 1000;
+const NUDGE2_WINDOW_END_MS = 5 * 60 * 1000;
+
+async function nudgeStillWorking(job: RenderJobRow, text: string): Promise<void> {
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    const text = "Still working on it, almost there.";
     await sendText(phone, text);
     await logOutbound(job.session_key, "text", { text });
   } catch (err) {
@@ -419,7 +430,12 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
     }
     const elapsed = Date.now() - new Date(job.created_at).getTime();
     if (elapsed >= NUDGE_WINDOW_START_MS && elapsed < NUDGE_WINDOW_END_MS) {
-      await nudgeStillWorking(job);
+      await nudgeStillWorking(job, "Still working on it, almost there.");
+    } else if (elapsed >= NUDGE2_WINDOW_START_MS && elapsed < NUDGE2_WINDOW_END_MS) {
+      await nudgeStillWorking(
+        job,
+        "Still going — a fit-out with several pieces takes a bit longer to get right. Thanks for hanging in there.",
+      );
     }
     return "pending";
   } catch (err) {
