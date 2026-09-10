@@ -47,6 +47,12 @@ import { sendButtons, sendImage, sendText } from "@/lib/wa-client.server";
 import { rehostRender } from "@/lib/wa-media.server";
 import { triggerRenderWorker } from "@/lib/wa-render-trigger.server";
 import { decryptPhone } from "@/lib/wa-phone-crypto.server";
+import { claimRenderAction } from "@/lib/wa-render-guards.server";
+import {
+  inspectWhatsAppEdit,
+  editDeliveryNote,
+  type EditVerdict,
+} from "@/lib/wa-edit-check.server";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -376,7 +382,10 @@ async function deliverImage(
   // Falls back to the tempfile URL rather than losing the render entirely if
   // the re-host fails — kie's own CDN survives long enough for one delivery.
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
-  const note = shortfallNote(shortfallFrom(expectedForJob(job), verdict), verdict.elsewhere);
+  const note =
+    job.mode === "edit"
+      ? editDeliveryNote(verdict)
+      : shortfallNote(shortfallFrom(expectedForJob(job), verdict), verdict.elsewhere);
   const cta = renderCta(job.mode);
   const buttons = renderCtaButtons(job.mode, job.product_ids, job.quantities);
   // The CTA moves into the follow-up buttons message when there is a real
@@ -414,11 +423,17 @@ async function deliverImage(
  */
 async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
   const expected = expectedForJob(job);
-  let verdict: Verdict;
+  let verdict: Verdict | EditVerdict;
   try {
-    verdict = await runInspectRender(parseInspectRender({ imageUrl, expected }));
+    verdict =
+      job.mode === "edit" && job.room_url
+        ? await inspectWhatsAppEdit(job.room_url, imageUrl, job.note ?? "")
+        : await runInspectRender(parseInspectRender({ imageUrl, expected }));
   } catch {
-    verdict = { ok: true, faults: [] };
+    verdict =
+      job.mode === "edit"
+        ? { ok: true, faults: [], editCheck: "unavailable" }
+        : { ok: true, faults: [] };
   }
 
   // A shortfall only earns a retry in staged_room: that room is invented,
@@ -430,6 +445,8 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
   const shortfall = job.mode === "staged_room" ? shortfallFrom(expected, verdict) : [];
 
   if (shouldRetry(verdict, job.attempt, shortfall)) {
+    // Concurrent pollers must not each purchase a corrective generation.
+    if (!(await claimRenderAction(job.id, job.session_key, `retry:${job.attempt}`))) return;
     try {
       const roomImageBase64 = job.room_url ? await base64FromUrl(job.room_url) : "";
       const retried = await runVisualizeStart(
@@ -448,7 +465,7 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
         }),
       );
       if (retried.imageUrl) {
-        await deliverImage(job, retried.imageUrl, verdict, job.attempt + 1);
+        await finishJob({ ...job, attempt: job.attempt + 1 }, retried.imageUrl);
         return;
       }
       if (retried.taskId) {
@@ -503,11 +520,8 @@ async function startJob(job: RenderJobRow): Promise<void> {
  * measured 80-98s), on top of however long it sat waiting for a cron tick to
  * claim it — long enough that a customer who was told "about half a minute"
  * can reasonably start wondering if anything is happening. One reassurance,
- * sent once. There's no "already nudged" column (avoids a schema change for
- * this), so it's a time window instead: wide enough that one ~60s-cadence
- * tick almost always lands inside it, narrow enough that a second tick
- * usually doesn't. Not a hard guarantee against a rare double-send — a
- * second gentle nudge is a far better failure mode than silence.
+ * sent once. Time windows choose when the update is useful; a durable unique
+ * claim prevents repeats across four-second polls and overlapping workers.
  */
 const NUDGE_WINDOW_START_MS = 75 * 1000;
 const NUDGE_WINDOW_END_MS = 135 * 1000;
@@ -517,15 +531,15 @@ const NUDGE_WINDOW_END_MS = 135 * 1000;
  * whole-room refit with several pieces, say) goes quiet from the first
  * nudge at ~2 minutes all the way to either the image or the 6-minute
  * timeout message — four minutes of silence that reads as abandoned rather
- * than "still working." Same time-window trick as the first nudge (no
- * "already sent" column), placed comfortably before STALE_MS so it lands
+ * than "still working." A separate once-only claim, placed before STALE_MS so it lands
  * before the hard stop rather than racing it.
  */
 const NUDGE2_WINDOW_START_MS = 4 * 60 * 1000;
 const NUDGE2_WINDOW_END_MS = 5 * 60 * 1000;
 
-async function nudgeStillWorking(job: RenderJobRow, text: string): Promise<void> {
+async function nudgeStillWorking(job: RenderJobRow, text: string, stage: string): Promise<void> {
   try {
+    if (!(await claimRenderAction(job.id, job.session_key, `progress:${stage}`))) return;
     const phone = decryptPhone(job.customer_phone_enc);
     const waMessageId = await sendText(phone, text);
     await logOutbound(waMessageId, job.session_key, "text", { text });
@@ -552,11 +566,16 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
     }
     const elapsed = Date.now() - new Date(job.created_at).getTime();
     if (elapsed >= NUDGE_WINDOW_START_MS && elapsed < NUDGE_WINDOW_END_MS) {
-      await nudgeStillWorking(job, "Your render is still active — I’m working on the details.");
+      await nudgeStillWorking(
+        job,
+        "Your render is still active — I’m working on the details.",
+        "initial",
+      );
     } else if (elapsed >= NUDGE2_WINDOW_START_MS && elapsed < NUDGE2_WINDOW_END_MS) {
       await nudgeStillWorking(
         job,
         "Still going — a fit-out with several pieces takes a bit longer to get right. Thanks for hanging in there.",
+        "late",
       );
     }
     return "pending";
