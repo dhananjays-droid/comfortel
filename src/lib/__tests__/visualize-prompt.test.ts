@@ -559,3 +559,65 @@ describe("staged_room — invents the right kind of room", () => {
     expect(prompt).toMatch(/hair salon/i);
   });
 });
+
+describe("edit — a targeted change to a render already delivered", () => {
+  it("sends no reference images at all — the anchor is the only image", () => {
+    const { imageUrls } = buildRenderRequest(
+      [],
+      "edit",
+      undefined,
+      undefined,
+      undefined,
+      "make the chairs blue",
+    );
+    expect(imageUrls).toEqual([]);
+  });
+
+  it("names image 1 as the previous result, not a new composition", () => {
+    const { prompt } = buildRenderRequest(
+      [],
+      "edit",
+      undefined,
+      undefined,
+      undefined,
+      "make the chairs blue",
+    );
+    expect(prompt).toMatch(/already built and shown to this customer/i);
+    expect(prompt).toMatch(/editing THIS photograph, not composing a new one/i);
+  });
+
+  it("quotes the customer's own words as the one change to make", () => {
+    const { prompt } = buildRenderRequest(
+      [],
+      "edit",
+      undefined,
+      undefined,
+      undefined,
+      "make the chairs blue",
+    );
+    expect(prompt).toContain('Make ONLY this change: "make the chairs blue"');
+  });
+
+  it("forbids changing anything the request didn't ask for", () => {
+    const { prompt } = buildRenderRequest(
+      [],
+      "edit",
+      undefined,
+      undefined,
+      undefined,
+      "add a plant",
+    );
+    expect(prompt).toMatch(/not the layout, not any other furniture, not the room itself/i);
+  });
+
+  it("still renders something sensible with no note at all", () => {
+    const { prompt } = buildRenderRequest([], "edit");
+    expect(prompt).toMatch(/smallest, most literal edit/i);
+  });
+
+  it("does not require a product for edit, unlike every other mode", () => {
+    expect(() =>
+      buildRenderRequest([], "edit", undefined, undefined, undefined, "make it blue"),
+    ).not.toThrow();
+  });
+});

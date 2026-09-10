@@ -282,6 +282,13 @@ describe("sanitizeSession", () => {
       flow: { awaiting: "visualize" },
       roomSpec: { wallCm: 400 },
       room: { url: "https://x/y.jpg", at: 1 },
+      lastRender: {
+        resultUrl: "https://x/render.jpg",
+        mode: "refit_room",
+        productIds: [REAL_ID],
+        quantities: { [REAL_ID]: 3 },
+        at: 1,
+      },
       offered: null,
       pendingZoneRender: true,
       pendingQuote: { productIds: [REAL_ID] },

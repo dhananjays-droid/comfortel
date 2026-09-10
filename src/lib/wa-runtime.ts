@@ -48,9 +48,11 @@ import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
 import { genericCapacity } from "@/lib/room";
 import { enqueueRenderJob } from "@/lib/wa-render-jobs.server";
 import {
+  liveLastRender,
   liveOffered,
   liveRoom,
   sanitizeRoomSpec,
+  type SessionLastRender,
   type SessionOffered,
   type SessionOfferedChoice,
   type SessionPendingQuote,
@@ -249,6 +251,43 @@ async function startRenderTurn(
           : groups.length > 1
             ? `Rendering ${groups.length} options into your space, please wait ⏳`
             : `Rendering the ${entryLabel(mode, groups[0]!)} into your space, please wait ⏳`;
+
+  let next = appendTranscript(session, "user", askedText);
+  next = appendTranscript(next, "assistant", contentText);
+
+  return { session: next, turns: [{ kind: "text", text: contentText }] };
+}
+
+/**
+ * A targeted change to the last render — "make the chairs blue" — not a
+ * new composition. New, not ported: index.tsx has its own equivalent (see
+ * runEditRender), but the mechanics differ enough (session-backed
+ * lastRender vs. a ref) that this isn't a shared function.
+ *
+ * Deliberately not routed through startRenderTurn: that function's whole
+ * shape — products, quantities, a room photo, per-mode wording — doesn't
+ * apply here. edit anchors on the previous RESULT image (never the
+ * customer's own room photo) and installs nothing new.
+ */
+async function startEditTurn(
+  session: SessionState,
+  sessionKey: string,
+  phone: string,
+  lastRender: SessionLastRender,
+  note: string | undefined,
+): Promise<RuntimeResult> {
+  if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
+
+  const ok = await enqueueRenderJob(sessionKey, phone, {
+    mode: "edit",
+    productIds: [],
+    roomUrl: lastRender.resultUrl,
+    ...(note ? { note } : {}),
+  });
+  if (!ok) return { session, turns: [RENDER_FAILED_TURN] };
+
+  const askedText = note ? `Change the render: ${note}` : "Update my last render.";
+  const contentText = "Updating that now, please wait ⏳";
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -504,7 +543,15 @@ async function acceptOfferRequest(
   tappedId: string,
 ): Promise<RuntimeResult> {
   const [, mode, idsPart] = tappedId.split(":");
-  if (!mode || !isVisualizeMode(mode) || !idsPart) return { session, turns: [] };
+  if (!mode || !isVisualizeMode(mode)) return { session, turns: [] };
+
+  if (mode === "edit") {
+    const lastRender = liveLastRender(session.lastRender);
+    if (!lastRender) return { session, turns: [] };
+    const note = idsPart ? decodeURIComponent(idsPart) : undefined;
+    return startEditTurn(session, sessionKey, phone, lastRender, note);
+  }
+  if (!idsPart) return { session, turns: [] };
 
   const staged = mode === "staged_room";
   const room = liveRoom(session.room);
@@ -701,11 +748,17 @@ async function runChatTurn(
     .slice(-12);
   const plan = linesFrom(planProductsOf(session), session.plan.qty);
   const room = liveRoom(session.room);
+  const lastRender = liveLastRender(session.lastRender);
 
   let res;
   try {
     res = await runChatCore(
-      parseChatInput({ messages: payload, hasRoomPhoto: room !== null, plan }),
+      parseChatInput({
+        messages: payload,
+        hasRoomPhoto: room !== null,
+        hasRecentRender: lastRender !== null,
+        plan,
+      }),
     );
   } catch (err) {
     console.error("wa-runtime: chat failed", err);
@@ -718,23 +771,40 @@ async function runChatTurn(
   const next = appendTranscript(session, "assistant", res.text);
   const turns: WaTurn[] = [];
 
-  if (res.offer && (room || res.offer.mode === "staged_room")) {
+  if (res.offer && (room || res.offer.mode === "staged_room" || res.offer.mode === "edit")) {
     const offer: RenderRequest = res.offer;
     const action: WaAction & { kind: "buttons" } = {
       kind: "buttons",
       buttons: [
         {
-          id: `offer:${offer.mode}:${offer.productIds.join(",")}`,
+          // edit has no product ids to name — "offer:edit:" (empty third
+          // segment) is a valid, expected id acceptOfferRequest handles.
+          id:
+            offer.mode === "edit"
+              ? // The note is the whole instruction — with nothing else
+                // carrying it, tapping the button would edit nothing.
+                // encodeURIComponent keeps it to one colon-free segment,
+                // same reasoning as every other id: prefix-parsed by
+                // acceptOfferRequest, never trusted as-is.
+                `offer:edit:${encodeURIComponent(offer.note ?? "")}`
+              : `offer:${offer.mode}:${offer.productIds.join(",")}`,
           // Exactly WA.buttonTitle (20 chars) — "See this in your
           // space" (22) was silently truncated by WhatsApp itself into
           // "See this in your sp…", a real bug a customer flagged.
-          title: "See it in your space",
+          title: offer.mode === "edit" ? "Yes, update it" : "See it in your space",
         },
       ],
     };
     turns.push({ kind: "buttons", text: res.text, action });
   } else {
     turns.push({ kind: "text", text: res.text });
+  }
+
+  if (res.render?.mode === "edit" && lastRender) {
+    const edited = await startEditTurn(next, sessionKey, phone, lastRender, res.render.note);
+    // Same reasoning as the products branch below: the reply already says
+    // what's being changed, so nothing else needs to follow it here.
+    return { session: edited.session, turns: [...turns, ...edited.turns] };
   }
 
   if (res.render && (room || res.render.mode === "staged_room")) {

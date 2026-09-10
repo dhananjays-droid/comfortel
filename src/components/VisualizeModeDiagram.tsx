@@ -19,6 +19,11 @@ const SLOTS: Record<VisualizeMode, Array<"new" | "kept">> = {
   // the pieces. Like refit_room it is never offered in the picker, but the map
   // is keyed by mode so it needs an entry.
   staged_room: ["new", "new", "new"],
+  // No product is being installed at all — edit changes one thing about a
+  // picture the customer already has, everything else in frame is kept.
+  // Never offered in the picker (it's inferred from "make it blue"-style
+  // follow-ups, not chosen), but the map is keyed by mode.
+  edit: ["kept", "kept", "kept"],
 };
 
 const W = 78;

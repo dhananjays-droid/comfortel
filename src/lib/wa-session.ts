@@ -14,6 +14,7 @@
 import type { ChatMessageInput } from "@/lib/chat.functions";
 import { CATALOG_FULL } from "@/lib/catalog";
 import type { Package, Role } from "@/lib/packages";
+import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 import type { Await, FlowState } from "@/lib/wa-flow";
 
 /** Matches kie's own tempfile expiry — see visualize.functions.ts / GUIDE.md. */
@@ -50,6 +51,31 @@ export type SessionRoomSpec = { wallCm: number; depthCm?: number };
  */
 export type SessionRoomPhoto = { url: string; at: number };
 
+/** How long a delivered render stays editable via "make it blue"-style
+ * follow-ups. Wider than ROOM_TTL_MS — a customer looking at a finished
+ * picture and deciding what to tweak takes longer than uploading a photo,
+ * but this still shouldn't outlive the conversation that produced it. */
+export const LAST_RENDER_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * The most recently delivered render — what a "make the chairs blue"
+ * follow-up actually edits.
+ *
+ * `resultUrl` is the durable, re-hosted image (never kie's own expiring
+ * tempfile URL — see rehostRender), which becomes the "room" input for an
+ * edit render the same way a customer's own photo does for every other
+ * mode. `mode`/`productIds`/`quantities` are kept only so a render-worker
+ * failure path or a future feature has the original request on hand; an
+ * edit itself needs none of them.
+ */
+export type SessionLastRender = {
+  resultUrl: string;
+  mode: VisualizeMode;
+  productIds: string[];
+  quantities: Record<string, number>;
+  at: number;
+};
+
 export type SessionOfferedChoice = {
   stations: number;
   budget: number;
@@ -75,6 +101,7 @@ export type SessionState = {
   flow: FlowState;
   roomSpec: SessionRoomSpec | null;
   room: SessionRoomPhoto | null;
+  lastRender: SessionLastRender | null;
   offered: SessionOffered | null;
   /** A dimensions run promised zone renders and is only waiting on a photo —
    * matches index.tsx's `pendingZoneRender` state. */
@@ -97,6 +124,7 @@ export const EMPTY_SESSION: SessionState = {
   flow: {},
   roomSpec: null,
   room: null,
+  lastRender: null,
   offered: null,
   pendingZoneRender: false,
   pendingQuote: null,
@@ -110,6 +138,17 @@ export const EMPTY_SESSION: SessionState = {
 export function liveRoom(room: SessionRoomPhoto | null, now = Date.now()): SessionRoomPhoto | null {
   if (!room) return null;
   return now - room.at > ROOM_TTL_MS ? null : room;
+}
+
+/** A render older than LAST_RENDER_TTL_MS is treated as gone — "make it
+ * blue" against a picture from an hour ago re-starts the conversation
+ * instead of editing something the customer may not even remember. */
+export function liveLastRender(
+  render: SessionLastRender | null,
+  now = Date.now(),
+): SessionLastRender | null {
+  if (!render) return null;
+  return now - render.at > LAST_RENDER_TTL_MS ? null : render;
 }
 
 /** A package offer older than OFFER_TTL_MS is treated as gone — a tap on a
@@ -178,6 +217,41 @@ export function sanitizeRoom(input: unknown): SessionRoomPhoto | null {
   const at = Number(raw.at);
   if (!Number.isFinite(at)) return null;
   return { url: raw.url, at };
+}
+
+export function sanitizeLastRender(input: unknown): SessionLastRender | null {
+  const raw = input as
+    | {
+        resultUrl?: unknown;
+        mode?: unknown;
+        productIds?: unknown;
+        quantities?: unknown;
+        at?: unknown;
+      }
+    | null
+    | undefined;
+  if (!raw || !isNonEmptyString(raw.resultUrl)) return null;
+  const at = Number(raw.at);
+  if (!Number.isFinite(at)) return null;
+  const mode: VisualizeMode = isVisualizeMode(raw.mode) ? raw.mode : "edit";
+
+  const idsIn = Array.isArray(raw.productIds) ? raw.productIds : [];
+  const productIds = idsIn.filter(
+    (id): id is string =>
+      typeof id === "string" && Object.prototype.hasOwnProperty.call(CATALOG_FULL, id),
+  );
+
+  const qtyIn =
+    raw.quantities && typeof raw.quantities === "object"
+      ? (raw.quantities as Record<string, unknown>)
+      : {};
+  const quantities: Record<string, number> = {};
+  for (const id of productIds) {
+    if (qtyIn[id] === undefined) continue;
+    quantities[id] = clampInt(qtyIn[id], MIN_QTY, MAX_QTY, 1);
+  }
+
+  return { resultUrl: raw.resultUrl, mode, productIds, quantities, at };
 }
 
 export function sanitizeRoomSpec(input: unknown): SessionRoomSpec | null {
@@ -284,6 +358,7 @@ export function sanitizeSession(input: unknown): SessionState {
     flow: sanitizeFlow(raw?.flow),
     roomSpec: sanitizeRoomSpec(raw?.roomSpec),
     room: sanitizeRoom(raw?.room),
+    lastRender: sanitizeLastRender(raw?.lastRender),
     offered: sanitizeOffered(raw?.offered),
     pendingZoneRender: raw?.pendingZoneRender === true,
     pendingQuote: sanitizePendingQuote(raw?.pendingQuote),

@@ -13,10 +13,21 @@ import {
 } from "@/lib/visualize-prompt";
 
 type StartInput = {
-  /** One id for the placement modes; up to MAX_REFERENCES for refit_room. */
+  /** One id for the placement modes; up to MAX_REFERENCES for refit_room.
+   * Empty for edit — it changes something already in the anchor photo
+   * rather than installing a new piece. */
   productIds: string[];
   /** Empty for staged_room, which invents the room instead of using one. */
   roomImageBase64: string;
+  /**
+   * A URL to fetch and encode server-side instead — the web app's own
+   * source for edit mode: the last render lives at a durable URL
+   * (visualizeStatus's own result), not a client-held base64 string the
+   * way an uploaded photo is, and re-fetching it in the browser just to
+   * re-upload the bytes risks CORS on whatever's actually hosting it.
+   * Ignored when roomImageBase64 is already present.
+   */
+  roomImageUrl?: string;
   /** The customer's stated room size, when they gave one. */
   room?: { wallCm: number; depthCm?: number } | undefined;
   mode: VisualizeMode;
@@ -39,6 +50,43 @@ type StartInput = {
 
 /** Rides straight into an image-generation prompt — short and plain. */
 const MAX_NOTE_CHARS = 300;
+
+/**
+ * `roomImageUrl` gets fetched server-side (see runVisualizeStart), and
+ * this is a `createServerFn` reachable straight from the browser — a
+ * client could send any URL it likes, not just the one the UI actually
+ * offers. Without this, that's a textbook SSRF: the server would happily
+ * fetch an internal service or a cloud metadata endpoint on the caller's
+ * behalf. Not a full fix (a hostname string can't catch DNS rebinding),
+ * but it stops the obvious targets without needing to know kie.ai's exact
+ * result domain in advance — which isn't documented and can change.
+ */
+function isSafeExternalUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) {
+    return false;
+  }
+  // Private/link-local IPv4 ranges — RFC 1918 + the 169.254/16 metadata range.
+  if (/^127\./.test(host)) return false;
+  if (/^10\./.test(host)) return false;
+  if (/^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  if (/^169\.254\./.test(host)) return false;
+  return true;
+}
 
 /** ~1024px longest edge at JPEG q0.85 lands well under this; anything larger is a client bug. */
 const MAX_BASE64_CHARS = 8_000_000;
@@ -134,12 +182,30 @@ export function parseVisualizeStart(input: StartInput) {
   const productIds = Array.isArray(input?.productIds)
     ? input.productIds.filter((id) => typeof id === "string" && id.length > 0)
     : [];
-  if (!productIds.length) throw new Error("productIds required");
+  // edit is the one mode with no product to install — it changes something
+  // already in the anchor photo (image 1, the previous render) rather than
+  // adding a new piece, so there is nothing to look up here.
+  if (!productIds.length && input?.mode !== "edit") throw new Error("productIds required");
   // staged_room is the one mode with nothing to upload: the references are
   // the input and the room is invented, so requiring a photo here is what
   // used to make a photo the price of admission for seeing your own plan.
   const staged = input?.mode === "staged_room";
-  if (!staged && (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string")) {
+  // edit's anchor can arrive as a URL instead of base64 — see roomImageUrl's
+  // own doc comment. Validated here, not just fetched blind in
+  // runVisualizeStart, since parseVisualizeStart is the one place every
+  // caller (browser, WhatsApp webhook, cron worker) actually shares.
+  const roomImageUrl =
+    input?.mode === "edit" &&
+    !input.roomImageBase64 &&
+    typeof input.roomImageUrl === "string" &&
+    isSafeExternalUrl(input.roomImageUrl)
+      ? input.roomImageUrl
+      : undefined;
+  if (
+    !staged &&
+    !roomImageUrl &&
+    (!input?.roomImageBase64 || typeof input.roomImageBase64 !== "string")
+  ) {
     throw new Error("roomImageBase64 required");
   }
   if ((input.roomImageBase64?.length ?? 0) > MAX_BASE64_CHARS) {
@@ -147,7 +213,8 @@ export function parseVisualizeStart(input: StartInput) {
   }
   return {
     productIds: productIds.slice(0, MAX_REFERENCES),
-    roomImageBase64: staged ? "" : input.roomImageBase64,
+    roomImageBase64: staged ? "" : (input.roomImageBase64 ?? ""),
+    ...(roomImageUrl ? { roomImageUrl } : {}),
     // Rebuilt rather than trusted, and bounded: a hostile depth would
     // otherwise reach the prompt verbatim.
     ...(input.room && Number.isFinite(Number(input.room.wallCm))
@@ -195,6 +262,20 @@ export async function runVisualizeStart(
   data: VisualizeStartData,
 ): Promise<{ taskId?: string; imageUrl?: string }> {
   try {
+    // edit's anchor can arrive as a URL (see StartInput.roomImageUrl) —
+    // resolved to base64 here, once, so everything downstream (the cache
+    // key, uploadToKie) keeps working against a single roomImageBase64
+    // the way every other mode already does.
+    const roomImageBase64 =
+      data.roomImageBase64 ||
+      ("roomImageUrl" in data && data.roomImageUrl
+        ? await (async () => {
+            const res = await fetch(data.roomImageUrl as string);
+            if (!res.ok) throw new Error(`failed to fetch anchor image: ${res.status}`);
+            return Buffer.from(await res.arrayBuffer()).toString("base64");
+          })()
+        : "");
+
     const catalog = catalogFull as unknown as Record<string, VisualizeProduct>;
     const slim = catalogSlim as unknown as Array<{ id: string; col?: string }>;
 
@@ -259,7 +340,7 @@ export async function runVisualizeStart(
         // before a tier change would be served back at the old resolution
         // forever, silently undoing the upgrade.
         resolutionFor(data.mode) +
-        data.roomImageBase64,
+        roomImageBase64,
     );
     const digest = await crypto.subtle.digest("SHA-256", encoded);
     const hash = Array.from(new Uint8Array(digest))
@@ -272,7 +353,7 @@ export async function runVisualizeStart(
     const cached = await readCache(hash);
     if (cached) return { imageUrl: cached };
 
-    const roomUrl = data.roomImageBase64 ? await uploadToKie(data.roomImageBase64) : null;
+    const roomUrl = roomImageBase64 ? await uploadToKie(roomImageBase64) : null;
     const taskId = await createVisualizeTask(
       roomUrl,
       imageUrls,
@@ -284,8 +365,11 @@ export async function runVisualizeStart(
     await writeCache({
       hash,
       taskId,
-      // The column holds one id; for a refit that is the lead reference.
-      productId: data.productIds[0] as string,
+      // The column holds one id and is NOT NULL; for a refit that is the
+      // lead reference. edit has no product at all, so it gets a fixed
+      // placeholder rather than an insert that fails the constraint and
+      // spams the log on every single edit.
+      productId: data.productIds[0] ?? "edit",
       mode: data.mode,
     });
 

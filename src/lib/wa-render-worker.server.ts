@@ -214,6 +214,46 @@ async function logOutbound(
   }
 }
 
+/**
+ * Folds a delivered render back into the session: `lastRender`, which a
+ * "make it blue" follow-up edits directly, and a transcript line, which is
+ * what lets the CHAT MODEL find out a render happened at all. Without this,
+ * the model's own memory has a hole exactly where rendering happens — the
+ * "Building that now" confirmation gets recorded when the job is enqueued,
+ * but delivery itself runs on a later, separate cron tick and previously
+ * never touched the session, so a customer asking to tweak "the picture
+ * you just sent" was talking to a model that had no idea one existed.
+ *
+ * Best-effort: a session write failing here must never turn an
+ * already-delivered image into a failed job.
+ */
+async function recordDeliveredRender(job: RenderJobRow, resultUrl: string): Promise<void> {
+  try {
+    const { loadSession, saveSession } = await import("@/lib/wa-session-store.server");
+    const session = await loadSession(job.session_key);
+    await saveSession(job.session_key, {
+      ...session,
+      transcript: [
+        ...session.transcript,
+        {
+          role: "assistant",
+          content:
+            "[The render finished and was delivered to the customer as an image in this chat — they cannot see this note.] If their next message asks for a specific visual change to it (a colour, a material, adding or removing one thing) rather than a new plan, that is an edit of THIS picture: emit RENDER:edit with no product ids and a note describing exactly what to change.",
+        },
+      ],
+      lastRender: {
+        resultUrl,
+        mode: job.mode,
+        productIds: job.product_ids,
+        quantities: job.quantities ?? {},
+        at: Date.now(),
+      },
+    });
+  } catch (err) {
+    console.error("recordDeliveredRender failed", err);
+  }
+}
+
 async function deliverFailure(job: RenderJobRow, message: string): Promise<void> {
   await updateJob(job.id, { status: "failed", error: message });
   try {
@@ -243,6 +283,9 @@ export function renderCta(mode: VisualizeMode): string {
   if (mode === "lineup") {
     return "See one you like? Tell me which and I'll add it to your plan.";
   }
+  // Nothing was installed — there's nothing to add to the plan or quote,
+  // so the generic default (below) would be a non sequitur here.
+  if (mode === "edit") return "Want anything else changed?";
   return "Want this added to your plan?";
 }
 
@@ -294,6 +337,7 @@ async function deliverImage(
     const phone = decryptPhone(job.customer_phone_enc);
     await sendImage(phone, durableUrl, caption);
     await logOutbound(job.session_key, "image", { imageUrl: durableUrl, caption });
+    await recordDeliveredRender(job, durableUrl);
     if (buttons.length) {
       await delay(IMAGE_DELIVERY_HEAD_START_MS);
       await sendButtons(phone, cta, { kind: "buttons", buttons });
