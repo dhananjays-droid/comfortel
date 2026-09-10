@@ -82,21 +82,59 @@ type MessageRow = {
   created_at: string;
 };
 
+type DeliveryStatusRow = {
+  wa_message_id: string;
+  session_key: string | null;
+  status: string;
+  event_at: string;
+  details: Record<string, unknown>;
+};
+
 /** One entry in the merged timeline — a message or a render job's current
  * status, sorted together by when it happened. A job contributes up to two
  * entries (started, then its current status once that differs), so
  * "what's happening in the background" reads as part of the same
  * continuous story as the conversation, not a separate disconnected list. */
 type TimelineEntry =
-  | { at: string; kind: "message"; message: MessageRow }
+  | {
+      at: string;
+      kind: "message";
+      message: MessageRow;
+      deliveryStatus?: DeliveryStatusRow | undefined;
+    }
   | { at: string; kind: "job-started"; job: JobRow }
   | { at: string; kind: "job-status"; job: JobRow };
 
-function buildTimeline(messages: MessageRow[], jobs: JobRow[]): TimelineEntry[] {
+function buildTimeline(
+  messages: MessageRow[],
+  jobs: JobRow[],
+  deliveryStatuses: DeliveryStatusRow[],
+): TimelineEntry[] {
+  const deliveryRank: Record<string, number> = {
+    sent: 1,
+    delivered: 2,
+    read: 3,
+    failed: 4,
+  };
+  const latestStatus = new Map<string, DeliveryStatusRow>();
+  for (const status of deliveryStatuses) {
+    const previous = latestStatus.get(status.wa_message_id);
+    if (
+      !previous ||
+      previous.event_at < status.event_at ||
+      (previous.event_at === status.event_at &&
+        (deliveryRank[previous.status] ?? 0) < (deliveryRank[status.status] ?? 0))
+    ) {
+      latestStatus.set(status.wa_message_id, status);
+    }
+  }
   const entries: TimelineEntry[] = messages.map((message) => ({
     at: message.created_at,
     kind: "message",
     message,
+    ...(latestStatus.get(message.wa_message_id)
+      ? { deliveryStatus: latestStatus.get(message.wa_message_id) }
+      : {}),
   }));
   for (const job of jobs) {
     entries.push({ at: job.created_at, kind: "job-started", job });
@@ -287,11 +325,25 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
               className="mb-1 h-20 w-20 rounded-lg border border-white/10 object-cover"
             />
             <p className="break-words text-sm text-slate-200">{body}</p>
+            {entry.deliveryStatus && (
+              <p
+                className={`mt-1 text-[11px] ${entry.deliveryStatus.status === "failed" ? "text-rose-400" : "text-slate-500"}`}
+              >
+                {entry.deliveryStatus.status}
+              </p>
+            )}
           </div>
         ) : (
-          <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-slate-200">
-            {body}
-          </p>
+          <div className="min-w-0 flex-1">
+            <p className="whitespace-pre-wrap break-words text-sm text-slate-200">{body}</p>
+            {entry.deliveryStatus && (
+              <p
+                className={`mt-1 text-[11px] ${entry.deliveryStatus.status === "failed" ? "text-rose-400" : "text-slate-500"}`}
+              >
+                {entry.deliveryStatus.status}
+              </p>
+            )}
+          </div>
         )}
       </div>
     );
@@ -334,16 +386,19 @@ function TimelineRow({ entry }: { entry: TimelineEntry }) {
 function SessionPane({ sessionKey, token }: { sessionKey: string; token: string }) {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [deliveryStatuses, setDeliveryStatuses] = useState<DeliveryStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const data = await callAdmin<{ jobs: JobRow[]; messages: MessageRow[] }>(
-        `/api/admin/wa-status?limit=80&session_key=${encodeURIComponent(sessionKey)}`,
-        token,
-      );
+      const data = await callAdmin<{
+        jobs: JobRow[];
+        messages: MessageRow[];
+        deliveryStatuses: DeliveryStatusRow[];
+      }>(`/api/admin/wa-status?limit=80&session_key=${encodeURIComponent(sessionKey)}`, token);
       setJobs(data.jobs ?? []);
       setMessages(data.messages ?? []);
+      setDeliveryStatuses(data.deliveryStatuses ?? []);
     } finally {
       setLoading(false);
     }
@@ -356,7 +411,10 @@ function SessionPane({ sessionKey, token }: { sessionKey: string; token: string 
     return () => clearInterval(id);
   }, [load]);
 
-  const timeline = useMemo(() => buildTimeline(messages, jobs), [messages, jobs]);
+  const timeline = useMemo(
+    () => buildTimeline(messages, jobs, deliveryStatuses),
+    [messages, jobs, deliveryStatuses],
+  );
   const activeJob = jobs.find((j) => j.status === "pending" || j.status === "generating");
 
   return (

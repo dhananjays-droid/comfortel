@@ -109,6 +109,12 @@ describe("advance", () => {
     expect(advance({ awaiting: "build" }, "1")).toBeNull();
   });
 
+  it("always lets menu escape an in-progress step", () => {
+    const out = advance({ awaiting: "quote" }, "menu");
+    expect(out?.state).toEqual({});
+    expect(out?.reply.action?.kind).toBe("buttons");
+  });
+
   it("falls through to the model for anything the menu cannot serve", () => {
     expect(advance(INITIAL, "do you have anything in oxblood")).toBeNull();
     expect(advance(INITIAL, "")).toBeNull();
@@ -144,6 +150,10 @@ describe("describeIntake", () => {
   it("says what it read", () => {
     expect(describeIntake({ stations: 4, budget: 15000 })).toContain("4 stations");
     expect(describeIntake({ stations: 4, budget: 15000 })).toContain("$15,000");
+  });
+
+  it("shows a budget range instead of silently choosing one end", () => {
+    expect(describeIntake({ budgetMin: 10000, budget: 15000 })).toContain("$10,000–$15,000");
   });
 
   it("says what it is assuming, rather than guessing silently", () => {

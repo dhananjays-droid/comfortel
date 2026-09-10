@@ -16,6 +16,68 @@ export type RenderJobInput = {
   note?: string | undefined;
 };
 
+export type ActiveRenderState = {
+  count: number;
+  pending: number;
+  generating: number;
+  oldestCreatedAt: string | null;
+};
+
+const NO_ACTIVE_RENDERS: ActiveRenderState = {
+  count: 0,
+  pending: 0,
+  generating: 0,
+  oldestCreatedAt: null,
+};
+
+/** A compact customer-facing view of work still in flight. */
+export async function getActiveRenderState(sessionKey: string): Promise<ActiveRenderState> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("wa_render_jobs")
+      .select("status,created_at")
+      .eq("session_key", sessionKey)
+      .in("status", ["pending", "generating"])
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    const rows = data ?? [];
+    return {
+      count: rows.length,
+      pending: rows.filter((row) => row.status === "pending").length,
+      generating: rows.filter((row) => row.status === "generating").length,
+      oldestCreatedAt: rows[0]?.created_at ?? null,
+    };
+  } catch (err) {
+    console.error("getActiveRenderState failed", err);
+    // Fail open: a temporary status-query failure must not permanently block
+    // a customer from rendering.
+    return NO_ACTIVE_RENDERS;
+  }
+}
+
+/** Stop queued work and suppress delivery for work already generating. */
+export async function cancelActiveRenderJobs(sessionKey: string): Promise<number> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("wa_render_jobs")
+      .update({
+        status: "cancelled",
+        error: "Cancelled by customer",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("session_key", sessionKey)
+      .in("status", ["pending", "generating"])
+      .select("id");
+    if (error) throw error;
+    return data?.length ?? 0;
+  } catch (err) {
+    console.error("cancelActiveRenderJobs failed", err);
+    return 0;
+  }
+}
+
 /** Transient Supabase/network blips shouldn't cost a customer their render —
  * retried a couple of times, with a short backoff, before giving up. */
 const MAX_ATTEMPTS = 3;

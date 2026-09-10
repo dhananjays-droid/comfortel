@@ -17,7 +17,7 @@
  * silently misbehaving.
  *
  * Outbound renders are a different story: kie.ai serves multi-reference modes
- * (staged_room, lineup, refit_room) at 2K, which regularly lands at 6-9MB —
+ * (staged_room, lineup, refit_room), which can still produce large files —
  * comfortably fine for a browser tab, but over WhatsApp's 5MB image cap.
  * That failure is silent and easy to miss: Meta's send API still returns a
  * message id for an oversized link-based image (it queues the async fetch

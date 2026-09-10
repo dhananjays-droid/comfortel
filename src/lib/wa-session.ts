@@ -33,7 +33,14 @@ const MAX_QTY = 99;
 /** Matches visualize.functions.ts's room-dimension clamp. */
 const MIN_ROOM_CM = 100;
 const MAX_ROOM_CM = 3000;
-const AWAIT_VALUES: readonly Await[] = ["visualize", "build", "wall", "photo", "quote"];
+const AWAIT_VALUES: readonly Await[] = [
+  "visualize",
+  "build",
+  "confirm_build",
+  "wall",
+  "photo",
+  "quote",
+];
 
 export type SessionPlan = { ids: string[]; qty: Record<string, number> };
 
@@ -93,12 +100,10 @@ export type SessionOffered = {
 export type SessionRolePick = { productId: string; qty: number };
 
 /**
- * Mid-way through picking a product for every role in a chosen tier —
- * "Pick your styling chair", then mirror, then wash unit, one WhatsApp
- * list message at a time, rather than the tier's own defaults going
- * straight into the plan unseen. Confirmed live: a customer accepting a
- * tier got one specific chair/mirror/trolley chosen entirely by the
- * system, with no chance to see or choose an alternative.
+ * Mid-way through picking the visually defining products in a chosen tier —
+ * styling chair, mirror and wash unit. The smaller roles retain the tier's
+ * recommended defaults so WhatsApp does not turn one plan into dozens of
+ * image messages.
  *
  * `remainingRoles` is the queue still to ask about, in ROLE_ORDER;
  * `picks` accumulates as each list reply comes in, seeded with the

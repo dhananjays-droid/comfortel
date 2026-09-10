@@ -1,8 +1,8 @@
 /**
  * Encrypts the one piece of PII this channel adapter has to store: the
- * customer's phone number, on `wa_render_jobs` only.
+ * customer's phone number, on short-lived WhatsApp worker jobs only.
  *
- * Every other table is deliberately phone-number-free — `sessions` is keyed
+ * Customer/session/audit tables are deliberately phone-number-free — `sessions` is keyed
  * by `waSessionKey()`'s one-way HMAC (see wa-session.server.ts) precisely so
  * a session row can never be traced back to a phone number. A render job is
  * the one exception: `wa-render-worker.server.ts` runs on a Vercel Cron tick
@@ -10,7 +10,9 @@
  * request, and an HMAC can't be reversed — there is no other way to know
  * where to deliver the finished image. AES-256-GCM (reversible, authenticated)
  * is the right primitive for "store now, must read back later," unlike the
- * session key's HMAC (never read back, only re-derived and compared).
+ * session key's HMAC (never read back, only re-derived and compared). The
+ * inbound FIFO uses the same encryption because it replies from a separate
+ * worker invocation after the original webhook has returned.
  *
  * `WHATSAPP_PHONE_ENC_KEY` is deliberately a separate secret from
  * `WHATSAPP_SESSION_SECRET` — a leak of one shouldn't compromise the other.

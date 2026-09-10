@@ -221,6 +221,22 @@ async function updateJob(id: string, patch: Record<string, unknown>): Promise<vo
   }
 }
 
+/** A cancellation may race a Kie start/retry. Never let a late task-id write
+ * move a customer-cancelled row back into active work. */
+async function updateGeneratingJob(id: string, patch: Record<string, unknown>): Promise<void> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("wa_render_jobs")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("status", "generating");
+    if (error) console.error("updateGeneratingJob failed", error);
+  } catch (err) {
+    console.error("updateGeneratingJob failed", err);
+  }
+}
+
 /** Logs a render-worker send to wa_messages the same way
  * wa-webhook.server.ts's own logOutbound does for a reply — without this,
  * the admin dashboard's conversation timeline had a hole exactly where a
@@ -230,6 +246,7 @@ async function updateJob(id: string, patch: Record<string, unknown>): Promise<vo
  * webhook and never touched wa_messages at all. Never throws — a missed
  * audit-log row is not a reason to treat an already-sent message as failed. */
 async function logOutbound(
+  waMessageId: string,
   sessionKey: string,
   kind: "text" | "image" | "interactive",
   payload: Record<string, string>,
@@ -237,11 +254,7 @@ async function logOutbound(
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("wa_messages").insert({
-      // Render-worker sends have no Graph API message id captured here
-      // (sendText/sendImage/sendButtons return one, but this call site
-      // doesn't thread it through) — a random id keeps the column's
-      // uniqueness constraint satisfied without pretending to have one.
-      wa_message_id: `wa-worker:${crypto.randomUUID()}`,
+      wa_message_id: waMessageId,
       direction: "outbound",
       session_key: sessionKey,
       kind,
@@ -298,8 +311,8 @@ async function deliverFailure(job: RenderJobRow, message: string): Promise<void>
   if (!(await claimTerminal(job.id, { status: "failed", error: message }))) return;
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendText(phone, message);
-    await logOutbound(job.session_key, "text", { text: message });
+    const waMessageId = await sendText(phone, message);
+    await logOutbound(waMessageId, job.session_key, "text", { text: message });
   } catch (err) {
     console.error("deliverFailure: send failed", err);
   }
@@ -378,13 +391,16 @@ async function deliverImage(
 
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendImage(phone, durableUrl, caption);
-    await logOutbound(job.session_key, "image", { imageUrl: durableUrl, caption });
+    const imageMessageId = await sendImage(phone, durableUrl, caption);
+    await logOutbound(imageMessageId, job.session_key, "image", {
+      imageUrl: durableUrl,
+      caption,
+    });
     await recordDeliveredRender(job, durableUrl);
     if (buttons.length) {
       await delay(IMAGE_DELIVERY_HEAD_START_MS);
-      await sendButtons(phone, cta, { kind: "buttons", buttons });
-      await logOutbound(job.session_key, "interactive", { text: cta });
+      const buttonsMessageId = await sendButtons(phone, cta, { kind: "buttons", buttons });
+      await logOutbound(buttonsMessageId, job.session_key, "interactive", { text: cta });
     }
   } catch (err) {
     console.error("deliverImage: send failed", err);
@@ -436,10 +452,9 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
         return;
       }
       if (retried.taskId) {
-        await updateJob(job.id, {
+        await updateGeneratingJob(job.id, {
           kie_task_id: retried.taskId,
           attempt: job.attempt + 1,
-          status: "generating",
         });
         return;
       }
@@ -476,7 +491,7 @@ async function startJob(job: RenderJobRow): Promise<void> {
       return;
     }
     if (!started.taskId) throw new Error("visualizeStart returned neither imageUrl nor taskId");
-    await updateJob(job.id, { kie_task_id: started.taskId });
+    await updateGeneratingJob(job.id, { kie_task_id: started.taskId });
   } catch (err) {
     console.error("startJob failed", err);
     await deliverFailure(job, "We couldn't start that render just now. Want me to try again?");
@@ -512,8 +527,8 @@ const NUDGE2_WINDOW_END_MS = 5 * 60 * 1000;
 async function nudgeStillWorking(job: RenderJobRow, text: string): Promise<void> {
   try {
     const phone = decryptPhone(job.customer_phone_enc);
-    await sendText(phone, text);
-    await logOutbound(job.session_key, "text", { text });
+    const waMessageId = await sendText(phone, text);
+    await logOutbound(waMessageId, job.session_key, "text", { text });
   } catch (err) {
     console.error("nudgeStillWorking failed", err);
   }
@@ -537,7 +552,7 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
     }
     const elapsed = Date.now() - new Date(job.created_at).getTime();
     if (elapsed >= NUDGE_WINDOW_START_MS && elapsed < NUDGE_WINDOW_END_MS) {
-      await nudgeStillWorking(job, "Still working on it, almost there.");
+      await nudgeStillWorking(job, "Your render is still active — I’m working on the details.");
     } else if (elapsed >= NUDGE2_WINDOW_START_MS && elapsed < NUDGE2_WINDOW_END_MS) {
       await nudgeStillWorking(
         job,

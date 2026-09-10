@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CATALOG_FULL } from "@/lib/catalog";
+import { stationsForBudget } from "@/lib/packages";
 import { handleInboundMessage, proactiveOfferTurn, productTurns } from "@/lib/wa-runtime";
 import { EMPTY_SESSION, type SessionState } from "@/lib/wa-session";
 
@@ -56,18 +57,23 @@ async function walkRolePicker(
 }
 
 describe("handleInboundMessage — greeting", () => {
-  it("opens with the three-button menu on a customer's very first message, whatever they said", async () => {
+  it("answers a substantive first message directly instead of putting a generic menu in front of it", async () => {
     const { session, turns } = await handleInboundMessage(fresh(), SESSION_KEY, TEST_PHONE, {
       kind: "text",
       text: "Do you sell barber chairs?",
     });
+    expect(turns[0]?.kind).not.toBe("buttons");
+    expect(session.transcript[0]).toMatchObject({ role: "user" });
+  });
+
+  it("takes a complete first-message planning brief straight to confirmation", async () => {
+    const { session, turns } = await handleInboundMessage(fresh(), SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "I need a 5 station salon with a $20k budget",
+    });
+    expect(session.flow.awaiting).toBe("confirm_build");
     expect(turns[0]?.kind).toBe("buttons");
-    if (turns[0]?.kind === "buttons") {
-      expect(turns[0].action.buttons.map((b) => b.id)).toEqual(["visualize", "build", "ask"]);
-    }
-    // The greeting joins the transcript ahead of anything the customer said,
-    // the same order the web's pre-seeded greetingMessage() would produce.
-    expect(session.transcript[0]).toMatchObject({ role: "assistant" });
+    if (turns[0]?.kind === "buttons") expect(turns[0].text).toContain("5 styling stations");
   });
 
   it("does not double-send the menu when the first message is already a greeting", async () => {
@@ -94,6 +100,70 @@ describe("handleInboundMessage — greeting", () => {
 });
 
 describe("handleInboundMessage — the guided build flow", () => {
+  it("sizes a budget-only WhatsApp plan from the budget instead of silently using four stations", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "build" },
+    };
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "My furniture budget is $50k",
+    });
+    expect(result.session.flow.awaiting).toBe("confirm_build");
+    if (result.turns[0]?.kind === "buttons") {
+      expect(result.turns[0].text).toContain(`${stationsForBudget(50000)} styling station`);
+    }
+
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
+    });
+    expect(result.session.offered?.choice.stations).toBe(stationsForBudget(50000));
+    expect(result.session.offered?.choice.budget).toBe(50000);
+  });
+
+  it("lets the customer correct interpreted details before any package is built", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "build" },
+    };
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "budget 20 grand",
+    });
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:change",
+    });
+    expect(result.session.flow.awaiting).toBe("build");
+    expect(result.session.offered).toBeNull();
+    expect(result.turns[0]?.kind).toBe("text");
+  });
+
+  it("does not call an unaffordable complete plan under budget", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "build" },
+    };
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "1 station with a hard cap of $500",
+    });
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
+    });
+    expect(result.session.offered).toBeNull();
+    expect(result.turns[0]?.kind).toBe("buttons");
+    if (result.turns[0]?.kind === "buttons") {
+      expect(result.turns[0].text).toContain("above your cap");
+      expect(result.turns[0].text).toContain("won’t label that as “under budget”");
+    }
+  });
+
   it("walks menu tap → intake → package options → a chosen package fills the plan", async () => {
     let state: SessionState = {
       ...fresh(),
@@ -111,6 +181,22 @@ describe("handleInboundMessage — the guided build flow", () => {
     result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
       kind: "text",
       text: "4 stations, about $15,000, a 16 ft wall",
+    });
+    state = result.session;
+    expect(state.flow.awaiting).toBe("confirm_build");
+    expect(state.offered).toBeNull();
+    expect(result.turns[0]?.kind).toBe("buttons");
+    if (result.turns[0]?.kind === "buttons") {
+      expect(result.turns[0].action.buttons.map((b) => b.id)).toEqual([
+        "build:confirm",
+        "build:change",
+        "nav:menu",
+      ]);
+    }
+
+    result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
     });
     state = result.session;
     expect(state.flow.awaiting).toBeUndefined();
@@ -159,10 +245,15 @@ describe("handleInboundMessage — the guided build flow", () => {
       transcript: [{ role: "assistant", content: "already greeted" }],
       flow: { awaiting: "build" },
     };
-    const { session, turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
       kind: "text",
       text: "1 station, budget $1,000,000",
     });
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
+    });
+    const { session, turns } = result;
     expect(session.offered?.packages).toHaveLength(1);
     expect(turns[0]?.kind).toBe("buttons");
     if (turns[0]?.kind === "buttons") {
@@ -212,6 +303,45 @@ describe("handleInboundMessage — the guided build flow", () => {
   });
 });
 
+describe("handleInboundMessage — global recovery", () => {
+  it("opens the main menu even in the middle of quote intake", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "quote" },
+      pendingQuote: { productIds: [REAL_ID] },
+    };
+    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "menu",
+    });
+    expect(result.session.flow).toEqual({});
+    expect(result.session.pendingQuote).toBeNull();
+    expect(result.turns[0]?.kind).toBe("buttons");
+  });
+
+  it("start over clears the plan and temporary journey state", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "old conversation" }],
+      plan: { ids: [REAL_ID], qty: { [REAL_ID]: 2 } },
+      flow: { awaiting: "build" },
+      room: { url: "https://example.com/old-room.jpg", at: Date.now() },
+      customerName: "Jamie",
+      phoneLast4: "4567",
+    };
+    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "start over",
+    });
+    expect(result.session.plan.ids).toEqual([]);
+    expect(result.session.flow).toEqual({});
+    expect(result.session.room).toBeNull();
+    expect(result.session.customerName).toBe("Jamie");
+    expect(result.turns[0]?.kind).toBe("buttons");
+  });
+});
+
 describe("handleInboundMessage — the role-by-role picker", () => {
   /** Walks the guided flow up to (not including) the tier tap, so each test
    * starts from a real, freshly-offered set of packages. */
@@ -221,9 +351,13 @@ describe("handleInboundMessage — the role-by-role picker", () => {
       transcript: [{ role: "assistant", content: "already greeted" }],
       flow: { awaiting: "build" },
     };
-    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
       kind: "text",
       text: "4 stations, about $18,000",
+    });
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
     });
     state = result.session;
     const tierId =
@@ -270,10 +404,11 @@ describe("handleInboundMessage — the role-by-role picker", () => {
       guard++;
     }
 
-    // Every role actually got its own turn, not the same one repeated.
-    expect(rolesSeen.size).toBeGreaterThan(1);
+    // Only the visually defining pieces require decisions; the package's
+    // recommended defaults remain for the smaller accessories.
+    expect([...rolesSeen]).toEqual(["styling", "mirror", "wash"]);
     expect(result.session.rolePicker).toBeNull();
-    expect(result.session.plan.ids.length).toBe(rolesSeen.size);
+    expect(result.session.plan.ids.length).toBeGreaterThan(rolesSeen.size);
     expect(result.turns[0]?.kind).toBe("text");
   });
 
@@ -385,6 +520,10 @@ describe("handleInboundMessage — render request", () => {
     let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
       kind: "text",
       text: "3 stations, $12,000, 20 by 12 ft",
+    });
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: "build:confirm",
     });
     state = result.session;
     const tierId =

@@ -8,7 +8,7 @@ photo of their own salon or request a quote.
 Two providers, doing different jobs:
 
 - **Anthropic (Claude Haiku 4.5)** — the conversation and product selection.
-- **kie.ai (`gpt-image-2-image-to-image`)** — the room renders. Nothing to do
+- **kie.ai (`gpt-image-2-5-flare-image-to-image`)** — the room renders. Nothing to do
   with Claude.
 
 ---
@@ -23,7 +23,7 @@ flowchart TD
     H --> V["parse + validate<br/><small>strip markers, check every id</small>"]
     F["catalog-full.json<br/><small>374 KB · never sent to the model</small>"] --> V
     V --> C["product cards<br/><small>price, images, specs</small>"]
-    V --> R["renders<br/><small>kie · GPT Image 2 · $0.03 at 1K, $0.05 at 2K</small>"]
+    V --> R["renders<br/><small>kie · GPT Image 2.5 Flare</small>"]
 ```
 
 The server function is the only thing that talks to Anthropic. No API call is
@@ -157,16 +157,12 @@ kie's resolution tiers are native generations, not upscales: **6 credits
 ($0.03) at 1K, 10 ($0.05) at 2K, 16 ($0.08) at 4K**, measured from
 `recordInfo.creditsConsumed`. A failed task consumes 0 — failures are free.
 
-The tier is chosen per render by `resolutionFor(mode)` in `kie.server.ts`,
-because what 2K buys is each product's share of the pixels. A refit, a lineup
-or a staged room puts several DIFFERENT products in one frame and gets **2K**;
-a single-product placement has one identity to get right, is read in a chat
-bubble, and stays **1K**. `KIE_IMAGE_RESOLUTION` overrides both for testing.
+Every mode is currently fixed at **1K** by `resolutionFor(mode)` in
+`kie.server.ts`. This deliberately keeps the existing reference allocation
+unchanged while measuring whether lower output resolution improves latency.
 
-The tier is part of the render cache key. It is derived from the mode, which
-was already in the key — but the mapping itself can change, and the override
-can change it without the mode moving, so every previously cached render would
-otherwise be served back at the old resolution forever.
+The tier is part of the render cache key, so previously cached 2K images are not
+served during the 1K evaluation.
 
 2K and 4K do not support 5:4, 4:5, 3:1, 1:3 or 9:21. `resize-image.ts` only
 ever produces 1:1, 3:2 or 2:3, so the restriction never bites.
@@ -174,9 +170,9 @@ ever produces 1:1, 3:2 or 2:3, so the restriction never bites.
 | Mode          | Images         | Tier | Cost      | Use for                                                             |
 | ------------- | -------------- | ---- | --------- | ------------------------------------------------------------------- |
 | `replace_all` | 1              | 1K   | $0.03     | every matching piece becomes the SAME product                       |
-| `lineup`      | 1              | 2K   | $0.05     | 2–4 DIFFERENT products side by side, one per station, left to right |
-| `refit_room`  | 1              | 2K   | $0.05     | whole room refitted across furniture types                          |
-| `staged_room` | 1              | 2K   | $0.05     | no room photo at all — the salon is built around the pieces         |
+| `lineup`      | 1              | 1K   | $0.03     | 2–4 DIFFERENT products side by side, one per station, left to right |
+| `refit_room`  | 1              | 1K   | $0.03     | whole room refitted across furniture types                          |
+| `staged_room` | 1              | 1K   | $0.03     | no room photo at all — the salon is built around the pieces         |
 | `add`         | 1              | 1K   | $0.03     | drop one piece into free space                                      |
 | `replace`     | **one per id** | 1K   | $0.03 × n | true A/B — same position, each candidate in turn                    |
 
@@ -194,7 +190,7 @@ to a single-product `replace`.
 ### The render call
 
 ```ts
-model: "gpt-image-2-image-to-image"      // NO slash, unlike the 1.5 ids
+model: "gpt-image-2-5-flare-image-to-image"
 input: {
   input_urls: [roomUrl, ...references],  // ORDER IS THE CONTRACT
   prompt, aspect_ratio,
@@ -293,7 +289,7 @@ more specific than the last:
 
 The task is instance tracking — pick one of several identical objects and edit
 only it, and only its reflection. Image models do not do that from prose. The
-industry answer is a **mask**, and kie exposes none: `gpt-image-2-image-to-image`
+industry answer is a **mask**, and kie exposes none: `gpt-image-2-5-flare-image-to-image`
 takes only `prompt`, `input_urls`, `aspect_ratio` and `resolution`. A `mask` field
 is not rejected, it is silently ignored, which is the worst failure mode.
 
@@ -518,15 +514,14 @@ distinct copy so whoever is testing can self-diagnose.
 
 ## 8. Environment variables
 
-| Name                            | Needed by              | Without it                             |
-| ------------------------------- | ---------------------- | -------------------------------------- |
-| `ANTHROPIC_API_KEY`             | server                 | chat dead                              |
-| `KIE_API_KEY`                   | server                 | renders dead                           |
-| `KIE_IMAGE_RESOLUTION`          | server, optional       | defaults to `1K` (`2K`/`4K` cost more) |
-| `SUPABASE_SERVICE_ROLE_KEY`     | server                 | quote requests fail; render cache off  |
-| `SUPABASE_URL`                  | server                 | as above                               |
-| `VITE_SUPABASE_URL`             | client, **build time** | see below                              |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | client, **build time** | see below                              |
+| Name                            | Needed by              | Without it                            |
+| ------------------------------- | ---------------------- | ------------------------------------- |
+| `ANTHROPIC_API_KEY`             | server                 | chat dead                             |
+| `KIE_API_KEY`                   | server                 | renders dead                          |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server                 | quote requests fail; render cache off |
+| `SUPABASE_URL`                  | server                 | as above                              |
+| `VITE_SUPABASE_URL`             | client, **build time** | see below                             |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | client, **build time** | see below                             |
 
 **The `VITE_` pair is inlined at build time.** A build that ran without them
 ships `undefined` — no runtime setting can recover it, only a rebuild. This

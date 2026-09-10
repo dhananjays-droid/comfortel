@@ -134,6 +134,8 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
       { data: messages, error: messagesError },
       { data: jobs, error: jobsError },
       { data: identities, error: identitiesError },
+      { data: inboundFailures, error: inboundFailuresError },
+      { data: deliveryFailures, error: deliveryFailuresError },
     ] = await Promise.all([
       supabaseAdmin
         .from("wa_messages")
@@ -150,12 +152,37 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
         .select("session_key, customer_name, phone_last4")
         .order("updated_at", { ascending: false })
         .limit(500),
+      supabaseAdmin
+        .from("wa_inbound_jobs")
+        .select("session_key, last_error, updated_at")
+        .eq("status", "failed")
+        .order("updated_at", { ascending: false })
+        .limit(500),
+      supabaseAdmin
+        .from("wa_message_statuses")
+        .select("session_key, details, event_at")
+        .eq("status", "failed")
+        .order("event_at", { ascending: false })
+        .limit(500),
     ]);
 
-    if (messagesError || jobsError || identitiesError) {
+    if (
+      messagesError ||
+      jobsError ||
+      identitiesError ||
+      inboundFailuresError ||
+      deliveryFailuresError
+    ) {
       return new Response(
         JSON.stringify({
-          error: (messagesError ?? jobsError ?? identitiesError)?.message ?? "query failed",
+          error:
+            (
+              messagesError ??
+              jobsError ??
+              identitiesError ??
+              inboundFailuresError ??
+              deliveryFailuresError
+            )?.message ?? "query failed",
         }),
         { status: 500, headers: { "content-type": "application/json" } },
       );
@@ -226,6 +253,45 @@ export async function handleAdminSessions(request: Request): Promise<Response> {
       };
     }
 
+    for (const failure of inboundFailures ?? []) {
+      const sessionKey = failure.session_key;
+      const existing = bySession.get(sessionKey);
+      if (existing) {
+        existing.hasError = true;
+        if (failure.updated_at > existing.lastActivity) existing.lastActivity = failure.updated_at;
+      } else {
+        bySession.set(sessionKey, {
+          sessionKey,
+          lastActivity: failure.updated_at,
+          messageCount: 0,
+          lastMessagePreview: `Inbound processing failed: ${failure.last_error ?? "unknown error"}`,
+          hasError: true,
+          latestJob: null,
+          ...identityFor(sessionKey),
+        });
+      }
+    }
+
+    for (const failure of deliveryFailures ?? []) {
+      if (!failure.session_key) continue;
+      const sessionKey = failure.session_key;
+      const existing = bySession.get(sessionKey);
+      if (existing) {
+        existing.hasError = true;
+        if (failure.event_at > existing.lastActivity) existing.lastActivity = failure.event_at;
+      } else {
+        bySession.set(sessionKey, {
+          sessionKey,
+          lastActivity: failure.event_at,
+          messageCount: 0,
+          lastMessagePreview: "WhatsApp delivery failed",
+          hasError: true,
+          latestJob: null,
+          ...identityFor(sessionKey),
+        });
+      }
+    }
+
     let sessions = Array.from(bySession.values()).sort((a, b) =>
       a.lastActivity < b.lastActivity ? 1 : -1,
     );
@@ -273,17 +339,42 @@ export async function handleAdminStatus(request: Request): Promise<Response> {
     if (sessionKey) messagesQuery = messagesQuery.eq("session_key", sessionKey);
     const { data: messages, error: messagesError } = await messagesQuery;
 
-    if (jobsError || messagesError) {
+    let statusesQuery = supabaseAdmin
+      .from("wa_message_statuses")
+      .select("wa_message_id, session_key, status, event_at, details")
+      .order("event_at", { ascending: false })
+      .limit(limit * 4);
+    if (sessionKey) statusesQuery = statusesQuery.eq("session_key", sessionKey);
+    const { data: deliveryStatuses, error: statusesError } = await statusesQuery;
+
+    let inboundQuery = supabaseAdmin
+      .from("wa_inbound_jobs")
+      .select(
+        "id, wa_message_id, session_key, status, attempt, last_error, created_at, started_at, completed_at, updated_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (sessionKey) inboundQuery = inboundQuery.eq("session_key", sessionKey);
+    const { data: inboundJobs, error: inboundError } = await inboundQuery;
+
+    if (jobsError || messagesError || statusesError || inboundError) {
       return new Response(
-        JSON.stringify({ error: (jobsError ?? messagesError)?.message ?? "query failed" }),
+        JSON.stringify({
+          error:
+            (jobsError ?? messagesError ?? statusesError ?? inboundError)?.message ??
+            "query failed",
+        }),
         { status: 500, headers: { "content-type": "application/json" } },
       );
     }
 
-    return new Response(JSON.stringify({ jobs, messages }, null, 2), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ jobs, inboundJobs, messages, deliveryStatuses }, null, 2),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    );
   } catch (err) {
     console.error("handleAdminStatus failed", err);
     // Safe to expose here — this endpoint is already bearer-protected and

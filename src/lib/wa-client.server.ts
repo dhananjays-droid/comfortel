@@ -61,6 +61,35 @@ async function send(payload: Record<string, unknown>): Promise<string> {
   return id;
 }
 
+/**
+ * Acknowledge the customer's message immediately and show that work has
+ * started. This endpoint returns a status acknowledgement rather than a new
+ * outbound message id, so it deliberately does not go through send().
+ */
+export async function markReadAndType(messageId: string): Promise<void> {
+  const { token, phoneNumberId } = credentials();
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new WaClientError(`WhatsApp read/typing update failed (${res.status})`, res.status, body);
+  }
+}
+
 export async function sendText(to: string, body: string): Promise<string> {
   return send({ to, type: "text", text: { body: truncate(body, WA.body) } });
 }

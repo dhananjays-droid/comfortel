@@ -43,6 +43,9 @@ describe("candidates", () => {
     expect(names("wash").some((n) => n.includes("comfortneck"))).toBe(false);
     expect(names("mirror").some((n) => n.includes("joiner frame"))).toBe(false);
     expect(names("trolley").some((n) => n.includes("tint bowl"))).toBe(false);
+    expect(names("wash").some((n) => /^basin|basin with tilt/.test(n))).toBe(false);
+    expect(names("waiting").some((n) => /rack|shelves/.test(n))).toBe(false);
+    expect(names("mirror").some((n) => /^salon pole frame/.test(n))).toBe(false);
   });
 
   it("keeps the actual furniture", () => {

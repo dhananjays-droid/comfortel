@@ -161,6 +161,7 @@ describe("sanitizeTranscript", () => {
 describe("sanitizeFlow", () => {
   it("accepts a known Await value", () => {
     expect(sanitizeFlow({ awaiting: "build" })).toEqual({ awaiting: "build" });
+    expect(sanitizeFlow({ awaiting: "confirm_build" })).toEqual({ awaiting: "confirm_build" });
   });
 
   it("drops an unknown awaiting value rather than trusting it", () => {
