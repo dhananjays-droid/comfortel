@@ -8,6 +8,7 @@
  * references after — the order is what tells the model which is which.
  */
 
+import { cdnFor } from "@/lib/cdn-assets";
 import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
 
 const KIE_API = "https://api.kie.ai";
@@ -125,6 +126,18 @@ const mirrored = new Map<string, { url: string; at: number }>();
 const MIRROR_TTL_MS = 20 * 60 * 1000;
 
 async function mirror(sourceUrl: string): Promise<string> {
+  // Already on our own CDN, which GPT Image 2 fetches happily — no download,
+  // no re-upload, nothing to expire. This is the whole point of
+  // scripts/sync-cdn-assets.mjs: mirroring here measured at ~16.7s before
+  // generation started, paid on almost every render because this Map is
+  // in-process and Vercel cold-starts wipe it.
+  //
+  // The upload path below stays as the fallback, deliberately. A product
+  // scraped since the last sync, or one whose upload failed, still renders —
+  // slowly, rather than not at all.
+  const fromCdn = cdnFor(sourceUrl);
+  if (fromCdn) return fromCdn;
+
   const hit = mirrored.get(sourceUrl);
   if (hit && Date.now() - hit.at < MIRROR_TTL_MS) return hit.url;
 
