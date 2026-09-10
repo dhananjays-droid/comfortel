@@ -358,3 +358,29 @@ export function buildPackages(budget: number, needs: Need[]): Package[] {
 export function idsOf(pkg: Package): string[] {
   return pkg.lines.map((line) => line.product.id);
 }
+
+/**
+ * The one line that actually distinguishes a package, for a reply that
+ * needs to say something — not everything — about it.
+ *
+ * `reasons` holds several sentences that serve different purposes and were
+ * never meant to be shown together: [0] is always the budget delta, [1]
+ * (a model's own rationale, or the deterministic packer's explanation of
+ * what changed from the middle option) is the actual "why", and whatever
+ * comes after — a restated station/piece count, "N other pieces differ
+ * too" — repeats information a summary line or an itemized list elsewhere
+ * already carries. Confirmed live, twice: joining the whole array read as
+ * one dense, repetitive paragraph in a three-way comparison a customer
+ * couldn't decide between, and read as a run-on wall of text after
+ * accepting one. This is the shared fix for both.
+ *
+ * One thing is pulled back in regardless of position: whether a role got
+ * left out entirely (curatePackages explicitly allows the model to skip
+ * one when the brief makes it irrelevant) — found by content, since only
+ * the curated path ever produces it, and it answers "wait, where's my
+ * reception desk" rather than restating a number the customer already sees.
+ */
+export function packageLine(p: Package): string {
+  const missing = p.reasons.find((r) => r.startsWith("Leaves out"));
+  return [p.reasons[0], p.reasons[1], missing].filter(Boolean).join(" ");
+}

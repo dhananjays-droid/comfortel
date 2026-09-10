@@ -8,7 +8,9 @@ import {
   distinctPackages,
   idsOf,
   needsFor,
+  packageLine,
   stationsForBudget,
+  type Package,
   type Role,
 } from "@/lib/packages";
 
@@ -165,6 +167,49 @@ describe("reasons", () => {
 
   it("reassures that the layout does not change between tiers", () => {
     expect(packs[0]!.reasons.join(" ")).toMatch(/Same station count/);
+  });
+});
+
+describe("packageLine", () => {
+  const budget = 15000;
+  const packs = buildPackages(budget, needsFor(4));
+
+  it("keeps the budget delta and the single biggest differentiator", () => {
+    // Confirmed live: a customer comparing three unseen packages couldn't
+    // decide between them because only the budget delta was ever shown —
+    // this is the fix, and it has to survive both the deterministic packer
+    // (tested here) and the curated path (reasons[1] is a model rationale
+    // there instead, but the same two slots).
+    for (const pkg of packs) {
+      const line = packageLine(pkg);
+      expect(line).toContain(pkg.reasons[0]);
+      expect(pkg.reasons[1]).toBeTruthy();
+      expect(line).toContain(pkg.reasons[1]);
+    }
+  });
+
+  it("drops the restated station/piece count and the reassurance filler", () => {
+    // Confirmed live: joining the whole reasons array read as one dense,
+    // repetitive paragraph — this is what a three-way comparison, and a
+    // post-acceptance confirmation, actually need instead.
+    for (const pkg of packs) {
+      const line = packageLine(pkg);
+      expect(line).not.toMatch(/Same station count/);
+      expect(line).not.toMatch(/other pieces? differ/);
+    }
+  });
+
+  it("pulls a missing-role note back in regardless of position", () => {
+    const withGap: Package = {
+      ...packs[0]!,
+      reasons: [
+        packs[0]!.reasons[0]!,
+        "Some rationale about the look.",
+        "4 stations, 12 pieces.",
+        "Leaves out the reception desk.",
+      ],
+    };
+    expect(packageLine(withGap)).toContain("Leaves out the reception desk.");
   });
 });
 
