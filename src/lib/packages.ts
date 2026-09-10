@@ -88,6 +88,39 @@ export function candidates(role: Role): FullProduct[] {
     .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
 }
 
+/**
+ * The order a customer picking role by role actually walks through a
+ * salon — the chairs and mirrors they'll look at first, the smaller
+ * fittings last. Used to sequence the WhatsApp role-picker (one list
+ * message per role), not the deterministic packer, which doesn't care
+ * about order at all.
+ */
+export const ROLE_ORDER: Role[] = [
+  "styling",
+  "mirror",
+  "wash",
+  "stool",
+  "trolley",
+  "reception",
+  "waiting",
+];
+
+/**
+ * A handful of real options for one role, priced near what this tier
+ * already spends on it — not the full catalogue range, which would offer
+ * a $3,000 mirror against a $1,500 budget for that role and call it a
+ * choice. Re-sorted back to ascending price for display; the search
+ * itself is by closeness to `targetPrice`, not by price order.
+ */
+export function candidatesNear(role: Role, targetPrice: number, max = 5): FullProduct[] {
+  const pool = candidates(role);
+  if (!pool.length) return [];
+  const closest = [...pool]
+    .sort((a, b) => Math.abs((a.price ?? 0) - targetPrice) - Math.abs((b.price ?? 0) - targetPrice))
+    .slice(0, max);
+  return closest.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+}
+
 export type Line = { role: Role; product: FullProduct; qty: number; subtotal: number };
 
 export type Tier = "lean" | "balanced" | "premium";

@@ -89,6 +89,30 @@ export type SessionOffered = {
   at: number;
 };
 
+/** One line accepted so far in the role-by-role picker below. */
+export type SessionRolePick = { productId: string; qty: number };
+
+/**
+ * Mid-way through picking a product for every role in a chosen tier —
+ * "Pick your styling chair", then mirror, then wash unit, one WhatsApp
+ * list message at a time, rather than the tier's own defaults going
+ * straight into the plan unseen. Confirmed live: a customer accepting a
+ * tier got one specific chair/mirror/trolley chosen entirely by the
+ * system, with no chance to see or choose an alternative.
+ *
+ * `remainingRoles` is the queue still to ask about, in ROLE_ORDER;
+ * `picks` accumulates as each list reply comes in, seeded with the
+ * chosen package's own defaults so an abandoned picker (a customer who
+ * stops responding mid-flow) still has a complete, sensible plan sitting
+ * in `picks` rather than a partial one.
+ */
+export type SessionRolePicker = {
+  choice: SessionOfferedChoice;
+  remainingRoles: Role[];
+  picks: Record<string, SessionRolePick>;
+  at: number;
+};
+
 /** Which products a tapped "Get a quote" button was for — held while
  * flow.awaiting is "quote" and the customer's name and email are collected,
  * since submitEnquiry needs both per product and neither travels with a
@@ -103,6 +127,7 @@ export type SessionState = {
   room: SessionRoomPhoto | null;
   lastRender: SessionLastRender | null;
   offered: SessionOffered | null;
+  rolePicker: SessionRolePicker | null;
   /** A dimensions run promised zone renders and is only waiting on a photo —
    * matches index.tsx's `pendingZoneRender` state. */
   pendingZoneRender: boolean;
@@ -126,6 +151,7 @@ export const EMPTY_SESSION: SessionState = {
   room: null,
   lastRender: null,
   offered: null,
+  rolePicker: null,
   pendingZoneRender: false,
   pendingQuote: null,
   handoff: false,
@@ -159,6 +185,17 @@ export function liveOffered(
 ): SessionOffered | null {
   if (!offered) return null;
   return now - offered.at > OFFER_TTL_MS ? null : offered;
+}
+
+/** Same TTL and reasoning as liveOffered — a role-picker list reply
+ * arriving half an hour after the tier was accepted answers a question
+ * the customer probably forgot asking. */
+export function liveRolePicker(
+  picker: SessionRolePicker | null,
+  now = Date.now(),
+): SessionRolePicker | null {
+  if (!picker) return null;
+  return now - picker.at > OFFER_TTL_MS ? null : picker;
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -311,6 +348,17 @@ function sanitizePackage(input: unknown): Package | null {
   return { tier, lines, total, reasons };
 }
 
+function sanitizeOfferedChoice(input: unknown): SessionOfferedChoice {
+  const raw = input as
+    { stations?: unknown; budget?: unknown; note?: unknown; byZone?: unknown } | null | undefined;
+  return {
+    stations: clampInt(raw?.stations, 1, 20, 4),
+    budget: Math.max(500, Number(raw?.budget) || 15000),
+    note: typeof raw?.note === "string" ? raw.note.slice(0, 800) : "",
+    byZone: raw?.byZone === true,
+  };
+}
+
 export function sanitizeOffered(input: unknown): SessionOffered | null {
   const raw = input as { packages?: unknown; choice?: unknown; at?: unknown } | null | undefined;
   if (!raw || !Array.isArray(raw.packages)) return null;
@@ -321,17 +369,55 @@ export function sanitizeOffered(input: unknown): SessionOffered | null {
     .slice(0, 3);
   if (!packages.length) return null;
 
-  const choiceIn = raw.choice as
-    { stations?: unknown; budget?: unknown; note?: unknown; byZone?: unknown } | null | undefined;
-  const choice: SessionOfferedChoice = {
-    stations: clampInt(choiceIn?.stations, 1, 20, 4),
-    budget: Math.max(500, Number(choiceIn?.budget) || 15000),
-    note: typeof choiceIn?.note === "string" ? choiceIn.note.slice(0, 800) : "",
-    byZone: choiceIn?.byZone === true,
+  const at = Number(raw.at);
+  return {
+    packages,
+    choice: sanitizeOfferedChoice(raw.choice),
+    at: Number.isFinite(at) ? at : Date.now(),
   };
+}
+
+const ROLE_VALUES: readonly Role[] = [
+  "styling",
+  "wash",
+  "mirror",
+  "stool",
+  "trolley",
+  "reception",
+  "waiting",
+];
+
+export function sanitizeRolePicker(input: unknown): SessionRolePicker | null {
+  const raw = input as
+    | { choice?: unknown; remainingRoles?: unknown; picks?: unknown; at?: unknown }
+    | null
+    | undefined;
+  if (!raw) return null;
+
+  const remainingRoles = (Array.isArray(raw.remainingRoles) ? raw.remainingRoles : []).filter(
+    (r): r is Role => ROLE_VALUES.includes(r as Role),
+  );
+  // Nothing left to ask about is not a picker in progress — it is done.
+  if (!remainingRoles.length) return null;
+
+  const picksIn =
+    raw.picks && typeof raw.picks === "object" ? (raw.picks as Record<string, unknown>) : {};
+  const picks: Record<string, SessionRolePick> = {};
+  for (const [role, value] of Object.entries(picksIn)) {
+    if (!ROLE_VALUES.includes(role as Role)) continue;
+    const v = value as { productId?: unknown; qty?: unknown } | null | undefined;
+    if (!v || typeof v.productId !== "string") continue;
+    if (!Object.prototype.hasOwnProperty.call(CATALOG_FULL, v.productId)) continue;
+    picks[role] = { productId: v.productId, qty: clampInt(v.qty, MIN_QTY, MAX_QTY, 1) };
+  }
 
   const at = Number(raw.at);
-  return { packages, choice, at: Number.isFinite(at) ? at : Date.now() };
+  return {
+    choice: sanitizeOfferedChoice(raw.choice),
+    remainingRoles,
+    picks,
+    at: Number.isFinite(at) ? at : Date.now(),
+  };
 }
 
 export function sanitizePendingQuote(input: unknown): SessionPendingQuote | null {
@@ -360,6 +446,7 @@ export function sanitizeSession(input: unknown): SessionState {
     room: sanitizeRoom(raw?.room),
     lastRender: sanitizeLastRender(raw?.lastRender),
     offered: sanitizeOffered(raw?.offered),
+    rolePicker: sanitizeRolePicker(raw?.rolePicker),
     pendingZoneRender: raw?.pendingZoneRender === true,
     pendingQuote: sanitizePendingQuote(raw?.pendingQuote),
     handoff: raw?.handoff === true,

@@ -290,6 +290,12 @@ describe("sanitizeSession", () => {
         at: 1,
       },
       offered: null,
+      rolePicker: {
+        choice: { stations: 3, budget: 12000, note: "", byZone: false },
+        remainingRoles: ["mirror", "wash"],
+        picks: { styling: { productId: REAL_ID, qty: 3 } },
+        at: 1,
+      },
       pendingZoneRender: true,
       pendingQuote: { productIds: [REAL_ID] },
       handoff: true,

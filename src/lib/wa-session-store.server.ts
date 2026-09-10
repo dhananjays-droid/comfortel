@@ -27,6 +27,7 @@ type SessionRow = {
   room_spec_depth_cm: number | null;
   last_render: unknown;
   offered: unknown;
+  role_picker: unknown;
   pending_zone_render: boolean;
   pending_quote: unknown;
   handoff: boolean;
@@ -110,6 +111,7 @@ function sessionFromRow(row: SessionRow): SessionState {
     room,
     lastRender: row.last_render,
     offered: row.offered,
+    rolePicker: row.role_picker,
     pendingZoneRender: row.pending_zone_render,
     pendingQuote: row.pending_quote,
     handoff: row.handoff,
@@ -135,6 +137,7 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
         room_spec_depth_cm: clean.roomSpec?.depthCm ?? null,
         last_render: clean.lastRender,
         offered: clean.offered,
+        role_picker: clean.rolePicker,
         pending_zone_render: clean.pendingZoneRender,
         pending_quote: clean.pendingQuote,
         handoff: clean.handoff,

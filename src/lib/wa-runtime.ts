@@ -35,12 +35,17 @@ import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
 import { parseEnquiryInput, runSubmitEnquiry } from "@/lib/enquiry.functions";
 import {
   buildPackages,
+  candidatesNear,
   distinctPackages,
   idsOf,
   needsFor,
   packageLine,
+  ROLE_LABEL,
+  ROLE_ORDER,
   TIER_LABEL,
+  type Line,
   type Package,
+  type Role,
 } from "@/lib/packages";
 import { expectedFrom, linesFrom, planPieces, planTotal, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
@@ -50,6 +55,7 @@ import { enqueueRenderJob } from "@/lib/wa-render-jobs.server";
 import {
   liveLastRender,
   liveOffered,
+  liveRolePicker,
   liveRoom,
   sanitizeRoomSpec,
   type SessionLastRender,
@@ -57,10 +63,13 @@ import {
   type SessionOfferedChoice,
   type SessionPendingQuote,
   type SessionPlan,
+  type SessionRolePick,
+  type SessionRolePicker,
   type SessionRoomPhoto,
   type SessionState,
 } from "@/lib/wa-session";
 import { isMultiReferenceMode, isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
+import { WA, truncate } from "@/lib/whatsapp";
 import { groupByZone, isSplittable } from "@/lib/zones";
 import {
   INITIAL,
@@ -477,10 +486,12 @@ function acceptPackageChoice(
 ): RuntimeResult {
   const ids = idsOf(pkg);
   const products = ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
-  if (!products.length) return { session: { ...session, offered: null }, turns: [] };
+  if (!products.length) {
+    return { session: { ...session, offered: null, rolePicker: null }, turns: [] };
+  }
 
   const qty = Object.fromEntries(pkg.lines.map((line) => [line.product.id, line.qty]));
-  let next: SessionState = { ...session, offered: null, plan: { ids, qty } };
+  let next: SessionState = { ...session, offered: null, rolePicker: null, plan: { ids, qty } };
 
   const summary = [
     `${choice.stations} station${choice.stations === 1 ? "" : "s"}`,
@@ -528,6 +539,163 @@ function acceptPackageChoice(
   return {
     session: next,
     turns: [{ kind: "text", text: `${replyText}\n\n${itemized}` }, ...productTurns(ids)],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// role-by-role picker — a tier's own defaults were going straight into the
+// plan unseen; this lets a customer choose the actual chair, mirror, trolley
+// for each role rather than have the system decide alone. New, not ported:
+// index.tsx has no equivalent (see acceptPackage there, which still accepts
+// the tier's defaults directly) — a full 7-step picker is WhatsApp-specific,
+// since the web app already lets a customer swap anything via the plan tray
+// and normal product browsing, which WhatsApp has no equivalent of.
+// ---------------------------------------------------------------------------
+
+const money = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")}`;
+
+function budgetDeltaLine(total: number, budget: number): string {
+  const gap = total - budget;
+  if (gap > 0) return `${money(gap)} over your ${money(budget)} budget.`;
+  if (gap < 0) return `${money(-gap)} under your ${money(budget)} budget.`;
+  return `Exactly on your ${money(budget)} budget.`;
+}
+
+/** Rebuilds a Package-shaped object from whatever the customer has picked so
+ * far — used both to finalize (every role picked) and, defensively, if a
+ * picker is abandoned mid-way (picks was seeded with every role's default
+ * up front, so it is always a complete, sensible plan even then). */
+function packageFromPicks(picks: Record<string, SessionRolePick>, budget: number): Package {
+  const lines: Line[] = ROLE_ORDER.map((role) => {
+    const pick = picks[role];
+    const product = pick ? getProduct(pick.productId) : undefined;
+    return product
+      ? { role, product, qty: pick!.qty, subtotal: (product.price ?? 0) * pick!.qty }
+      : null;
+  }).filter((l): l is Line => l !== null);
+  const total = lines.reduce((sum, l) => sum + l.subtotal, 0);
+  return { tier: "balanced", lines, total, reasons: [budgetDeltaLine(total, budget)] };
+}
+
+/** One WhatsApp list message: the currently-recommended product for this
+ * role, plus a few real alternatives priced near it — never the catalogue's
+ * full range, which would offer a $3,000 mirror against a $1,500 ask and
+ * call it a choice. */
+function roleListTurn(role: Role, currentId: string, introText: string): WaTurn {
+  const current = getProduct(currentId);
+  const targetPrice = current?.price ?? 0;
+  const alternatives = candidatesNear(role, targetPrice, 5).filter((p) => p.id !== currentId);
+  const options = [current, ...alternatives]
+    .filter((p): p is FullProduct => Boolean(p))
+    .slice(0, 5);
+
+  const rows = options.map((p, i) => ({
+    id: `role:${role}:${p.id}`,
+    title: truncate(p.name, WA.listRowTitle),
+    description: truncate(
+      i === 0 ? `${formatPrice(p.price)} — recommended` : formatPrice(p.price),
+      WA.listRowDescription,
+    ),
+  }));
+
+  return {
+    kind: "list",
+    text: introText,
+    action: { kind: "list", button: "Choose", rows },
+  };
+}
+
+/** Varies the phrasing across steps rather than repeating "Pick your X:"
+ * verbatim seven times in a row — confirmed asked for directly: "make sure
+ * you are not showing the same things to users again and again." */
+function roleStepIntro(index: number, total: number, role: Role): string {
+  const label = ROLE_LABEL[role];
+  if (index === 0) return `Let's pick your pieces one by one. First, your ${label}:`;
+  if (index === total - 1) return `Last one — your ${label}:`;
+  return `Now your ${label}:`;
+}
+
+/** Seeds the picker with the chosen tier's own defaults for every role (so
+ * an abandoned picker still lands on a complete plan — see
+ * packageFromPicks), then sends the first role's list message. */
+function startRolePicker(
+  session: SessionState,
+  pkg: Package,
+  choice: SessionOfferedChoice,
+): RuntimeResult {
+  const roles = ROLE_ORDER.filter((role) => pkg.lines.some((l) => l.role === role));
+  // Nothing to choose between (a one-role plan, or a malformed package) —
+  // finalize immediately rather than run a picker with a single option.
+  if (roles.length < 2) return acceptPackageChoice(session, pkg, choice);
+
+  const picks: Record<string, SessionRolePick> = {};
+  for (const line of pkg.lines) {
+    picks[line.role] = { productId: line.product.id, qty: line.qty };
+  }
+
+  const rolePicker: SessionRolePicker = {
+    choice,
+    remainingRoles: roles,
+    picks,
+    at: Date.now(),
+  };
+
+  const firstRole = roles[0]!;
+  const intro = `Here is your plan — ${choice.stations} station${choice.stations === 1 ? "" : "s"} · ${formatPrice(pkg.total)}. ${roleStepIntro(0, roles.length, firstRole)}`;
+  const turn = roleListTurn(firstRole, picks[firstRole]!.productId, intro);
+
+  const next = appendTranscript(
+    { ...session, offered: null, rolePicker },
+    "user",
+    `Build me a ${choice.stations}-station salon for about ${formatPrice(choice.budget)}.`,
+  );
+  return { session: next, turns: [turn] };
+}
+
+/** One list reply (`role:<role>:<productId>`) landing mid-picker: record the
+ * pick, move to the next role, or finalize once every role has one. */
+function handleRolePick(session: SessionState, tappedId: string): RuntimeResult {
+  const picker = liveRolePicker(session.rolePicker);
+  if (!picker) {
+    return {
+      session: { ...session, rolePicker: null },
+      turns: [
+        {
+          kind: "text",
+          text: "That choice has expired, tell me again what you're after (stations, budget, look) and I'll put together fresh options.",
+        },
+      ],
+    };
+  }
+
+  const [, roleRaw, productId] = tappedId.split(":");
+  const role = roleRaw as Role | undefined;
+  if (!role || !productId || !Object.prototype.hasOwnProperty.call(CATALOG_FULL, productId)) {
+    return { session, turns: [] };
+  }
+  // A stale tap on a role already answered (a slow double-tap, or a reply
+  // to a list message that already scrolled past) — the picker only ever
+  // moves forward, so this is a no-op rather than reopening a step.
+  if (!picker.remainingRoles.includes(role)) return { session, turns: [] };
+
+  const qty = picker.picks[role]?.qty ?? 1;
+  const picks = { ...picker.picks, [role]: { productId, qty } };
+  const remainingRoles = picker.remainingRoles.filter((r) => r !== role);
+
+  if (!remainingRoles.length) {
+    const pkg = packageFromPicks(picks, picker.choice.budget);
+    return acceptPackageChoice({ ...session, rolePicker: null }, pkg, picker.choice);
+  }
+
+  const totalRoles = Object.keys(picker.picks).length;
+  const nextRole = remainingRoles[0]!;
+  const nextIndex = totalRoles - remainingRoles.length;
+  const intro = roleStepIntro(nextIndex, totalRoles, nextRole);
+  const turn = roleListTurn(nextRole, picks[nextRole]!.productId, intro);
+
+  return {
+    session: { ...session, rolePicker: { ...picker, picks, remainingRoles, at: Date.now() } },
+    turns: [turn],
   };
 }
 
@@ -869,7 +1037,7 @@ async function route(
   if (tappedId?.startsWith("pkg:")) {
     const offered = liveOffered(session.offered);
     const pkg = offered?.packages.find((p) => `pkg:${p.tier}` === tappedId);
-    if (offered && pkg) return acceptPackageChoice(session, pkg, offered.choice);
+    if (offered && pkg) return startRolePicker(session, pkg, offered.choice);
     // Stale or unrecognized — the session outlives a browser tab by a lot
     // (30 days vs. one visit), so a tap on an expired offer has to be
     // answered rather than silently dropped.
@@ -886,6 +1054,10 @@ async function route(
 
   if (tappedId?.startsWith("offer:")) {
     return acceptOfferRequest(session, sessionKey, phone, tappedId);
+  }
+
+  if (tappedId?.startsWith("role:")) {
+    return handleRolePick(session, tappedId);
   }
 
   if (tappedId?.startsWith("plan:add:")) {
