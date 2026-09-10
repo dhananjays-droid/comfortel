@@ -186,13 +186,32 @@ const money = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")
  * because nothing generated it. The model's contribution is the part it is
  * actually better at — why these pieces sit together.
  */
-export function reasonsFor(pkg: Package, budget: number, rationale?: string): string[] {
+export function reasonsFor(
+  pkg: Package,
+  budget: number,
+  rationale?: string,
+  /**
+   * The mechanical "Saved on the styling chairs: X rather than Y" line —
+   * see roleDiffReason() in packages.ts. Pushed BEFORE the model's own
+   * rationale, on purpose: the rationale is prose the model wrote about
+   * what it originally proposed, and fitToBand can swap a product after
+   * that prose was written, sometimes leaving it stale (curate.functions.ts
+   * already drops the rationale outright when that happens). packageLine()
+   * only ever shows reasons[0] and [1] in a three-way comparison, so
+   * whichever of these two lands second decides whether a customer sees a
+   * concrete product difference or just style commentary — the mechanical
+   * fact is the one that actually helps someone choose, so it goes first.
+   */
+  roleDiff?: string,
+): string[] {
   const gap = pkg.total - budget;
   const reasons: string[] = [];
 
   if (gap > 0) reasons.push(`${money(gap)} over your ${money(budget)} budget.`);
   else if (gap < 0) reasons.push(`${money(-gap)} under your ${money(budget)} budget.`);
   else reasons.push(`Exactly on your ${money(budget)} budget.`);
+
+  if (roleDiff) reasons.push(roleDiff);
 
   const trimmed = rationale?.trim();
   if (trimmed) reasons.push(trimmed);

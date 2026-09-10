@@ -228,6 +228,43 @@ const money = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")
  * instead of that one — beats any amount of adjective. Every line here is
  * derived from the packages themselves; none of it is copy.
  */
+/**
+ * The one concrete thing that actually distinguishes a tier from the
+ * middle option — "Saved on the styling chairs: Eco Chair rather than
+ * Panther Chair." Mechanical, derived straight from the two packages'
+ * real lines, so unlike a model-written rationale it can never go stale
+ * (see curate.functions.ts: fitToBand can swap a product after the
+ * rationale describing it was already written) and unlike "N stations, M
+ * pieces" it actually tells a customer comparing tiers what's different,
+ * not just what's the same.
+ *
+ * Undefined for the balanced tier itself (nothing to compare it to) or
+ * when every role happens to match (nothing to report).
+ */
+export function roleDiffReason(pkg: Package, balanced: Package): string | undefined {
+  if (pkg.tier === "balanced") return undefined;
+
+  const changed = pkg.lines.filter((line) => {
+    const other = balanced.lines.find((l) => l.role === line.role);
+    return other && other.product.id !== line.product.id;
+  });
+  if (!changed.length) return undefined;
+
+  // Name the single biggest difference. Listing every changed role produces
+  // a sentence nobody finishes reading, and the largest swing is the one
+  // that explains the price gap anyway.
+  const biggest = [...changed].sort((a, b) => {
+    const otherA = balanced.lines.find((l) => l.role === a.role)?.subtotal ?? 0;
+    const otherB = balanced.lines.find((l) => l.role === b.role)?.subtotal ?? 0;
+    return Math.abs(b.subtotal - otherB) - Math.abs(a.subtotal - otherA);
+  })[0];
+  if (!biggest) return undefined;
+
+  const other = balanced.lines.find((l) => l.role === biggest.role);
+  const verb = pkg.tier === "lean" ? "Saved on" : "Spent on";
+  return `${verb} the ${ROLE_LABEL[biggest.role]}s: ${biggest.product.name} rather than ${other?.product.name}.`;
+}
+
 function explain(pkg: Package, balanced: Package, budget: number): string[] {
   const reasons: string[] = [];
   const gap = pkg.total - budget;
@@ -249,30 +286,14 @@ function explain(pkg: Package, balanced: Package, budget: number): string[] {
     reasons.push(`Exactly on your budget.`);
   }
 
-  // Name the roles that actually differ from the middle option.
-  const changed = pkg.lines.filter((line) => {
-    const other = balanced.lines.find((l) => l.role === line.role);
-    return other && other.product.id !== line.product.id;
-  });
+  const roleDiff = roleDiffReason(pkg, balanced);
+  if (roleDiff) {
+    reasons.push(roleDiff);
 
-  if (pkg.tier !== "balanced" && changed.length) {
-    // Name the single biggest difference. Listing every changed role produces a
-    // sentence nobody finishes reading, and the largest swing is the one that
-    // explains the price gap anyway.
-    const biggest = [...changed].sort((a, b) => {
-      const otherA = balanced.lines.find((l) => l.role === a.role)?.subtotal ?? 0;
-      const otherB = balanced.lines.find((l) => l.role === b.role)?.subtotal ?? 0;
-      return Math.abs(b.subtotal - otherB) - Math.abs(a.subtotal - otherA);
-    })[0];
-
-    if (biggest) {
-      const other = balanced.lines.find((l) => l.role === biggest.role);
-      const verb = pkg.tier === "lean" ? "Saved on" : "Spent on";
-      reasons.push(
-        `${verb} the ${ROLE_LABEL[biggest.role]}s: ${biggest.product.name} rather than ${other?.product.name}.`,
-      );
-    }
-
+    const changed = pkg.lines.filter((line) => {
+      const other = balanced.lines.find((l) => l.role === line.role);
+      return other && other.product.id !== line.product.id;
+    });
     const rest = changed.length - 1;
     if (rest > 0) {
       reasons.push(`${rest} other ${rest === 1 ? "piece differs" : "pieces differ"} too.`);

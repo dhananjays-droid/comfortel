@@ -9,6 +9,7 @@ import {
   idsOf,
   needsFor,
   packageLine,
+  roleDiffReason,
   stationsForBudget,
   type Package,
   type Role,
@@ -300,5 +301,26 @@ describe("distinctPackages", () => {
   it("leaves genuinely different tiers alone", () => {
     const spread = buildPackages(15000, needsFor(4));
     expect(distinctPackages(spread)).toHaveLength(3);
+  });
+});
+
+describe("roleDiffReason", () => {
+  const packs = buildPackages(15000, needsFor(4));
+  const [lean, balanced, premium] = packs;
+
+  it("names the actual product swapped, for both tiers", () => {
+    // Confirmed live: the three-tier comparison showed a price and "$X
+    // under budget" for every option with nothing telling a customer what
+    // was actually different between them — this is the fix.
+    expect(roleDiffReason(lean!, balanced!)).toMatch(/^Saved on the .+: .+ rather than .+\.$/);
+    expect(roleDiffReason(premium!, balanced!)).toMatch(/^Spent on the .+: .+ rather than .+\.$/);
+  });
+
+  it("is undefined for the balanced tier itself — nothing to compare it to", () => {
+    expect(roleDiffReason(balanced!, balanced!)).toBeUndefined();
+  });
+
+  it("is undefined when every role happens to match", () => {
+    expect(roleDiffReason(balanced!, { ...balanced!, tier: "lean" })).toBeUndefined();
   });
 });
