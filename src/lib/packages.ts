@@ -244,25 +244,50 @@ const money = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")
 export function roleDiffReason(pkg: Package, balanced: Package): string | undefined {
   if (pkg.tier === "balanced") return undefined;
 
-  const changed = pkg.lines.filter((line) => {
+  const changedProduct = pkg.lines.filter((line) => {
     const other = balanced.lines.find((l) => l.role === line.role);
     return other && other.product.id !== line.product.id;
   });
-  if (!changed.length) return undefined;
 
-  // Name the single biggest difference. Listing every changed role produces
-  // a sentence nobody finishes reading, and the largest swing is the one
-  // that explains the price gap anyway.
-  const biggest = [...changed].sort((a, b) => {
-    const otherA = balanced.lines.find((l) => l.role === a.role)?.subtotal ?? 0;
-    const otherB = balanced.lines.find((l) => l.role === b.role)?.subtotal ?? 0;
-    return Math.abs(b.subtotal - otherB) - Math.abs(a.subtotal - otherA);
+  if (changedProduct.length) {
+    // Name the single biggest difference. Listing every changed role
+    // produces a sentence nobody finishes reading, and the largest swing
+    // is the one that explains the price gap anyway.
+    const biggest = [...changedProduct].sort((a, b) => {
+      const otherA = balanced.lines.find((l) => l.role === a.role)?.subtotal ?? 0;
+      const otherB = balanced.lines.find((l) => l.role === b.role)?.subtotal ?? 0;
+      return Math.abs(b.subtotal - otherB) - Math.abs(a.subtotal - otherA);
+    })[0];
+    if (biggest) {
+      const other = balanced.lines.find((l) => l.role === biggest.role);
+      const verb = pkg.tier === "lean" ? "Saved on" : "Spent on";
+      return `${verb} the ${ROLE_LABEL[biggest.role]}s: ${biggest.product.name} rather than ${other?.product.name}.`;
+    }
+  }
+
+  // No product was swapped for any role — the tiers can still differ by
+  // quantity alone (fitToBand only ever swaps a product, it never touches
+  // qty; a quantity difference is entirely the model's own doing). Confirmed
+  // live: two tiers priced $549 apart — the exact cost of one trolley — with
+  // every product identical between them and nothing in the reasons saying
+  // so, because this function only ever looked for a different product.
+  const changedQty = pkg.lines.filter((line) => {
+    const other = balanced.lines.find((l) => l.role === line.role);
+    return other && other.qty !== line.qty;
+  });
+  if (!changedQty.length) return undefined;
+
+  const biggestQty = [...changedQty].sort((a, b) => {
+    const otherA = balanced.lines.find((l) => l.role === a.role)?.qty ?? 0;
+    const otherB = balanced.lines.find((l) => l.role === b.role)?.qty ?? 0;
+    return Math.abs(b.qty - otherB) - Math.abs(a.qty - otherA);
   })[0];
-  if (!biggest) return undefined;
+  if (!biggestQty) return undefined;
 
-  const other = balanced.lines.find((l) => l.role === biggest.role);
-  const verb = pkg.tier === "lean" ? "Saved on" : "Spent on";
-  return `${verb} the ${ROLE_LABEL[biggest.role]}s: ${biggest.product.name} rather than ${other?.product.name}.`;
+  const otherQty = balanced.lines.find((l) => l.role === biggestQty.role)?.qty ?? 0;
+  const label = ROLE_LABEL[biggestQty.role];
+  const plural = (n: number) => `${n} ${label}${n === 1 ? "" : "s"}`;
+  return `${plural(biggestQty.qty)} instead of ${otherQty}.`;
 }
 
 function explain(pkg: Package, balanced: Package, budget: number): string[] {
