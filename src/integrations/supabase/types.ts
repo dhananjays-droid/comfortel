@@ -101,6 +101,7 @@ export type Database = {
           pending_zone_render: boolean;
           phone_last4: string | null;
           plan: Json;
+          role_picker: Json | null;
           room_at: string | null;
           room_spec_depth_cm: number | null;
           room_spec_wall_cm: number | null;
@@ -123,6 +124,7 @@ export type Database = {
           pending_zone_render?: boolean;
           phone_last4?: string | null;
           plan?: Json;
+          role_picker?: Json | null;
           room_at?: string | null;
           room_spec_depth_cm?: number | null;
           room_spec_wall_cm?: number | null;
@@ -145,6 +147,7 @@ export type Database = {
           pending_zone_render?: boolean;
           phone_last4?: string | null;
           plan?: Json;
+          role_picker?: Json | null;
           room_at?: string | null;
           room_spec_depth_cm?: number | null;
           room_spec_wall_cm?: number | null;

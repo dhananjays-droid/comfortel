@@ -21,6 +21,31 @@ const TEST_PHONE = "15551234567";
 const fresh = (): SessionState => ({ ...EMPTY_SESSION });
 const REAL_ID = Object.keys(CATALOG_FULL)[0]!;
 
+/**
+ * Tapping a budget tier now starts the role-by-role picker (one WhatsApp
+ * list message per role) rather than finalizing the plan immediately —
+ * this walks it to completion, always taking the first (recommended)
+ * option, and returns the state/turns once the picker is done and the
+ * plan is actually finalized.
+ */
+async function walkRolePicker(
+  state: SessionState,
+  turns: Awaited<ReturnType<typeof handleInboundMessage>>["turns"],
+) {
+  let result = { session: state, turns };
+  let guard = 0;
+  while (result.turns[0]?.kind === "list" && guard < 10) {
+    const row = result.turns[0].action.rows[0];
+    if (!row) break;
+    result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: row.id,
+    });
+    guard++;
+  }
+  return result;
+}
+
 describe("handleInboundMessage — greeting", () => {
   it("opens with the three-button menu on a customer's very first message, whatever they said", async () => {
     const { session, turns } = await handleInboundMessage(fresh(), SESSION_KEY, TEST_PHONE, {
@@ -92,8 +117,15 @@ describe("handleInboundMessage — the guided build flow", () => {
       kind: "button",
       id: tierId!,
     });
+    // Tapping the tier starts the role-by-role picker rather than
+    // finalizing immediately — one list message per role.
+    expect(result.turns[0]?.kind).toBe("list");
+    expect(result.session.rolePicker).not.toBeNull();
+
+    result = await walkRolePicker(result.session, result.turns);
     state = result.session;
     expect(state.offered).toBeNull();
+    expect(state.rolePicker).toBeNull();
     expect(state.plan.ids.length).toBeGreaterThan(0);
     // The wall length given during intake means the package promises a
     // zone-by-zone render once a photo arrives.
@@ -170,6 +202,147 @@ describe("handleInboundMessage — the guided build flow", () => {
   });
 });
 
+describe("handleInboundMessage — the role-by-role picker", () => {
+  /** Walks the guided flow up to (not including) the tier tap, so each test
+   * starts from a real, freshly-offered set of packages. */
+  async function toOfferedState() {
+    let state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      flow: { awaiting: "build" },
+    };
+    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "4 stations, about $18,000",
+    });
+    state = result.session;
+    const tierId =
+      result.turns[0]?.kind === "buttons" ? result.turns[0].action.buttons[0]?.id : undefined;
+    return { state, tierId: tierId! };
+  }
+
+  it("starts with the recommended product listed first, marked as such", async () => {
+    const { state, tierId } = await toOfferedState();
+    const { turns } = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: tierId,
+    });
+    expect(turns[0]?.kind).toBe("list");
+    if (turns[0]?.kind !== "list") return;
+    const rows = turns[0].action.rows;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]?.id).toMatch(/^role:/);
+    expect(rows[0]?.description).toMatch(/recommended/i);
+  });
+
+  it("moves to the next role on a tap, and finalizes once every role is answered", async () => {
+    const { state, tierId } = await toOfferedState();
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: tierId,
+    });
+    expect(result.session.rolePicker?.remainingRoles.length).toBeGreaterThan(1);
+    const rolesSeen = new Set<string>();
+
+    let guard = 0;
+    while (result.turns[0]?.kind === "list" && guard < 10) {
+      const row = result.turns[0].action.rows[0]!;
+      const [, role] = row.id.split(":");
+      rolesSeen.add(role!);
+      result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+        kind: "button",
+        id: row.id,
+      });
+      guard++;
+    }
+
+    // Every role actually got its own turn, not the same one repeated.
+    expect(rolesSeen.size).toBeGreaterThan(1);
+    expect(result.session.rolePicker).toBeNull();
+    expect(result.session.plan.ids.length).toBe(rolesSeen.size);
+    expect(result.turns[0]?.kind).toBe("text");
+  });
+
+  it("finalizes with the product actually tapped, not just the recommended default", async () => {
+    const { state, tierId } = await toOfferedState();
+    let result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: tierId,
+    });
+
+    // On the very first role, deliberately pick something other than the
+    // recommended (first) option, if one exists.
+    let chosenId: string | undefined;
+    if (result.turns[0]?.kind === "list") {
+      const rows = result.turns[0].action.rows;
+      const alt = rows[1] ?? rows[0]!;
+      chosenId = alt.id.split(":")[2];
+      result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+        kind: "button",
+        id: alt.id,
+      });
+    }
+
+    let guard = 0;
+    while (result.turns[0]?.kind === "list" && guard < 10) {
+      const row = result.turns[0].action.rows[0]!;
+      result = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+        kind: "button",
+        id: row.id,
+      });
+      guard++;
+    }
+
+    if (chosenId) expect(result.session.plan.ids).toContain(chosenId);
+  });
+
+  it("ignores a tap on a role already answered, rather than reopening that step", async () => {
+    const { state, tierId } = await toOfferedState();
+    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: tierId,
+    });
+    if (result.turns[0]?.kind !== "list") throw new Error("expected a list turn");
+    const firstRole = result.turns[0].action.rows[0]!.id.split(":")[1];
+
+    const advanced = await handleInboundMessage(result.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: result.turns[0].action.rows[0]!.id,
+    });
+    // Re-tap the SAME (now-answered) role rather than the new current one.
+    const stale = await handleInboundMessage(advanced.session, SESSION_KEY, TEST_PHONE, {
+      kind: "button",
+      id: `role:${firstRole}:${REAL_ID}`,
+    });
+    expect(stale.turns).toHaveLength(0);
+    expect(stale.session).toEqual(advanced.session);
+  });
+
+  it("re-curates rather than crashing on a role tap against an expired picker", async () => {
+    const withStalePicker: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+      rolePicker: {
+        choice: { stations: 4, budget: 15000, note: "", byZone: false },
+        remainingRoles: ["mirror"],
+        picks: { styling: { productId: REAL_ID, qty: 4 } },
+        at: Date.now() - 31 * 60 * 1000, // past the picker's TTL
+      },
+    };
+    const { session, turns } = await handleInboundMessage(
+      withStalePicker,
+      SESSION_KEY,
+      TEST_PHONE,
+      {
+        kind: "button",
+        id: `role:mirror:${REAL_ID}`,
+      },
+    );
+    expect(session.rolePicker).toBeNull();
+    expect(turns[0]?.kind).toBe("text");
+  });
+});
+
 describe("handleInboundMessage — render request", () => {
   /**
    * enqueueRenderJob has no Supabase credentials in this test environment
@@ -202,6 +375,7 @@ describe("handleInboundMessage — render request", () => {
       kind: "button",
       id: tierId!,
     });
+    result = await walkRolePicker(result.session, result.turns);
     state = result.session;
     expect(state.pendingZoneRender).toBe(true);
 
