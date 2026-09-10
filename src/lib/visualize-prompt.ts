@@ -854,7 +854,7 @@ function buildEditPrompt(note?: string, correction?: string): string {
         : `Make the smallest, most literal edit you can justify from context — no change was clearly stated, so do not use that as licence to redesign anything else in the photograph.`,
     ),
     req(
-      `The edited result must read as the same unedited photograph with one thing different — matching exposure, white balance, resolution and photographic grain exactly at the seam, so nothing looks pasted in or re-lit.`,
+      `Apply the requested change to EVERY targeted physical object, respecting explicit counts and words such as both or all. A colour change to two chairs means both chairs change colour, not just one; preserve their count and positions and update their reflections consistently. The edited result must read as the same photograph with only the requested changes — matching exposure, white balance, resolution and photographic grain so nothing looks pasted in or re-lit.`,
     ),
     ...correctionClauses(correction),
   ]);
