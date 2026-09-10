@@ -577,32 +577,47 @@ function packageFromPicks(picks: Record<string, SessionRolePick>, budget: number
   return { tier: "balanced", lines, total, reasons: [budgetDeltaLine(total, budget)] };
 }
 
-/** One WhatsApp list message: the currently-recommended product for this
- * role, plus a few real alternatives priced near it — never the catalogue's
- * full range, which would offer a $3,000 mirror against a $1,500 ask and
- * call it a choice. */
-function roleListTurn(role: Role, currentId: string, introText: string): WaTurn {
+/**
+ * The currently-recommended product for this role, plus a couple of real
+ * alternatives priced near it — never the catalogue's full range, which
+ * would offer a $3,000 mirror against a $1,500 ask and call it a choice.
+ *
+ * A WhatsApp list message cannot show an image per row at all — Meta's own
+ * platform limit, not a setting — so a text-only list of furniture names
+ * asked a customer to guess what a "Panther Barbers Chair" looks like.
+ * Confirmed live: "show me images of items, how the hell will I assume
+ * from the item name." This sends the actual photo for each option first
+ * (the same "product" turn productTurns() already uses for browsing), then
+ * a short reply-buttons message to tap one — capped at 3 options rather
+ * than the list's 5, both because that's the reply-button limit and
+ * because it keeps the number of images sent per step manageable.
+ */
+function roleChoiceTurns(role: Role, currentId: string, introText: string): WaTurn[] {
   const current = getProduct(currentId);
   const targetPrice = current?.price ?? 0;
-  const alternatives = candidatesNear(role, targetPrice, 5).filter((p) => p.id !== currentId);
+  const alternatives = candidatesNear(role, targetPrice, 3).filter((p) => p.id !== currentId);
   const options = [current, ...alternatives]
-    .filter((p): p is FullProduct => Boolean(p))
-    .slice(0, 5);
+    .filter((p): p is FullProduct => Boolean(p) && (p?.images.length ?? 0) > 0)
+    .slice(0, 3);
 
-  const rows = options.map((p, i) => ({
-    id: `role:${role}:${p.id}`,
-    title: truncate(p.name, WA.listRowTitle),
-    description: truncate(
-      i === 0 ? `${formatPrice(p.price)} — recommended` : formatPrice(p.price),
-      WA.listRowDescription,
+  const images: WaTurn[] = options.map((p, i) => ({
+    kind: "product",
+    imageUrl: p.images[0]!,
+    caption: [`*${p.name}*`, `${formatPrice(p.price)}${i === 0 ? " — recommended" : ""}`].join(
+      "\n",
     ),
   }));
 
-  return {
-    kind: "list",
-    text: introText,
-    action: { kind: "list", button: "Choose", rows },
-  };
+  const buttons = options.map((p, i) => ({
+    id: `role:${role}:${p.id}`,
+    title: truncate(`Option ${i + 1} — ${formatPrice(p.price)}`, WA.buttonTitle),
+  }));
+
+  return [
+    { kind: "text", text: introText },
+    ...images,
+    { kind: "buttons", text: "Which one?", action: { kind: "buttons", buttons } },
+  ];
 }
 
 /** Varies the phrasing across steps rather than repeating "Pick your X:"
@@ -610,7 +625,8 @@ function roleListTurn(role: Role, currentId: string, introText: string): WaTurn 
  * you are not showing the same things to users again and again." */
 function roleStepIntro(index: number, total: number, role: Role): string {
   const label = ROLE_LABEL[role];
-  if (index === 0) return `Let's pick your pieces one by one. First, your ${label}:`;
+  if (index === 0)
+    return `Let's pick your pieces one by one. First, your ${label} — a few options:`;
   if (index === total - 1) return `Last one — your ${label}:`;
   return `Now your ${label}:`;
 }
@@ -642,14 +658,14 @@ function startRolePicker(
 
   const firstRole = roles[0]!;
   const intro = `Here is your plan — ${choice.stations} station${choice.stations === 1 ? "" : "s"} · ${formatPrice(pkg.total)}. ${roleStepIntro(0, roles.length, firstRole)}`;
-  const turn = roleListTurn(firstRole, picks[firstRole]!.productId, intro);
+  const turns = roleChoiceTurns(firstRole, picks[firstRole]!.productId, intro);
 
   const next = appendTranscript(
     { ...session, offered: null, rolePicker },
     "user",
     `Build me a ${choice.stations}-station salon for about ${formatPrice(choice.budget)}.`,
   );
-  return { session: next, turns: [turn] };
+  return { session: next, turns };
 }
 
 /** One list reply (`role:<role>:<productId>`) landing mid-picker: record the
@@ -691,11 +707,11 @@ function handleRolePick(session: SessionState, tappedId: string): RuntimeResult 
   const nextRole = remainingRoles[0]!;
   const nextIndex = totalRoles - remainingRoles.length;
   const intro = roleStepIntro(nextIndex, totalRoles, nextRole);
-  const turn = roleListTurn(nextRole, picks[nextRole]!.productId, intro);
+  const turns = roleChoiceTurns(nextRole, picks[nextRole]!.productId, intro);
 
   return {
     session: { ...session, rolePicker: { ...picker, picks, remainingRoles, at: Date.now() } },
-    turns: [turn],
+    turns,
   };
 }
 
