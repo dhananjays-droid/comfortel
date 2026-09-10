@@ -1,4 +1,5 @@
 import { encryptPhone } from "@/lib/wa-phone-crypto.server";
+import { triggerRenderWorker } from "@/lib/wa-render-trigger.server";
 import type { VisualizeMode } from "@/lib/visualize-prompt";
 
 export type RenderJobInput = {
@@ -83,7 +84,14 @@ export async function enqueueRenderJob(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      if (await insertRow(sessionKey, phone, job, "pending")) return true;
+      if (await insertRow(sessionKey, phone, job, "pending")) {
+        // Wake the worker now instead of leaving the job to sit for up to a
+        // minute waiting for the next cron tick. Deliberately not allowed to
+        // affect the return value: the job IS queued either way, and cron
+        // remains the backstop if the trigger doesn't land.
+        await triggerRenderWorker();
+        return true;
+      }
       lastError = "insert returned an error";
     } catch (err) {
       lastError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
