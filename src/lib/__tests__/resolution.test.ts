@@ -1,45 +1,46 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resolutionFor } from "@/lib/kie.server";
-import { VISUALIZE_MODES, isMultiReferenceMode } from "@/lib/visualize-prompt";
+import { createVisualizeTask, KIE_IMAGE_MODEL, resolutionFor } from "@/lib/kie.server";
+import { VISUALIZE_MODES } from "@/lib/visualize-prompt";
 
-const ORIGINAL = process.env["KIE_IMAGE_RESOLUTION"];
+const ORIGINAL_API_KEY = process.env["KIE_API_KEY"];
 afterEach(() => {
-  if (ORIGINAL === undefined) delete process.env["KIE_IMAGE_RESOLUTION"];
-  else process.env["KIE_IMAGE_RESOLUTION"] = ORIGINAL;
+  if (ORIGINAL_API_KEY === undefined) delete process.env["KIE_API_KEY"];
+  else process.env["KIE_API_KEY"] = ORIGINAL_API_KEY;
+  vi.restoreAllMocks();
+});
+
+describe("Kie image model", () => {
+  it("sends GPT Image 2.5 Flare through Kie's existing createTask contract", async () => {
+    process.env["KIE_API_KEY"] = "test-key";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ code: 200, msg: "success", data: { taskId: "task-1" } })),
+      );
+
+    await expect(
+      createVisualizeTask(null, [], "Design a salon", "3:2", "staged_room"),
+    ).resolves.toBe("task-1");
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model: "gpt-image-2-5-flare-image-to-image",
+      input: {
+        input_urls: [],
+        prompt: "Design a salon",
+        aspect_ratio: "3:2",
+        resolution: "1K",
+      },
+    });
+    expect(KIE_IMAGE_MODEL).toBe("gpt-image-2-5-flare-image-to-image");
+  });
 });
 
 describe("resolutionFor", () => {
-  it("spends 2K only where several different products share a frame", () => {
-    // 2K is four times the pixels for two-thirds more money, and what it buys
-    // is each product's share of them. One product has one identity to get
-    // right and is read in a chat bubble, so it gains almost nothing.
-    delete process.env["KIE_IMAGE_RESOLUTION"];
-    expect(resolutionFor("refit_room")).toBe("2K");
-    expect(resolutionFor("lineup")).toBe("2K");
-    expect(resolutionFor("staged_room")).toBe("2K");
-
-    expect(resolutionFor("replace")).toBe("1K");
-    expect(resolutionFor("replace_all")).toBe("1K");
-    expect(resolutionFor("add")).toBe("1K");
-  });
-
-  it("keeps the tier tied to crowding, not to a hand-kept list", () => {
-    delete process.env["KIE_IMAGE_RESOLUTION"];
+  it("uses 1K for every render mode", () => {
     for (const mode of VISUALIZE_MODES) {
-      expect(resolutionFor(mode)).toBe(isMultiReferenceMode(mode) ? "2K" : "1K");
+      expect(resolutionFor(mode)).toBe("1K");
     }
-  });
-
-  it("lets the env override force a whole run to one tier", () => {
-    process.env["KIE_IMAGE_RESOLUTION"] = "4K";
-    expect(resolutionFor("add")).toBe("4K");
-    expect(resolutionFor("refit_room")).toBe("4K");
-  });
-
-  it("ignores a junk override rather than sending it upstream", () => {
-    process.env["KIE_IMAGE_RESOLUTION"] = "8K";
-    expect(resolutionFor("add")).toBe("1K");
-    expect(resolutionFor("refit_room")).toBe("2K");
   });
 });

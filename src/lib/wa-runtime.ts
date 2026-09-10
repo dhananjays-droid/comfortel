@@ -42,6 +42,7 @@ import {
   packageLine,
   ROLE_LABEL,
   ROLE_ORDER,
+  stationsForBudget,
   TIER_LABEL,
   type Line,
   type Package,
@@ -51,7 +52,12 @@ import { expectedFrom, linesFrom, planPieces, planTotal, quantitiesFor } from "@
 import { wantsZoneSplit } from "@/lib/render-intent";
 import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
 import { genericCapacity } from "@/lib/room";
-import { enqueueRenderJob } from "@/lib/wa-render-jobs.server";
+import {
+  cancelActiveRenderJobs,
+  enqueueRenderJob,
+  getActiveRenderState,
+  type ActiveRenderState,
+} from "@/lib/wa-render-jobs.server";
 import {
   liveLastRender,
   liveOffered,
@@ -74,8 +80,8 @@ import { groupByZone, isSplittable } from "@/lib/zones";
 import {
   INITIAL,
   advance,
+  buildIntake,
   describeIntake,
-  isGreeting,
   readIntake,
   welcome,
   type WaAction,
@@ -160,9 +166,34 @@ export type InboundEvent =
   | { kind: "text"; text: string }
   | { kind: "button"; id: string }
   | { kind: "photo"; url: string; caption?: string | undefined }
+  | { kind: "photo_error" }
   | { kind: "unsupported" };
 
 export type RuntimeResult = { session: SessionState; turns: WaTurn[] };
+
+function renderBusyTurn(
+  active: ActiveRenderState,
+  photoSaved = false,
+): Extract<WaTurn, { kind: "buttons" }> {
+  const progress = active.generating
+    ? `${active.generating} generating`
+    : `${active.pending} waiting to start`;
+  const intro = photoSaved
+    ? "I saved this as the room photo for your next render."
+    : "A render is already in progress, so I haven’t started another one.";
+  return {
+    kind: "buttons",
+    text: `${intro} Your current request is still active (${progress}).`,
+    action: {
+      kind: "buttons",
+      buttons: [
+        { id: "render:status", title: "Check status" },
+        { id: "render:cancel", title: "Cancel render" },
+        { id: "nav:menu", title: "Main menu" },
+      ],
+    },
+  };
+}
 
 function planProductsOf(session: SessionState): FullProduct[] {
   return session.plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
@@ -215,6 +246,8 @@ async function startRenderTurn(
   /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
   note?: string | undefined,
 ): Promise<RuntimeResult> {
+  const active = await getActiveRenderState(sessionKey);
+  if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ids = products.map((p) => p.id);
@@ -252,14 +285,14 @@ async function startRenderTurn(
   const names = products.map((p) => p.name).filter(Boolean);
   const contentText =
     mode === "refit_room"
-      ? "Refitting your salon with those Comfortel pieces now, please wait ⏳"
+      ? "I’ve started refitting your salon with those Comfortel pieces. This usually takes 1–2 minutes ⏳"
       : mode === "staged_room"
-        ? "Building that now, please wait ⏳"
+        ? "I’ve started building that salon. This usually takes 1–2 minutes ⏳"
         : mode === "lineup"
-          ? `Placing ${names.join(", ")} side by side in your space, please wait ⏳`
+          ? `I’ve started placing ${names.join(", ")} side by side. This usually takes 1–2 minutes ⏳`
           : groups.length > 1
-            ? `Rendering ${groups.length} options into your space, please wait ⏳`
-            : `Rendering the ${entryLabel(mode, groups[0]!)} into your space, please wait ⏳`;
+            ? `I’ve started ${groups.length} options for your space. This usually takes 1–2 minutes ⏳`
+            : `I’ve started rendering the ${entryLabel(mode, groups[0]!)} in your space. This usually takes 1–2 minutes ⏳`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -285,6 +318,8 @@ async function startEditTurn(
   lastRender: SessionLastRender,
   note: string | undefined,
 ): Promise<RuntimeResult> {
+  const active = await getActiveRenderState(sessionKey);
+  if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ok = await enqueueRenderJob(sessionKey, phone, {
@@ -296,7 +331,7 @@ async function startEditTurn(
   if (!ok) return { session, turns: [RENDER_FAILED_TURN] };
 
   const askedText = note ? `Change the render: ${note}` : "Update my last render.";
-  const contentText = "Updating that now, please wait ⏳";
+  const contentText = "I’ve started updating that render. This usually takes 1–2 minutes ⏳";
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -315,6 +350,8 @@ async function renderPlanByZoneTurn(
 ): Promise<RuntimeResult> {
   const planProducts = planProductsOf(session);
   if (!planProducts.length) return { session, turns: [] };
+  const active = await getActiveRenderState(sessionKey);
+  if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const photo = liveRoom(session.room);
@@ -339,7 +376,7 @@ async function renderPlanByZoneTurn(
   if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
-  const contentText = `Rendering zone by zone: ${zones}, please wait ⏳`;
+  const contentText = `I’ve started the zone renders for ${zones}. They usually take 1–2 minutes each ⏳`;
   const next = appendTranscript(session, "assistant", contentText);
   return { session: next, turns: [{ kind: "text", text: contentText }] };
 }
@@ -347,6 +384,81 @@ async function renderPlanByZoneTurn(
 // ---------------------------------------------------------------------------
 // packages
 // ---------------------------------------------------------------------------
+
+/**
+ * Pause before the expensive package build and let the customer correct the
+ * two facts that most affect price. The original free-text brief is already in
+ * the transcript, so the confirm button does not need to carry customer data
+ * in its id or add another session column.
+ */
+function confirmBuildDetails(session: SessionState, text: string): RuntimeResult {
+  const intake = readIntake(text);
+  const fromWall = intake.wallCm ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits : 0;
+  const budget = intake.budget || DEFAULT_BUDGET;
+  const stations =
+    intake.stations ||
+    fromWall ||
+    (intake.budget ? stationsForBudget(intake.budget) : DEFAULT_STATIONS);
+
+  const stationSource = intake.stations
+    ? "you specified"
+    : fromWall
+      ? "estimated from the wall length"
+      : intake.budget
+        ? "recommended for that budget"
+        : "assumed";
+  const budgetText = intake.budgetMin
+    ? `${formatPrice(intake.budgetMin)}–${formatPrice(budget)}; I’ll treat ${formatPrice(budget)} as the cap`
+    : `${formatPrice(budget)}${intake.budget ? "" : " assumed"}`;
+  const wallText = intake.wallCm
+    ? `\n• Room: about ${Math.round(intake.wallCm / 30.48)}ft${intake.depthCm ? ` × ${Math.round(intake.depthCm / 30.48)}ft` : " wall"}`
+    : "";
+  const replyText = [
+    "Before I build the options, please check I understood you:",
+    "",
+    `• ${stations} styling station${stations === 1 ? "" : "s"} (${stationSource})`,
+    `• Furniture budget: ${budgetText}${wallText}`,
+    "",
+    "This is the catalog-furniture budget; freight and lead time are confirmed with the final quote. Are these details right?",
+  ].join("\n");
+
+  let next = session;
+  if (intake.wallCm) {
+    next = {
+      ...next,
+      roomSpec: sanitizeRoomSpec({ wallCm: intake.wallCm, depthCm: intake.depthCm }),
+    };
+  }
+  next = appendTranscript(next, "user", text);
+  next = appendTranscript(next, "assistant", replyText);
+  next = { ...next, flow: { awaiting: "confirm_build" } };
+
+  return {
+    session: next,
+    turns: [
+      {
+        kind: "buttons",
+        text: replyText,
+        action: {
+          kind: "buttons",
+          buttons: [
+            { id: "build:confirm", title: "Use these details" },
+            { id: "build:change", title: "Change details" },
+            { id: "nav:menu", title: "Main menu" },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function latestUserText(session: SessionState): string | null {
+  for (let i = session.transcript.length - 1; i >= 0; i--) {
+    const message = session.transcript[i];
+    if (message?.role === "user" && message.content.trim()) return message.content.trim();
+  }
+  return null;
+}
 
 /**
  * Sent immediately, before the package-curation call below — that call is a
@@ -388,6 +500,7 @@ async function offerPackages(
   sessionKey: string,
   phone: string,
   text: string,
+  recordUser = true,
 ): Promise<RuntimeResult> {
   const intake = readIntake(text);
   let next = session;
@@ -405,13 +518,39 @@ async function offerPackages(
   // Confirmed live: "How many styling stations - 5" alongside a 10ft wall
   // came back as a 3-station package with no mention 5 was ever asked for,
   // because this used to check the wall-derived figure first.
-  const stations = intake.stations || fromWall || DEFAULT_STATIONS;
+  const stations =
+    intake.stations ||
+    fromWall ||
+    (intake.budget ? stationsForBudget(intake.budget) : DEFAULT_STATIONS);
   const budget = intake.budget || DEFAULT_BUDGET;
   const note = describeIntake(intake);
 
-  next = appendTranscript(next, "user", note ? `${text}\n\n(${note})` : text);
+  if (recordUser) next = appendTranscript(next, "user", note ? `${text}\n\n(${note})` : text);
 
   let packages = buildPackages(budget, needsFor(stations));
+  const minimum = Math.min(...packages.map((pkg) => pkg.total));
+  if (Number.isFinite(minimum) && minimum > budget) {
+    const gap = minimum - budget;
+    const suggestedStations = Math.max(1, stations - 1);
+    const replyText = `A complete ${stations}-station furniture plan currently starts around ${formatPrice(minimum)}, which is ${formatPrice(gap)} above your cap. I won’t label that as “under budget”. Would you like to reduce the station count or change the budget?`;
+    const buttons = [
+      ...(stations > 1
+        ? [
+            {
+              id: `build:reduce:${suggestedStations}:${budget}`,
+              title: `Try ${suggestedStations} stations`,
+            },
+          ]
+        : []),
+      { id: "build:change", title: "Change budget" },
+      { id: "nav:menu", title: "Main menu" },
+    ];
+    const finalSession = appendTranscript(next, "assistant", replyText);
+    return {
+      session: { ...finalSession, flow: { awaiting: "confirm_build" }, offered: null },
+      turns: [{ kind: "buttons", text: replyText, action: { kind: "buttons", buttons } }],
+    };
+  }
   try {
     const [curated] = await Promise.all([
       runCuratePackages(parseCurateInput({ brief: text, stations, budget })),
@@ -543,16 +682,14 @@ function acceptPackageChoice(
 }
 
 // ---------------------------------------------------------------------------
-// role-by-role picker — a tier's own defaults were going straight into the
-// plan unseen; this lets a customer choose the actual chair, mirror, trolley
-// for each role rather than have the system decide alone. New, not ported:
-// index.tsx has no equivalent (see acceptPackage there, which still accepts
-// the tier's defaults directly) — a full 7-step picker is WhatsApp-specific,
-// since the web app already lets a customer swap anything via the plan tray
-// and normal product browsing, which WhatsApp has no equivalent of.
+// Focused product picker — customize the three pieces that most define the
+// room, while retaining the chosen package's recommended defaults for the
+// smaller accessories. Seven consecutive choices produced far too many image
+// messages on a phone.
 // ---------------------------------------------------------------------------
 
 const money = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")}`;
+const CUSTOMIZE_ROLES: readonly Role[] = ["styling", "mirror", "wash"];
 
 function budgetDeltaLine(total: number, budget: number): string {
   const gap = total - budget;
@@ -639,7 +776,7 @@ function startRolePicker(
   pkg: Package,
   choice: SessionOfferedChoice,
 ): RuntimeResult {
-  const roles = ROLE_ORDER.filter((role) => pkg.lines.some((l) => l.role === role));
+  const roles = CUSTOMIZE_ROLES.filter((role) => pkg.lines.some((l) => l.role === role));
   // Nothing to choose between (a one-role plan, or a malformed package) —
   // finalize immediately rather than run a picker with a single option.
   if (roles.length < 2) return acceptPackageChoice(session, pkg, choice);
@@ -703,7 +840,7 @@ function handleRolePick(session: SessionState, tappedId: string): RuntimeResult 
     return acceptPackageChoice({ ...session, rolePicker: null }, pkg, picker.choice);
   }
 
-  const totalRoles = Object.keys(picker.picks).length;
+  const totalRoles = CUSTOMIZE_ROLES.filter((role) => picker.picks[role]).length;
   const nextRole = remainingRoles[0]!;
   const nextIndex = totalRoles - remainingRoles.length;
   const intro = roleStepIntro(nextIndex, totalRoles, nextRole);
@@ -1048,6 +1185,156 @@ async function route(
   text: string,
   tappedId: string | undefined,
 ): Promise<RuntimeResult> {
+  const command = (tappedId ?? text.replace(/^wa:/i, "")).trim().toLowerCase();
+
+  if (command === "render:status" || /^(check )?render status$/.test(command)) {
+    const active = await getActiveRenderState(sessionKey);
+    const textOut = active.count
+      ? `Your render is active: ${active.generating || active.pending} ${active.generating ? "generating" : "waiting to start"}. I’ll send it here as soon as it is ready.`
+      : "You don’t have a render in progress right now.";
+    return {
+      session,
+      turns: [
+        {
+          kind: "buttons",
+          text: textOut,
+          action: {
+            kind: "buttons",
+            buttons: active.count
+              ? [
+                  { id: "render:cancel", title: "Cancel render" },
+                  { id: "nav:menu", title: "Main menu" },
+                ]
+              : [{ id: "nav:menu", title: "Main menu" }],
+          },
+        },
+      ],
+    };
+  }
+
+  if (command === "render:cancel" || command === "cancel render" || command === "cancel") {
+    const cancelled = await cancelActiveRenderJobs(sessionKey);
+    const next = {
+      ...session,
+      flow: INITIAL,
+      offered: null,
+      rolePicker: null,
+      pendingQuote: null,
+      pendingZoneRender: false,
+    };
+    return {
+      session: next,
+      turns: [
+        {
+          kind: "buttons",
+          text: cancelled
+            ? `Cancelled ${cancelled} active render${cancelled === 1 ? "" : "s"}. What would you like to do next?`
+            : "That step is cancelled. There wasn’t an active render to stop.",
+          action: {
+            kind: "buttons",
+            buttons: [
+              { id: "visualize", title: "Start a render" },
+              { id: "build", title: "Plan my salon" },
+              { id: "nav:menu", title: "Main menu" },
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  if (command === "start over" || command === "restart") {
+    await cancelActiveRenderJobs(sessionKey);
+    const reply = welcome();
+    const reset: SessionState = {
+      transcript: [{ role: "assistant", content: reply.text }],
+      plan: { ids: [], qty: {} },
+      flow: INITIAL,
+      roomSpec: null,
+      room: null,
+      lastRender: null,
+      offered: null,
+      rolePicker: null,
+      pendingZoneRender: false,
+      pendingQuote: null,
+      handoff: false,
+      customerName: session.customerName,
+      phoneLast4: session.phoneLast4,
+    };
+    return {
+      session: reset,
+      turns: [
+        {
+          kind: "buttons",
+          text: reply.text,
+          action: reply.action as WaAction & { kind: "buttons" },
+        },
+      ],
+    };
+  }
+
+  if (tappedId === "nav:menu" || command === "menu") {
+    const reply = welcome();
+    const next = appendTranscript(
+      {
+        ...session,
+        flow: INITIAL,
+        offered: null,
+        rolePicker: null,
+        pendingQuote: null,
+        pendingZoneRender: false,
+      },
+      "assistant",
+      reply.text,
+    );
+    return {
+      session: next,
+      turns: [
+        {
+          kind: "buttons",
+          text: reply.text,
+          action: reply.action as WaAction & { kind: "buttons" },
+        },
+      ],
+    };
+  }
+
+  if (tappedId === "build:change") {
+    const reply = buildIntake();
+    return {
+      session: {
+        ...appendTranscript(session, "assistant", reply.text),
+        flow: { awaiting: "build" },
+        offered: null,
+      },
+      turns: [{ kind: "text", text: reply.text }],
+    };
+  }
+
+  if (tappedId === "build:confirm") {
+    const brief = latestUserText(session);
+    if (!brief) {
+      const reply = buildIntake();
+      return {
+        session: { ...session, flow: { awaiting: "build" } },
+        turns: [{ kind: "text", text: reply.text }],
+      };
+    }
+    return offerPackages({ ...session, flow: INITIAL }, sessionKey, phone, brief, false);
+  }
+
+  if (tappedId?.startsWith("build:reduce:")) {
+    const [, , stationsRaw, budgetRaw] = tappedId.split(":");
+    const stations = Number.parseInt(stationsRaw ?? "", 10);
+    const budget = Number.parseInt(budgetRaw ?? "", 10);
+    if (Number.isInteger(stations) && stations >= 1 && Number.isFinite(budget) && budget >= 500) {
+      return confirmBuildDetails(
+        { ...session, offered: null },
+        `${stations} styling stations with a $${budget.toLocaleString("en-US")} furniture budget`,
+      );
+    }
+  }
+
   // A package tap is answered from what is already on the table, not by the
   // menu and not by the model — the pieces and prices are already decided.
   if (tappedId?.startsWith("pkg:")) {
@@ -1084,6 +1371,18 @@ async function route(
     return startQuoteTurn(session, tappedId);
   }
 
+  // A customer who opens with a complete planning brief should not receive a
+  // generic menu and then have to repeat it. Go straight to the confirmation
+  // checkpoint when the message contains real planning numbers.
+  if (
+    !tappedId &&
+    !session.flow.awaiting &&
+    /\b(salon|station|chair|budget|fit[ -]?out)\b/i.test(text)
+  ) {
+    const intake = readIntake(text);
+    if (intake.stations || intake.budget) return confirmBuildDetails(session, text);
+  }
+
   const step = advance(session.flow, text);
 
   if (!step) {
@@ -1092,7 +1391,27 @@ async function route(
     }
 
     if (session.flow.awaiting === "build") {
-      return offerPackages({ ...session, flow: INITIAL }, sessionKey, phone, text);
+      return confirmBuildDetails(session, text);
+    }
+
+    if (session.flow.awaiting === "confirm_build") {
+      return {
+        session,
+        turns: [
+          {
+            kind: "buttons",
+            text: "Please choose whether to use those details or change them.",
+            action: {
+              kind: "buttons",
+              buttons: [
+                { id: "build:confirm", title: "Use these details" },
+                { id: "build:change", title: "Change details" },
+                { id: "nav:menu", title: "Main menu" },
+              ],
+            },
+          },
+        ],
+      };
     }
 
     if (session.flow.awaiting === "visualize") {
@@ -1170,6 +1489,15 @@ async function handlePhoto(
   let next: SessionState = { ...session, room: { url, at: Date.now() } };
   next = appendTranscript(next, "user", content);
 
+  const active = await getActiveRenderState(sessionKey);
+  if (active.count) {
+    const turn = renderBusyTurn(active, true);
+    return {
+      session: appendTranscript(next, "assistant", turn.text),
+      turns: [turn],
+    };
+  }
+
   // A dimensions run was promised zone renders and was only ever waiting on
   // a photo. Honour that instead of asking the model what to do with it.
   if (next.pendingZoneRender && next.plan.ids.length) {
@@ -1200,29 +1528,8 @@ export async function handleInboundMessage(
     return { session: { ...session, handoff: true }, turns: [{ kind: "text", text: HANDOFF_ACK }] };
   }
 
-  // The greeting-with-three-buttons is what a customer meets on the web the
-  // instant the page opens. WhatsApp has no equivalent of "before any input"
-  // — a business number can't message first outside an approved template —
-  // so it rides along ahead of the reply to their very first message
-  // instead, and (like the web's pre-seeded greetingMessage()) joins the
-  // transcript before anything the customer said, so chat() replays history
-  // in the same order a browser session would have built it. Skipped when
-  // that first message is already a plain greeting: advance() returns the
-  // identical welcome() reply for that case on its own, and sending it twice
-  // would just be noise.
-  const greetFirst = session.transcript.length === 0;
-  const alreadyGreeting = event.kind === "text" && isGreeting(event.text.trim());
-  let working = session;
+  const working = session;
   const turns: WaTurn[] = [];
-  if (greetFirst && !alreadyGreeting) {
-    const hello = welcome();
-    working = appendTranscript(working, "assistant", hello.text);
-    turns.push({
-      kind: "buttons",
-      text: hello.text,
-      action: hello.action as WaAction & { kind: "buttons" },
-    });
-  }
 
   let result: RuntimeResult;
   if (event.kind === "photo") {

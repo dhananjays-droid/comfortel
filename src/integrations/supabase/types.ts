@@ -185,6 +185,84 @@ export type Database = {
         };
         Relationships: [];
       };
+      wa_inbound_jobs: {
+        Row: {
+          attempt: number;
+          completed_at: string | null;
+          created_at: string;
+          customer_name: string | null;
+          customer_phone_enc: string;
+          event: Json;
+          id: string;
+          last_error: string | null;
+          session_key: string;
+          started_at: string | null;
+          status: string;
+          updated_at: string;
+          wa_message_id: string;
+        };
+        Insert: {
+          attempt?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          customer_name?: string | null;
+          customer_phone_enc: string;
+          event: Json;
+          id?: string;
+          last_error?: string | null;
+          session_key: string;
+          started_at?: string | null;
+          status?: string;
+          updated_at?: string;
+          wa_message_id: string;
+        };
+        Update: {
+          attempt?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          customer_name?: string | null;
+          customer_phone_enc?: string;
+          event?: Json;
+          id?: string;
+          last_error?: string | null;
+          session_key?: string;
+          started_at?: string | null;
+          status?: string;
+          updated_at?: string;
+          wa_message_id?: string;
+        };
+        Relationships: [];
+      };
+      wa_message_statuses: {
+        Row: {
+          created_at: string;
+          details: Json;
+          event_at: string;
+          id: string;
+          session_key: string | null;
+          status: string;
+          wa_message_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          details?: Json;
+          event_at: string;
+          id?: string;
+          session_key?: string | null;
+          status: string;
+          wa_message_id: string;
+        };
+        Update: {
+          created_at?: string;
+          details?: Json;
+          event_at?: string;
+          id?: string;
+          session_key?: string | null;
+          status?: string;
+          wa_message_id?: string;
+        };
+        Relationships: [];
+      };
       wa_messages: {
         Row: {
           created_at: string;
@@ -283,7 +361,22 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      claim_wa_inbound_jobs: {
+        Args: { p_limit?: number };
+        Returns: Database["public"]["Tables"]["wa_inbound_jobs"]["Row"][];
+      };
+      enqueue_wa_inbound: {
+        Args: {
+          p_customer_name?: string | null;
+          p_customer_phone_enc: string;
+          p_event: Json;
+          p_kind: string;
+          p_message_payload: Json;
+          p_session_key: string;
+          p_wa_message_id: string;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       [_ in never]: never;

@@ -39,6 +39,20 @@ describe("readBrief — budget", () => {
     expect(readBrief("15k to spend").budget).toBe(15000);
     expect(readBrief("spending around 20000").budget).toBe(20000);
     expect(readBrief("up to 9,500").budget).toBe(9500);
+    expect(readBrief("budget 20 grand").budget).toBe(20000);
+    expect(readBrief("budget twenty thousand").budget).toBe(20000);
+    expect(readBrief("budget: USD 20,000").budget).toBe(20000);
+  });
+
+  it("keeps both ends of a range and plans against the upper cap", () => {
+    expect(readBrief("between $10k and $15k")).toMatchObject({
+      budgetMin: 10000,
+      budget: 15000,
+    });
+    expect(readBrief("I have a 15k budget but can stretch to 18k")).toMatchObject({
+      budgetMin: 15000,
+      budget: 18000,
+    });
   });
 
   it("does not mistake a station count for a budget", () => {

@@ -14,7 +14,7 @@ outbound client + async render worker as the only genuinely new infrastructure.
 
 This plan was produced by verifying that spec against the actual repo (three parallel
 explorations covering the UI state machine, the server function layer, and the platform
-conventions) rather than trusting it blindly. The good news: the repo is *more* ready
+conventions) rather than trusting it blindly. The good news: the repo is _more_ ready
 for this than the spec assumed — we're already on branch `feat/whatsappMigration`,
 sitting at the exact base commit (`c044409`) the spec targets, and `main` is at the same
 commit. The spec's picture of `wa-flow.ts`/`whatsapp.ts`/the server functions is
@@ -38,18 +38,18 @@ called from a new channel adapter instead of the browser.
 
 ## Corrections to the spec (verified against the repo, not assumed)
 
-| Spec said | Actually | Where |
-|---|---|---|
-| Webhook lives at a route like the existing `api/**` convention | **No such convention exists.** `@tanstack/react-start@1.168.32` has no `./api` export, no `createServerFileRoute`/`createAPIFileRoute` anywhere in `node_modules`. All server logic today is `createServerFn` RPCs, not raw HTTP routes. The only real request entry is `src/server.ts`'s exported `fetch(request, env, ctx)` (wired via `vite.config.ts`'s `tanstackStart.server.entry: "server"`). | `src/server.ts`, `vite.config.ts` |
-| Render worker is "an always-on loop (or short-interval Supabase Edge Function/cron)" | No `supabase/functions/` exists, and the app deploys to Vercel — no long-running process to host a loop. Decision: use **Vercel Cron** instead. There's also an unused, auto-generated `authenticateCronRequest` scaffold (`src/integrations/supabase/cron-auth.ts`) hinting at a Lovable-cron path, but it has zero call sites and we're using Vercel Cron, so it stays unused. | `src/integrations/supabase/cron-auth.ts` (ignore), `vercel.json` (new) |
-| "Reuse the existing Storage bucket" (implied by media bridge design) | **No Supabase Storage bucket exists anywhere in this codebase.** Every image URL today is a third-party kie.ai/redpandaai URL string stored in Postgres; nothing is ever uploaded to Supabase Storage. A bucket must be created as new infrastructure. | grep confirmed zero `supabase.storage` call sites |
-| `curate(...)` | Function is exported as **`curatePackages`** from `curate.functions.ts` (there's also a separate `curate.ts` helper module `curate.functions.ts` imports from — different file, same base name). | `src/lib/curate.functions.ts`, `src/lib/curate.ts` |
-| `wantsZoneSplit` lives in `wa-flow.ts` | Lives in **`src/lib/render-intent.ts:134`**, imported into `index.tsx` from there, not from `wa-flow.ts`. | `src/lib/render-intent.ts` |
-| `describeIntake()` in `brief.ts` | **Doesn't exist.** `brief.ts` exports `readBrief`, `readIntake`, `readWall`, `readRoomPair` only. Port the porting-table row using those names. | `src/lib/brief.ts` |
-| One-retry-on-fault lives inside `inspectRender()` (`render-qa.functions.ts`) | The retry decision (`shouldRetry`, `correctionFor`, `MAX_RETRIES = 1`) is a **separate pure module**, `src/lib/render-qa.ts`, orchestrated today by `index.tsx`'s `finish()` callback — `inspectRender()` itself just returns a verdict. `wa-render-worker.ts` needs to import from *both* files. | `src/lib/render-qa.ts` vs `src/lib/render-qa.functions.ts` |
-| `MAX_QTY` in `chat.functions.ts` | `MAX_QTY = 20` lives in **`visualize.functions.ts`** (caps render quantities; already enforced there — no need to duplicate). Chat's own plan-quantity clamp is inline (`Math.min(99, Math.max(1, ...))`, `chat.functions.ts`), no named constant. `wa-session.ts`'s `sanitizePlan` should clamp `1..99` to match `chat.functions.ts`, not `1..20`. | `src/lib/chat.functions.ts:209`, `src/lib/visualize.functions.ts:60` |
-| `toWaItems()` is a reusable WA-message-shaping helper in `whatsapp.ts`/`wa-flow.ts` | It's defined in **`src/routes/index.tsx:301`** and shapes messages into `WaItem` for the **React preview UI** (`WhatsAppView.tsx`), not into Graph API payloads. `wa-runtime.ts` needs its own, new outbound-composition logic that calls `wa-client.server.ts`'s `sendText`/`sendButtons`/etc. — same *idea* as `toWaItems`, but new code, since the target shape is different. | `src/routes/index.tsx:301`, `src/components/WhatsAppView.tsx` |
-| SYSTEM_INSTRUCTIONS has an obvious insertion point before "What the catalog is" | Confirmed true, but there's no existing blank paragraph there — insert the new compliance paragraph between the one-sentence brand framing and the `What the catalog is` header. | `src/lib/chat.functions.ts:46-48` |
+| Spec said                                                                            | Actually                                                                                                                                                                                                                                                                                                                                                                                             | Where                                                                  |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Webhook lives at a route like the existing `api/**` convention                       | **No such convention exists.** `@tanstack/react-start@1.168.32` has no `./api` export, no `createServerFileRoute`/`createAPIFileRoute` anywhere in `node_modules`. All server logic today is `createServerFn` RPCs, not raw HTTP routes. The only real request entry is `src/server.ts`'s exported `fetch(request, env, ctx)` (wired via `vite.config.ts`'s `tanstackStart.server.entry: "server"`). | `src/server.ts`, `vite.config.ts`                                      |
+| Render worker is "an always-on loop (or short-interval Supabase Edge Function/cron)" | No `supabase/functions/` exists, and the app deploys to Vercel — no long-running process to host a loop. Decision: use **Vercel Cron** instead. There's also an unused, auto-generated `authenticateCronRequest` scaffold (`src/integrations/supabase/cron-auth.ts`) hinting at a Lovable-cron path, but it has zero call sites and we're using Vercel Cron, so it stays unused.                     | `src/integrations/supabase/cron-auth.ts` (ignore), `vercel.json` (new) |
+| "Reuse the existing Storage bucket" (implied by media bridge design)                 | **No Supabase Storage bucket exists anywhere in this codebase.** Every image URL today is a third-party kie.ai/redpandaai URL string stored in Postgres; nothing is ever uploaded to Supabase Storage. A bucket must be created as new infrastructure.                                                                                                                                               | grep confirmed zero `supabase.storage` call sites                      |
+| `curate(...)`                                                                        | Function is exported as **`curatePackages`** from `curate.functions.ts` (there's also a separate `curate.ts` helper module `curate.functions.ts` imports from — different file, same base name).                                                                                                                                                                                                     | `src/lib/curate.functions.ts`, `src/lib/curate.ts`                     |
+| `wantsZoneSplit` lives in `wa-flow.ts`                                               | Lives in **`src/lib/render-intent.ts:134`**, imported into `index.tsx` from there, not from `wa-flow.ts`.                                                                                                                                                                                                                                                                                            | `src/lib/render-intent.ts`                                             |
+| `describeIntake()` in `brief.ts`                                                     | **Doesn't exist.** `brief.ts` exports `readBrief`, `readIntake`, `readWall`, `readRoomPair` only. Port the porting-table row using those names.                                                                                                                                                                                                                                                      | `src/lib/brief.ts`                                                     |
+| One-retry-on-fault lives inside `inspectRender()` (`render-qa.functions.ts`)         | The retry decision (`shouldRetry`, `correctionFor`, `MAX_RETRIES = 1`) is a **separate pure module**, `src/lib/render-qa.ts`, orchestrated today by `index.tsx`'s `finish()` callback — `inspectRender()` itself just returns a verdict. `wa-render-worker.ts` needs to import from _both_ files.                                                                                                    | `src/lib/render-qa.ts` vs `src/lib/render-qa.functions.ts`             |
+| `MAX_QTY` in `chat.functions.ts`                                                     | `MAX_QTY = 20` lives in **`visualize.functions.ts`** (caps render quantities; already enforced there — no need to duplicate). Chat's own plan-quantity clamp is inline (`Math.min(99, Math.max(1, ...))`, `chat.functions.ts`), no named constant. `wa-session.ts`'s `sanitizePlan` should clamp `1..99` to match `chat.functions.ts`, not `1..20`.                                                  | `src/lib/chat.functions.ts:209`, `src/lib/visualize.functions.ts:60`   |
+| `toWaItems()` is a reusable WA-message-shaping helper in `whatsapp.ts`/`wa-flow.ts`  | It's defined in **`src/routes/index.tsx:301`** and shapes messages into `WaItem` for the **React preview UI** (`WhatsAppView.tsx`), not into Graph API payloads. `wa-runtime.ts` needs its own, new outbound-composition logic that calls `wa-client.server.ts`'s `sendText`/`sendButtons`/etc. — same _idea_ as `toWaItems`, but new code, since the target shape is different.                     | `src/routes/index.tsx:301`, `src/components/WhatsAppView.tsx`          |
+| SYSTEM_INSTRUCTIONS has an obvious insertion point before "What the catalog is"      | Confirmed true, but there's no existing blank paragraph there — insert the new compliance paragraph between the one-sentence brand framing and the `What the catalog is` header.                                                                                                                                                                                                                     | `src/lib/chat.functions.ts:46-48`                                      |
 
 Everything else in the spec — the porting table's behavior descriptions, the session
 schema, the compliance/scope-guard design, the cost model, the WABA setup steps —
@@ -113,18 +113,18 @@ against `CATALOG_FULL` server-side already, channel-blind.
 Port function-by-function, reading `src/routes/index.tsx` on the current branch as the
 source of truth for edge cases (not this document). Exact current signatures/locations:
 
-| Client (`index.tsx`) | Server equivalent (`wa-runtime.ts`) | What changes |
-|---|---|---|
-| `advance(flow, text)` — imported from `wa-flow.ts`, called at line 1295 | same call, unchanged | Pure, channel-agnostic already. |
-| `sendTurn(raw, tapped)` (lines 1280-1381) | `handleInboundMessage(session, message)` | Same dispatch order (package-tap shortcut → `advance()` → `flow.awaiting` handling ("build"/"visualize") → `wantsZoneSplit(text)` **from `render-intent.ts`** → fallback to chat), reads/writes a `sessions` DB row instead of `useState`. |
-| `offerPackages(text)` (lines 917-980) | `offerPackages(session, text)` | `readIntake` → local `buildPackages` fallback → `curatePackages()` best-effort (correct function name) → persist `offered` to the session row instead of `useState`, since the next message may arrive minutes later against a cold request. |
-| `acceptPackage(result)` (lines 1219-1265) | `acceptPackage(session, result)` | Sets `session.plan` instead of `setPlanIds`/`setPlanQty`. |
-| `acceptOffer(offer)` (lines 990-999) | `acceptOffer(session, offer)` | Same `photo \|\| staged` guard, reads `session.room` instead of `roomPhotoRef.current`. |
-| `startRender(products, mode, photo, quantities)` (lines 1030-1073) | `startRender(session, products, mode, quantities)` | Instead of `runRender()` polling `visualizeStatus()` from the browser every 3s, **enqueues a row in `wa_render_jobs`** and returns immediately — the webhook must ack Meta in seconds. Vercel Cron ticks drive the polling (§6). |
-| `renderPlanByZone()` / `renderPlanStaged()` (lines 1140-1178, 1206-1209) | same split | Identical logic; only delivery (enqueue vs. `useState`) differs. |
-| `runChat(history, hasPhoto)` (lines 775-849) | `runChat(session, history, hasPhoto)` | Calls `chat.functions.ts`'s `chat()` exactly as today; last-12-message window, same offer/render gating via `wantsRender()` in `render-intent.ts`. The `offer` field becomes a WhatsApp button instead of a `<Button>`. |
-| `roomSpecRef`/`roomPhotoRef` (lines 471, 549) | `session.room` (DB column) | New concept: 15-min TTL (`ROOM_TTL_MS`) — doesn't exist on `main` today, only ever existed on the abandoned `feat/whatsapp_shift` branch. Port the *idea*, write fresh code. |
-| `messages` state (line 423) | `session.transcript` (DB column) | Same `ChatMessageInput[]` shape `chat.functions.ts` expects, same 12-message/4000-char truncation it already does — persisted instead of held in the tab. |
+| Client (`index.tsx`)                                                     | Server equivalent (`wa-runtime.ts`)                | What changes                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `advance(flow, text)` — imported from `wa-flow.ts`, called at line 1295  | same call, unchanged                               | Pure, channel-agnostic already.                                                                                                                                                                                                              |
+| `sendTurn(raw, tapped)` (lines 1280-1381)                                | `handleInboundMessage(session, message)`           | Same dispatch order (package-tap shortcut → `advance()` → `flow.awaiting` handling ("build"/"visualize") → `wantsZoneSplit(text)` **from `render-intent.ts`** → fallback to chat), reads/writes a `sessions` DB row instead of `useState`.   |
+| `offerPackages(text)` (lines 917-980)                                    | `offerPackages(session, text)`                     | `readIntake` → local `buildPackages` fallback → `curatePackages()` best-effort (correct function name) → persist `offered` to the session row instead of `useState`, since the next message may arrive minutes later against a cold request. |
+| `acceptPackage(result)` (lines 1219-1265)                                | `acceptPackage(session, result)`                   | Sets `session.plan` instead of `setPlanIds`/`setPlanQty`.                                                                                                                                                                                    |
+| `acceptOffer(offer)` (lines 990-999)                                     | `acceptOffer(session, offer)`                      | Same `photo \|\| staged` guard, reads `session.room` instead of `roomPhotoRef.current`.                                                                                                                                                      |
+| `startRender(products, mode, photo, quantities)` (lines 1030-1073)       | `startRender(session, products, mode, quantities)` | Instead of `runRender()` polling `visualizeStatus()` from the browser every 3s, **enqueues a row in `wa_render_jobs`** and returns immediately — the webhook must ack Meta in seconds. Vercel Cron ticks drive the polling (§6).             |
+| `renderPlanByZone()` / `renderPlanStaged()` (lines 1140-1178, 1206-1209) | same split                                         | Identical logic; only delivery (enqueue vs. `useState`) differs.                                                                                                                                                                             |
+| `runChat(history, hasPhoto)` (lines 775-849)                             | `runChat(session, history, hasPhoto)`              | Calls `chat.functions.ts`'s `chat()` exactly as today; last-12-message window, same offer/render gating via `wantsRender()` in `render-intent.ts`. The `offer` field becomes a WhatsApp button instead of a `<Button>`.                      |
+| `roomSpecRef`/`roomPhotoRef` (lines 471, 549)                            | `session.room` (DB column)                         | New concept: 15-min TTL (`ROOM_TTL_MS`) — doesn't exist on `main` today, only ever existed on the abandoned `feat/whatsapp_shift` branch. Port the _idea_, write fresh code.                                                                 |
+| `messages` state (line 423)                                              | `session.transcript` (DB column)                   | Same `ChatMessageInput[]` shape `chat.functions.ts` expects, same 12-message/4000-char truncation it already does — persisted instead of held in the tab.                                                                                    |
 
 ---
 
@@ -329,7 +329,7 @@ export function liveRoom(room: SessionState["room"], now = Date.now()): SessionS
 ```
 
 `src/lib/wa-session.functions.ts` — `loadSession`/`saveSession`, each dynamically
-importing `supabaseAdmin` from `src/integrations/supabase/client.server.ts` *inside* the
+importing `supabaseAdmin` from `src/integrations/supabase/client.server.ts` _inside_ the
 handler (matching that module's own documented convention — never a static top-level
 import, since `.functions.ts` files ship to the client bundle otherwise). Wrap in
 try/catch degrading to an empty in-memory session on failure — same resilience stance as
@@ -412,7 +412,7 @@ invoked by Vercel Cron hitting `/api/cron/wa-render-worker`:
 7. Respond `200` with a small summary (`{ claimed, done, failed }`) for Vercel Cron's log.
 
 **Cadence — decided: Hobby plan, external pinger.** Vercel Cron's minimum interval is
-once every 60 seconds, but *per-minute* schedules require Pro or higher — Hobby is
+once every 60 seconds, but _per-minute_ schedules require Pro or higher — Hobby is
 capped at once/day. The project is on Hobby for now (Pro is a later decision if it
 turns out to be needed), so `vercel.json`'s own cron entry is set to a **once-daily
 fallback safety net** (`"0 0 * * *"`, midnight UTC — the only thing Hobby allows) rather
@@ -534,17 +534,17 @@ reply to see it") approved during setup (§12) as the render-worker's fallback.
 
 ## 11. Cost model
 
-| Item | Rate | Notes |
-|---|---|---|
-| Claude Haiku 4.5 (`chat.functions.ts`) | existing web-app rate | Same model/prompt cache. |
-| Claude Sonnet 5 (`curatePackages`) | existing, unchanged | Once or twice a session. |
-| kie.ai render, 1K | $0.03 (6 credits) | Single-product modes (`add`, `replace_all`, `replace`). |
-| kie.ai render, 2K | $0.05 (10 credits) | Multi-reference modes (`lineup`, `refit_room`, `staged_room`). |
-| Claude Haiku vision QA (`render-qa.functions.ts`) | existing, unchanged | One retry max, same as web. |
-| WhatsApp conversation (service/utility) | per-country, billed from Oct 1 2026 | Confirm at implementation time. |
-| WhatsApp template send (outside 24h) | per-country, higher | Render-worker fallback only. |
-| Supabase Storage (new bucket) | new usage on existing plan | Every finished render + retained room photo until QA completes (§7). |
-| Vercel Cron invocations | included on Pro+/usage-based on some tiers | Confirm plan tier per §6. |
+| Item                                              | Rate                                       | Notes                                                                |
+| ------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------- |
+| Claude Haiku 4.5 (`chat.functions.ts`)            | existing web-app rate                      | Same model/prompt cache.                                             |
+| Claude Sonnet 5 (`curatePackages`)                | existing, unchanged                        | Once or twice a session.                                             |
+| kie.ai render, 1K                                 | $0.03 (6 credits)                          | Single-product modes (`add`, `replace_all`, `replace`).              |
+| kie.ai render, 1K                                 | $0.03 (6 credits)                          | All render modes during the 1K latency/fidelity evaluation.          |
+| Claude Haiku vision QA (`render-qa.functions.ts`) | existing, unchanged                        | One retry max, same as web.                                          |
+| WhatsApp conversation (service/utility)           | per-country, billed from Oct 1 2026        | Confirm at implementation time.                                      |
+| WhatsApp template send (outside 24h)              | per-country, higher                        | Render-worker fallback only.                                         |
+| Supabase Storage (new bucket)                     | new usage on existing plan                 | Every finished render + retained room photo until QA completes (§7). |
+| Vercel Cron invocations                           | included on Pro+/usage-based on some tiers | Confirm plan tier per §6.                                            |
 
 `render-intent.ts`'s `wantsRender()` gating (already the single biggest cost control on
 the web app) ports unchanged and is what keeps WhatsApp from reintroducing the "half of
@@ -582,16 +582,16 @@ execution time — this is vendor-console detail that drifts.
 
 ## 13. Environment variables
 
-| Name | Used by | Missing behavior |
-|---|---|---|
-| `WHATSAPP_ACCESS_TOKEN` | `wa-client.server.ts` | outbound sends fail |
-| `WHATSAPP_PHONE_NUMBER_ID` | `wa-client.server.ts` | outbound sends have nowhere to send from |
-| `WHATSAPP_APP_SECRET` | `wa-webhook.server.ts` | can't validate `X-Hub-Signature-256` — reject all inbound traffic |
-| `WHATSAPP_VERIFY_TOKEN` | `wa-webhook.server.ts` | Meta's subscription handshake fails at setup |
-| `WHATSAPP_SESSION_SECRET` | `wa-session.server.ts` | session keys can't be derived |
-| `WHATSAPP_PHONE_ENC_KEY` | `wa-phone-crypto.server.ts` | **NEW, not in the original spec** — a render job can't be encrypted with a phone number to deliver to; `enqueueRenderJob` throws, no renders ever complete. Deliberately a separate secret from `WHATSAPP_SESSION_SECRET` (see §4's correction). |
-| `CRON_SECRET` | `wa-render-worker.server.ts` (Vercel Cron's own convention) | can't authenticate cron ticks |
-| `ANTHROPIC_API_KEY`, `KIE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | already required | unchanged — new tables/bucket reuse them |
+| Name                                                                            | Used by                                                     | Missing behavior                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WHATSAPP_ACCESS_TOKEN`                                                         | `wa-client.server.ts`                                       | outbound sends fail                                                                                                                                                                                                                              |
+| `WHATSAPP_PHONE_NUMBER_ID`                                                      | `wa-client.server.ts`                                       | outbound sends have nowhere to send from                                                                                                                                                                                                         |
+| `WHATSAPP_APP_SECRET`                                                           | `wa-webhook.server.ts`                                      | can't validate `X-Hub-Signature-256` — reject all inbound traffic                                                                                                                                                                                |
+| `WHATSAPP_VERIFY_TOKEN`                                                         | `wa-webhook.server.ts`                                      | Meta's subscription handshake fails at setup                                                                                                                                                                                                     |
+| `WHATSAPP_SESSION_SECRET`                                                       | `wa-session.server.ts`                                      | session keys can't be derived                                                                                                                                                                                                                    |
+| `WHATSAPP_PHONE_ENC_KEY`                                                        | `wa-phone-crypto.server.ts`                                 | **NEW, not in the original spec** — a render job can't be encrypted with a phone number to deliver to; `enqueueRenderJob` throws, no renders ever complete. Deliberately a separate secret from `WHATSAPP_SESSION_SECRET` (see §4's correction). |
+| `CRON_SECRET`                                                                   | `wa-render-worker.server.ts` (Vercel Cron's own convention) | can't authenticate cron ticks                                                                                                                                                                                                                    |
+| `ANTHROPIC_API_KEY`, `KIE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | already required                                            | unchanged — new tables/bucket reuse them                                                                                                                                                                                                         |
 
 Match the existing style: direct `process.env["X"]` access at point of use (no central
 `env.ts` in this repo), server-side only, never committed, never reach the client bundle.
@@ -607,6 +607,7 @@ mainly: applying the migration to the live DB, and everything that needs real
 neither of which a coding session can do on its own.
 
 **Phase 1 — data + session, no WhatsApp traffic yet**
+
 1. ~~Write~~ **and run** the migration (§4) — written, **not yet applied** to the live
    Supabase project (no CLI/DB credentials available in-session; apply via the dashboard
    SQL editor or `supabase db push`).
@@ -614,71 +615,59 @@ neither of which a coding session can do on its own.
    `wa-session.test.ts` — done, 31 tests: mint a key, TTL expiry (`liveRoom`/`liveOffered`),
    sanitizers reject a hostile payload.
 
-**Phase 2 — outbound + webhook skeleton**
-3. `wa-client.server.ts` — done. **Not yet manually verified against Meta's test number**
-   (§12 step 3) — needs real `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`.
-4. `src/server.ts` path interception + `wa-webhook.server.ts`: `GET` verify, `POST`
-   signature check + `200` ack + `wa_messages` dedupe insert — done. **Not yet manually
-   verified** against Meta's webhook test tool (needs a deployed URL + `WHATSAPP_APP_SECRET`/
-   `WHATSAPP_VERIFY_TOKEN`).
+**Phase 2 — outbound + webhook skeleton** 3. `wa-client.server.ts` — done. **Not yet manually verified against Meta's test number**
+(§12 step 3) — needs real `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`. 4. `src/server.ts` path interception + `wa-webhook.server.ts`: `GET` verify, `POST`
+signature check + `200` ack + `wa_messages` dedupe insert — done. **Not yet manually
+verified** against Meta's webhook test tool (needs a deployed URL + `WHATSAPP_APP_SECRET`/
+`WHATSAPP_VERIFY_TOKEN`).
 
-**Phase 3 — the conversation engine**
-5. `wa-runtime.ts` — done: greeting + 3-button menu, `build`/`visualize`/`ask` intake,
-   free-text fallthrough to `chat.functions.ts`, package selection, zone-split renders,
-   render-offer buttons. 13 tests in `wa-runtime.test.ts` drive the full scripted flow
-   (greeting → menu tap → intake → package tap → render request) — two real bugs were
-   caught and fixed while writing these (transcript ordering, a missing transcript append
-   in the scripted-menu branch).
-6. `wa-markdown.ts` + test — done, 8 tests. Verified against hand-written samples matching
-   `SYSTEM_INSTRUCTIONS`'s own style guidance, **not yet against a real Claude transcript**
-   (no live `ANTHROPIC_API_KEY` in the build environment) — re-check once the assistant is live.
-7. Compliance scope guard (§8) — done: additive `SYSTEM_INSTRUCTIONS` paragraph +
-   `wantsHandoff()` trigger in `wa-runtime.ts`, tested.
+**Phase 3 — the conversation engine** 5. `wa-runtime.ts` — done: greeting + 3-button menu, `build`/`visualize`/`ask` intake,
+free-text fallthrough to `chat.functions.ts`, package selection, zone-split renders,
+render-offer buttons. 13 tests in `wa-runtime.test.ts` drive the full scripted flow
+(greeting → menu tap → intake → package tap → render request) — two real bugs were
+caught and fixed while writing these (transcript ordering, a missing transcript append
+in the scripted-menu branch). 6. `wa-markdown.ts` + test — done, 8 tests. Verified against hand-written samples matching
+`SYSTEM_INSTRUCTIONS`'s own style guidance, **not yet against a real Claude transcript**
+(no live `ANTHROPIC_API_KEY` in the build environment) — re-check once the assistant is live. 7. Compliance scope guard (§8) — done: additive `SYSTEM_INSTRUCTIONS` paragraph +
+`wantsHandoff()` trigger in `wa-runtime.ts`, tested.
 
-**Phase 4 — rendering**
-8. `wa-media.server.ts` inbound path — done, **without the resize step** (§7's flagged
-   deviation — no server-side image library; size-capped and re-hosted unresized instead).
-   **Not yet manually verified** against a real photo from Meta's test number.
-9. `wa_render_jobs` + `wa-render-worker.server.ts` + `vercel.json` cron — done: enqueues
-   from `wa-runtime.ts`'s `startRenderTurn`/`renderPlanByZoneTurn`, claims on cron ticks,
-   runs `inspectRender()` + `render-qa.ts`'s retry helpers with the same `MAX_RETRIES = 1`
-   `index.tsx`'s `finish()` uses. **One real design gap found and fixed while building
-   this**: the original spec never explained how a job running on a later, unrelated cron
-   tick would know which phone number to deliver to, since `session_key`'s HMAC is
-   one-way — fixed by encrypting the phone onto the job row alone (§4's correction,
-   `wa-phone-crypto.server.ts`). Cron cadence and claim-locking still need the
-   confirmations §6 already calls out (Vercel plan tier; the non-atomic claim is a
-   deliberate, documented simplification, not an oversight).
-10. `wa-media.server.ts` outbound path — done: the `wa-media` bucket is created by the
-    migration itself, finished renders are re-hosted before sending.
-11. **End-to-end against the test number — not yet run.** This needs the applied
-    migration, all `WHATSAPP_*` credentials, `CRON_SECRET`, `WHATSAPP_PHONE_ENC_KEY`, and
-    Meta's test number (§12) — none of which exist yet. This is the next real milestone:
-    "Plan my salon" → free-text intake → package buttons → "see it in my space" → photo
-    → rendered image back, for real.
+**Phase 4 — rendering** 8. `wa-media.server.ts` inbound path — done, **without the resize step** (§7's flagged
+deviation — no server-side image library; size-capped and re-hosted unresized instead).
+**Not yet manually verified** against a real photo from Meta's test number. 9. `wa_render_jobs` + `wa-render-worker.server.ts` + `vercel.json` cron — done: enqueues
+from `wa-runtime.ts`'s `startRenderTurn`/`renderPlanByZoneTurn`, claims on cron ticks,
+runs `inspectRender()` + `render-qa.ts`'s retry helpers with the same `MAX_RETRIES = 1`
+`index.tsx`'s `finish()` uses. **One real design gap found and fixed while building
+this**: the original spec never explained how a job running on a later, unrelated cron
+tick would know which phone number to deliver to, since `session_key`'s HMAC is
+one-way — fixed by encrypting the phone onto the job row alone (§4's correction,
+`wa-phone-crypto.server.ts`). Cron cadence and claim-locking still need the
+confirmations §6 already calls out (Vercel plan tier; the non-atomic claim is a
+deliberate, documented simplification, not an oversight). 10. `wa-media.server.ts` outbound path — done: the `wa-media` bucket is created by the
+migration itself, finished renders are re-hosted before sending. 11. **End-to-end against the test number — not yet run.** This needs the applied
+migration, all `WHATSAPP_*` credentials, `CRON_SECRET`, `WHATSAPP_PHONE_ENC_KEY`, and
+Meta's test number (§12) — none of which exist yet. This is the next real milestone:
+"Plan my salon" → free-text intake → package buttons → "see it in my space" → photo
+→ rendered image back, for real.
 
-**Phase 5 — production readiness**
-12. **Blocked on §12 setup** — App Review/Advanced Access (§12 step 7), template
-    approval (§12 step 8, §10). Can't start until the Meta app exists and a working
-    test-number integration is demonstrable — Meta's review process requires showing
-    the bot actually working.
-13. **Blocked on §12/13** — load the real business number, re-run the Phase 4
-    end-to-end test against it.
-14. **Done.** Rate-limit/abuse guard: `wa-rate-limit.server.ts` — `tooManyInboundMessages()`
-    (20 inbound messages / 60s per `session_key`, checked in `wa-webhook.server.ts`
-    before any dispatch, over-limit messages dropped silently since replying also
-    bills a conversation) and `tooManyRenderRequests()` (5 renders / 5 min per
-    `session_key`, checked at the top of `wa-runtime.ts`'s `startRenderTurn` and
-    `renderPlanByZoneTurn`, over-limit gets an explanation rather than silence — a
-    real customer can legitimately hit this one). No new table: both windowed counts
-    query `wa_messages`/`wa_render_jobs` directly, since they already log exactly
-    what's needed (`session_key` + `created_at`) for audit purposes. Fails open on
-    any DB error, same resilience stance as every other store in this channel —
-    logged loudly either way. Thresholds are a starting point, explicitly not sized
-    against real traffic yet (unknown at build time) — revisit once there's launch
-    volume to look at. 2 tests verify the fail-open behavior (the actual
-    over-threshold behavior needs a real database, same testing-boundary stance as
-    `wa-render-worker.test.ts`).
+**Phase 5 — production readiness** 12. **Blocked on §12 setup** — App Review/Advanced Access (§12 step 7), template
+approval (§12 step 8, §10). Can't start until the Meta app exists and a working
+test-number integration is demonstrable — Meta's review process requires showing
+the bot actually working. 13. **Blocked on §12/13** — load the real business number, re-run the Phase 4
+end-to-end test against it. 14. **Done.** Rate-limit/abuse guard: `wa-rate-limit.server.ts` — `tooManyInboundMessages()`
+(20 inbound messages / 60s per `session_key`, checked in `wa-webhook.server.ts`
+before any dispatch, over-limit messages dropped silently since replying also
+bills a conversation) and `tooManyRenderRequests()` (5 renders / 5 min per
+`session_key`, checked at the top of `wa-runtime.ts`'s `startRenderTurn` and
+`renderPlanByZoneTurn`, over-limit gets an explanation rather than silence — a
+real customer can legitimately hit this one). No new table: both windowed counts
+query `wa_messages`/`wa_render_jobs` directly, since they already log exactly
+what's needed (`session_key` + `created_at`) for audit purposes. Fails open on
+any DB error, same resilience stance as every other store in this channel —
+logged loudly either way. Thresholds are a starting point, explicitly not sized
+against real traffic yet (unknown at build time) — revisit once there's launch
+volume to look at. 2 tests verify the fail-open behavior (the actual
+over-threshold behavior needs a real database, same testing-boundary stance as
+`wa-render-worker.test.ts`).
 
 ---
 

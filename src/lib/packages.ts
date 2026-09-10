@@ -54,6 +54,20 @@ const SOURCE: Record<Role, { placement?: string; category?: string; minPrice: nu
 const ACCESSORY =
   /\b(joiner|wheel option|shelf only|box \d|accessory|holder|hose|bench|comfortneck)\b/i;
 
+/** Category/placement data on the source store is broader than a fit-out role. */
+const ROLE_MATCH: Partial<Record<Role, RegExp>> = {
+  // A standalone basin is not a complete backwash unit, even though the
+  // storefront files both under shampoo-area.
+  wash: /\b(shampoo system|wash lounge)\b/i,
+  // waiting-retail also contains magazine racks and retail shelves.
+  waiting: /\b(sofa|chair|seat|ottoman)\b/i,
+};
+
+const ROLE_EXCLUDE: Partial<Record<Role, RegExp>> = {
+  // "X with Pole Frame" is a complete mirror; "Salon Pole Frame" is not.
+  mirror: /^salon pole frame\b/i,
+};
+
 export type Need = { role: Role; qty: number };
 
 /**
@@ -81,7 +95,10 @@ export function candidates(role: Role): FullProduct[] {
   return Object.values(CATALOG_FULL)
     .filter((p) => {
       if (!p.price || p.price < source.minPrice) return false;
+      if (p.is_component) return false;
       if (ACCESSORY.test(p.name)) return false;
+      if (ROLE_MATCH[role] && !ROLE_MATCH[role]!.test(p.name)) return false;
+      if (ROLE_EXCLUDE[role]?.test(p.name)) return false;
       if (source.placement) return p.salon_placement === source.placement;
       return p.category === source.category;
     })

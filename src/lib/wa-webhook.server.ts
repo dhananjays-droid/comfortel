@@ -21,9 +21,17 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import type { Json } from "@/integrations/supabase/types";
+import { enqueueInboundJob, triggerInboundWorker } from "@/lib/wa-inbound-queue.server";
 import { tooManyInboundMessages } from "@/lib/wa-rate-limit.server";
 import { receiveRoomPhoto } from "@/lib/wa-media.server";
-import { sendButtons, sendImage, sendList, sendText } from "@/lib/wa-client.server";
+import {
+  markReadAndType,
+  sendButtons,
+  sendImage,
+  sendList,
+  sendText,
+} from "@/lib/wa-client.server";
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
 import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-runtime";
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
@@ -70,8 +78,7 @@ function handleVerify(url: URL): Response {
 }
 
 /**
- * Meta's webhook envelope, narrowed to what this app reads. Fields not named
- * here (statuses, etc.) are ignored rather than typed. contacts[].profile.name
+ * Meta's webhook envelope, narrowed to what this app reads. contacts[].profile.name
  * is read (for the admin dashboard only, see wa-session.ts's customerName) —
  * it is the display name the customer set in their own WhatsApp app, not
  * something Comfortel asked for or that conversation logic depends on.
@@ -81,6 +88,15 @@ type WebhookEnvelope = {
     changes?: Array<{
       value?: {
         contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
+        statuses?: Array<{
+          id?: string;
+          status?: string;
+          timestamp?: string;
+          recipient_id?: string;
+          conversation?: Record<string, unknown>;
+          pricing?: Record<string, unknown>;
+          errors?: Array<Record<string, unknown>>;
+        }>;
         messages?: Array<{
           id?: string;
           from?: string;
@@ -96,6 +112,42 @@ type WebhookEnvelope = {
     }>;
   }>;
 };
+
+export type DeliveryStatusEvent = {
+  waMessageId: string;
+  status: string;
+  eventAt: string;
+  recipientId?: string;
+  details: Record<string, unknown>;
+};
+
+/** Extracted separately because status-only callbacks have no messages array. */
+export function extractDeliveryStatuses(envelope: WebhookEnvelope): DeliveryStatusEvent[] {
+  const statuses: DeliveryStatusEvent[] = [];
+  for (const entry of envelope.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const status of change.value?.statuses ?? []) {
+        if (!status.id || !status.status || !status.timestamp) continue;
+        const seconds = Number(status.timestamp);
+        const eventAt = Number.isFinite(seconds)
+          ? new Date(seconds * 1000).toISOString()
+          : new Date().toISOString();
+        statuses.push({
+          waMessageId: status.id,
+          status: status.status,
+          eventAt,
+          ...(status.recipient_id ? { recipientId: status.recipient_id } : {}),
+          details: {
+            ...(status.conversation ? { conversation: status.conversation } : {}),
+            ...(status.pricing ? { pricing: status.pricing } : {}),
+            ...(status.errors ? { errors: status.errors } : {}),
+          },
+        });
+      }
+    }
+  }
+  return statuses;
+}
 
 function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
   const out: InboundMessage[] = [];
@@ -183,17 +235,39 @@ async function recordInboundIfNew(message: InboundMessage, sessionKey: string): 
   }
 }
 
-/** Returns null only when an image genuinely couldn't be resolved (Meta's
- * media API rejected it, or it was over the size cap) — a real failure, not
- * "not implemented yet" — so the caller can tell the customer plainly. */
-async function toInboundEvent(message: InboundMessage): Promise<InboundEvent | null> {
+/** Delivery callbacks are observational only: they never mutate a session or
+ * trigger a reply. The unique key makes Meta retries harmless. */
+async function recordDeliveryStatuses(envelope: WebhookEnvelope): Promise<void> {
+  const statuses = extractDeliveryStatuses(envelope);
+  if (!statuses.length) return;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("wa_message_statuses").upsert(
+      statuses.map((status) => ({
+        wa_message_id: status.waMessageId,
+        session_key: status.recipientId ? waSessionKey(status.recipientId) : null,
+        status: status.status,
+        event_at: status.eventAt,
+        details: status.details as Json,
+      })),
+      { onConflict: "wa_message_id,status,event_at", ignoreDuplicates: true },
+    );
+    if (error) console.error("recordDeliveryStatuses failed", error);
+  } catch (error) {
+    // A status-audit outage must not make Meta retry the whole webhook and
+    // delay unrelated inbound customer messages in the same envelope.
+    console.error("recordDeliveryStatuses failed", error);
+  }
+}
+
+async function toInboundEvent(message: InboundMessage): Promise<InboundEvent> {
   if (message.kind === "text" && message.text) return { kind: "text", text: message.text };
   if (message.kind === "interactive" && message.buttonReplyId) {
     return { kind: "button", id: message.buttonReplyId };
   }
   if (message.kind === "image" && message.imageId) {
     const url = await receiveRoomPhoto(message.imageId);
-    if (!url) return null;
+    if (!url) return { kind: "photo_error" };
     return { kind: "photo", url, caption: message.imageCaption };
   }
   return { kind: "unsupported" };
@@ -306,67 +380,103 @@ async function handleReceive(request: Request): Promise<Response> {
   }
 
   const contactNames = extractContactNames(envelope);
+  await recordDeliveryStatuses(envelope);
 
   for (const message of extractMessages(envelope)) {
     const sessionKey = waSessionKey(message.from);
-    const isNew = await recordInboundIfNew(message, sessionKey);
-    if (!isNew) continue;
-
-    // These three don't depend on one another's result, so they run
-    // concurrently rather than one after another — on the common path
-    // (not rate-limited, a real event, no error) this saves two whole
-    // round trips off every single reply's latency, which is otherwise
-    // entirely serial: rate-limit check, then resolve the message (a real
-    // Graph API round trip for a photo), then load the session, then the
-    // chat/curate call, then save, then send. A rate-limited or
-    // unreadable message still discards the other two results cleanly —
-    // a session load or a media fetch that turns out to be unneeded is a
-    // wasted read, never a wasted write.
-    const [tooMany, event, session] = await Promise.all([
-      tooManyInboundMessages(sessionKey),
-      toInboundEvent(message),
-      loadSession(sessionKey),
-    ]);
-
-    // Checked first — a flood gets dropped silently rather than answered,
-    // since replying to it also bills a conversation under WhatsApp's
-    // per-message pricing (plan §10).
-    if (tooMany) {
-      console.warn("WhatsApp rate limit: too many inbound messages", { sessionKey });
-      continue;
-    }
-
-    if (!event) {
-      await deliver(message.from, sessionKey, [
-        {
-          kind: "text",
-          text: "I couldn't quite read that photo. Could you try sending it again?",
-        },
-      ]);
-      continue;
-    }
-
+    // Best effort and deliberately before media resolution/queueing: show
+    // acknowledgement as soon as the signed event has been accepted.
     try {
-      const result = await handleInboundMessage(session, sessionKey, message.from, event);
-      // Identity for the admin dashboard only — never used by conversation
-      // logic. A known name is never overwritten with an absence of one
-      // (Meta doesn't send profile info on every single delivery).
-      const digits = message.from.replace(/\D/g, "");
-      await saveSession(sessionKey, {
-        ...result.session,
-        customerName: contactNames.get(message.from) ?? result.session.customerName,
-        phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
-      });
-      await deliver(message.from, sessionKey, result.turns);
+      await markReadAndType(message.waMessageId);
     } catch (err) {
-      console.error("wa-runtime dispatch failed", err);
-      await deliver(message.from, sessionKey, [
-        { kind: "text", text: "Sorry, something went wrong on our end. Try that again?" },
-      ]);
+      console.error("WhatsApp read/typing update failed", err);
+    }
+
+    const event = await toInboundEvent(message);
+    try {
+      const customerName = contactNames.get(message.from);
+      const enqueued = await enqueueInboundJob({
+        waMessageId: message.waMessageId,
+        sessionKey,
+        phone: message.from,
+        event,
+        audit: {
+          kind: message.kind,
+          payload: {
+            text: message.text ?? null,
+            buttonReplyId: message.buttonReplyId ?? null,
+            buttonReplyTitle: message.buttonReplyTitle ?? null,
+            imageId: message.imageId ?? null,
+            imageCaption: message.imageCaption ?? null,
+          },
+        },
+        ...(customerName ? { customerName } : {}),
+      });
+      if (!enqueued) continue;
+
+      // Usually wakes a separate invocation and returns quickly. Local or
+      // temporarily unconfigured environments drain inline to preserve the
+      // pre-queue behavior instead of leaving the customer waiting forever.
+      if (!(await triggerInboundWorker())) {
+        const { runInboundBatch } = await import("@/lib/wa-inbound-worker.server");
+        await runInboundBatch();
+      }
+    } catch (error) {
+      // Migration/env compatibility fallback. The atomic RPC cannot partially
+      // commit, so the old idempotency insert is safe to use after it fails.
+      console.error("WhatsApp inbound enqueue failed; processing inline", error);
+      if (!(await recordInboundIfNew(message, sessionKey))) {
+        // The RPC may have committed even if its response was lost. Wake the
+        // queue once more before treating this as an ordinary Meta retry.
+        await triggerInboundWorker();
+        continue;
+      }
+      if (await tooManyInboundMessages(sessionKey)) continue;
+      const customerName = contactNames.get(message.from);
+      await processQueuedInbound({
+        sessionKey,
+        phone: message.from,
+        waMessageId: message.waMessageId,
+        event,
+        ...(customerName ? { customerName } : {}),
+      });
     }
   }
 
   return new Response("OK", { status: 200 });
+}
+
+/** The existing conversation behavior, now called by the FIFO worker. */
+export async function processQueuedInbound(input: {
+  sessionKey: string;
+  phone: string;
+  waMessageId: string;
+  event: InboundEvent;
+  customerName?: string;
+}): Promise<void> {
+  if (input.event.kind === "photo_error") {
+    await deliver(input.phone, input.sessionKey, [
+      { kind: "text", text: "I couldn't quite read that photo. Could you try sending it again?" },
+    ]);
+    return;
+  }
+
+  const session = await loadSession(input.sessionKey);
+  try {
+    const result = await handleInboundMessage(session, input.sessionKey, input.phone, input.event);
+    const digits = input.phone.replace(/\D/g, "");
+    await saveSession(input.sessionKey, {
+      ...result.session,
+      customerName: input.customerName ?? result.session.customerName,
+      phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
+    });
+    await deliver(input.phone, input.sessionKey, result.turns);
+  } catch (error) {
+    console.error("wa-runtime dispatch failed", error);
+    await deliver(input.phone, input.sessionKey, [
+      { kind: "text", text: "Sorry, something went wrong on our end. Try that again?" },
+    ]);
+  }
 }
 
 export async function handleWhatsAppWebhook(request: Request): Promise<Response> {

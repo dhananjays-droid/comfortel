@@ -15,6 +15,8 @@ export type FullProduct = {
   in_stock: boolean;
   category: string | null;
   sku: string | null;
+  product_type: string | null;
+  is_component: boolean;
   delivery_date: string | null;
   salon_placement: string | null;
   replaces: string | null;

@@ -47,7 +47,7 @@ export type WaReply = {
  * at a time. Five questions in a row is how a business number gets muted, and
  * on WhatsApp there is no form to fall back on.
  */
-export type Await = "visualize" | "build" | "wall" | "photo" | "quote";
+export type Await = "visualize" | "build" | "confirm_build" | "wall" | "photo" | "quote";
 
 export type FlowState = { awaiting?: Await | undefined };
 
@@ -96,7 +96,7 @@ export function welcome(): WaReply {
  * reads the numbers out of ordinary prose, and whatever is missing is assumed
  * out loud rather than demanded up front.
  */
-function buildIntake(): WaReply {
+export function buildIntake(): WaReply {
   return {
     text: [
       "Tell me what you can, in your own words:",
@@ -155,7 +155,12 @@ function matchButton(text: string): string | null {
 export function describeIntake(intake: Intake): string {
   const read: string[] = [];
   if (intake.stations) read.push(`${intake.stations} stations`);
-  if (intake.budget) read.push(`$${intake.budget.toLocaleString("en-US")} budget`);
+  if (intake.budget) {
+    const amount = intake.budgetMin
+      ? `$${intake.budgetMin.toLocaleString("en-US")}–$${intake.budget.toLocaleString("en-US")}`
+      : `$${intake.budget.toLocaleString("en-US")}`;
+    read.push(`${amount} budget`);
+  }
   if (intake.wallCm) read.push(`${Math.round(intake.wallCm / 30.48)}ft wall`);
 
   const missing: string[] = [];
@@ -196,6 +201,10 @@ export function advance(
   const text = raw.trim();
   if (!text) return null;
 
+  // Menu is a global escape hatch. It must work while the customer is in a
+  // build, quote or photo step rather than becoming an answer to that step.
+  if (isGreeting(text)) return { reply: welcome(), state: {} };
+
   // A turn that answers a question we just asked belongs to the model, with
   // what we parsed attached. Returning null hands it over; the route reads
   // `state.awaiting` to know how to frame it.
@@ -208,8 +217,6 @@ export function advance(
   if (id === "visualize") return { reply: visualizeIntake(), state: { awaiting: "visualize" } };
   if (id === "build") return { reply: buildIntake(), state: { awaiting: "build" } };
   if (id === "ask") return { reply: askIntake(), state: {} };
-
-  if (isGreeting(text)) return { reply: welcome(), state: {} };
 
   return null;
 }

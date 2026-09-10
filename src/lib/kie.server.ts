@@ -9,52 +9,23 @@
  */
 
 import { cdnFor } from "@/lib/cdn-assets";
-import { isMultiReferenceMode, type VisualizeMode } from "@/lib/visualize-prompt";
+import type { VisualizeMode } from "@/lib/visualize-prompt";
 
 const KIE_API = "https://api.kie.ai";
 const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 
 /**
- * GPT Image 2. Chosen over gpt-image/1.5-image-to-image after rendering the
- * same salon photo through both: 1.5 does not replace furniture, it RE-SKINS
- * it — asked to fit a black Comfortel chair into a room of chrome barber
- * chairs it recoloured the existing chairs black and kept their frames, bases
- * and footrests. GPT Image 2 removed them and installed the actual product,
- * preserving the room, the chair count and each station's facing.
- *
- * It also lifts two hard limits that shaped this module: the prompt cap goes
- * from 3000 characters to 20000, and up to 16 reference images are accepted.
- *
- * Note the id has NO slash, unlike the 1.5 ids.
+ * Kie's recommended GPT Image 2.5 production variant. Flare keeps the same
+ * createTask contract this integration already uses while improving reference
+ * preservation, edit precision and latency. Image-to-image is used for every
+ * mode because even staged rooms include product reference images.
  */
-const MODEL = "gpt-image-2-image-to-image";
+export const KIE_IMAGE_MODEL = "gpt-image-2-5-flare-image-to-image";
 
-/**
- * Resolution is chosen per render, because what it buys depends on the mode.
- *
- * kie's tiers are native generations rather than upscales — 6 credits ($0.03)
- * at 1K, 10 ($0.05) at 2K, 16 ($0.08) at 4K — so 2K is four times the pixels
- * for two-thirds more money, not a resize.
- *
- * Where that matters is crowding. A refit, a lineup or a staged room puts
- * several DIFFERENT products in one frame, and each one's share of the pixels
- * is what decides whether its armrests and base survive; a seven-product plan
- * at 1K is where pieces stop being recognisable. A single-product placement has
- * one identity to get right and is read in a chat bubble, so it gains almost
- * nothing and 1K stays the honest default there.
- *
- * The aspect-ratio caveat does not bite: 2K and 4K exclude 5:4, 4:5, 3:1, 1:3
- * and 9:21, and resize-image.ts only ever produces 1:1, 3:2 or 2:3.
- *
- * KIE_IMAGE_RESOLUTION still overrides both, for testing a whole run at one
- * tier without touching code.
- */
-const VALID_RESOLUTIONS = ["1K", "2K", "4K"];
-
-export function resolutionFor(mode: VisualizeMode): string {
-  const override = (process.env["KIE_IMAGE_RESOLUTION"] ?? "").trim();
-  if (VALID_RESOLUTIONS.includes(override)) return override;
-  return isMultiReferenceMode(mode) ? "2K" : "1K";
+/** Fixed at 1K while measuring latency and fidelity with the existing full
+ * reference allocation. Both web and WhatsApp call this shared adapter. */
+export function resolutionFor(_mode: VisualizeMode): string {
+  return "1K";
 }
 
 // Narrow shapes for the three kie responses this module reads. Only the fields
@@ -179,7 +150,7 @@ export async function createVisualizeTask(
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify({
-      model: MODEL,
+      model: KIE_IMAGE_MODEL,
       input: {
         input_urls: roomUrl ? [roomUrl, ...references] : references,
         prompt,

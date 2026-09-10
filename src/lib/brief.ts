@@ -28,6 +28,9 @@ const WORD_NUMBER: Record<string, number> = {
 
 export type Brief = {
   stations?: number | undefined;
+  /** Lower end when the customer gave a range or a comfortable/stretch pair. */
+  budgetMin?: number | undefined;
+  /** Upper end, or the single stated budget. This is the cap used for planning. */
   budget?: number | undefined;
 };
 
@@ -83,25 +86,98 @@ function readStations(text: string): number | undefined {
  */
 const MIN_BUDGET = 500;
 
-function readBudget(text: string): number | undefined {
-  // $15k / $15,000 / 15k — the dollar sign or the k makes it unambiguous.
-  const marked = text.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(k\b)?|\b([\d,]+(?:\.\d+)?)\s*k\b/i);
-  if (marked) {
-    const digits = marked[1] ?? marked[3];
-    const isK = Boolean(marked[2]) || Boolean(marked[3]);
-    if (digits) {
-      const value = Number.parseFloat(digits.replace(/,/g, "")) * (isK ? 1000 : 1);
-      if (Number.isFinite(value) && value >= MIN_BUDGET) return Math.round(value);
-    }
+type BudgetRead = { budget: number; budgetMin?: number };
+
+const NUMBER_WORD =
+  "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
+const MONEY_TOKEN = "(?:\\$\\s*|usd\\s*)?[\\d,]+(?:\\.\\d+)?\\s*(?:k\\b|grand\\b|thousand\\b)?";
+
+const MONEY_WORD: Record<string, number> = {
+  ...WORD_NUMBER,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+};
+
+function parseMoneyToken(raw: string): number | undefined {
+  const normalized = raw.toLowerCase().trim();
+  const wordMatch = normalized.match(
+    new RegExp(`\\b(${NUMBER_WORD})(?:[-\\s]+(${NUMBER_WORD}))?\\s+(?:thousand|grand)\\b`, "i"),
+  );
+  if (wordMatch?.[1]) {
+    const first = MONEY_WORD[wordMatch[1].toLowerCase()] ?? 0;
+    const second = wordMatch[2] ? (MONEY_WORD[wordMatch[2].toLowerCase()] ?? 0) : 0;
+    const value = (first + second) * 1000;
+    return value >= MIN_BUDGET ? value : undefined;
+  }
+
+  const match = normalized.match(/([\d,]+(?:\.\d+)?)\s*(k|grand|thousand)?/i);
+  if (!match?.[1]) return undefined;
+  const multiplier = match[2] ? 1000 : 1;
+  const value = Number.parseFloat(match[1].replace(/,/g, "")) * multiplier;
+  return Number.isFinite(value) && value >= MIN_BUDGET ? Math.round(value) : undefined;
+}
+
+function readBudget(text: string): BudgetRead | undefined {
+  // Keep both ends of an explicit range. Planning uses the upper end as the
+  // cap, while the confirmation makes the range visible to the customer.
+  const range = text.match(
+    new RegExp(`(${MONEY_TOKEN})\\s*(?:-|–|—|to|and)\\s*(${MONEY_TOKEN})`, "i"),
+  );
+  if (range?.[1] && range[2]) {
+    const a = parseMoneyToken(range[1]);
+    const b = parseMoneyToken(range[2]);
+    if (a && b) return { budget: Math.max(a, b), budgetMin: Math.min(a, b) };
+  }
+
+  // "15k but can stretch to 18k" is also a range, even though ordinary
+  // words sit between the two values.
+  const stretch = text.match(
+    new RegExp(`(${MONEY_TOKEN})[^.\\n]{0,50}?stretch(?:ing)?(?:\\s+to)?\\s*(${MONEY_TOKEN})`, "i"),
+  );
+  if (stretch?.[1] && stretch[2]) {
+    const a = parseMoneyToken(stretch[1]);
+    const b = parseMoneyToken(stretch[2]);
+    if (a && b) return { budget: Math.max(a, b), budgetMin: Math.min(a, b) };
+  }
+
+  // $15k / USD 15,000 / 15 grand / 15k — a marker makes it unambiguous.
+  const marked = text.match(
+    /(?:\$\s*|usd\s*)[\d,]+(?:\.\d+)?\s*(?:k\b|grand\b|thousand\b)?|\b[\d,]+(?:\.\d+)?\s*(?:k|grand|thousand)\b/i,
+  );
+  if (marked?.[0]) {
+    const budget = parseMoneyToken(marked[0]);
+    if (budget) return { budget };
+  }
+
+  // Word amounts are common in voice-note transcripts and casual messages.
+  const words = text.match(
+    new RegExp(`\\b(?:${NUMBER_WORD})(?:[-\\s]+(?:${NUMBER_WORD}))?\\s+(?:thousand|grand)\\b`, "i"),
+  );
+  if (words?.[0]) {
+    const budget = parseMoneyToken(words[0]);
+    if (budget) return { budget };
   }
 
   // Otherwise only a number that follows budget language counts.
   const contextual = text.match(
-    /(?:budget|spend|spending|around|about|up to|under|roughly)\D{0,12}([\d,]{3,})/i,
+    /(?:budget|spend|spending|around|about|up to|under|roughly|cap)\D{0,12}([\d,]{3,})/i,
   );
   if (contextual?.[1]) {
     const value = Number.parseFloat(contextual[1].replace(/,/g, ""));
-    if (Number.isFinite(value) && value >= MIN_BUDGET) return Math.round(value);
+    if (Number.isFinite(value) && value >= MIN_BUDGET) return { budget: Math.round(value) };
   }
 
   return undefined;
@@ -171,10 +247,11 @@ export function readIntake(text: string): Intake {
 
 export function readBrief(text: string): Brief {
   const stations = readStations(text);
-  const budget = readBudget(text);
+  const budgetRead = readBudget(text);
   return {
     ...(stations === undefined ? {} : { stations }),
-    ...(budget === undefined ? {} : { budget }),
+    ...(budgetRead?.budgetMin === undefined ? {} : { budgetMin: budgetRead.budgetMin }),
+    ...(budgetRead?.budget === undefined ? {} : { budget: budgetRead.budget }),
   };
 }
 

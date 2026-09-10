@@ -1,3 +1,6 @@
 {
-  "crons": [{ "path": "/api/cron/wa-render-worker", "schedule": "0 0 * * *" }]
+  "crons": [
+    { "path": "/api/cron/wa-render-worker", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/wa-inbound-worker", "schedule": "0 0 * * *" }
+  ]
 }
