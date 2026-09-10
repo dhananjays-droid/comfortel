@@ -108,12 +108,15 @@ describe("handleRenderWorkerTick auth guard", () => {
     process.env["CRON_SECRET"] = "test-secret";
     const res = await handleRenderWorkerTick(request("Bearer test-secret"));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { claimed: number; generating: number };
+    const body = (await res.json()) as { claimed: number; outstanding: number; chained: boolean };
     // No SUPABASE_SERVICE_ROLE_KEY in this test environment, so
     // claimPendingJobs/fetchGeneratingJobs fail closed to an empty list
     // (the same resilience stance every other *.server.ts store takes)
     // rather than throwing past the auth guard.
     expect(body.claimed).toBe(0);
-    expect(body.generating).toBe(0);
+    expect(body.outstanding).toBe(0);
+    // And an empty tick must not wake a successor — that is what stops the
+    // self-triggering chain running forever against an idle table.
+    expect(body.chained).toBe(false);
   });
 });

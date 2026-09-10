@@ -11,13 +11,17 @@
  * server-side, since a WhatsApp send can't block a cron invocation for the
  * full render duration the way the browser blocks on its own `await`.
  *
- * Claiming is a plain `update ... where status = 'pending'`, not
- * `select ... for update skip locked` — Vercel Cron invocations for one
- * schedule are effectively serialized in practice, and supabase-js's
- * REST-based client can't express row locking anyway. A genuine overlap
- * between two ticks is a wasted read at worst (see the guards below), not a
- * duplicate render — sized against this channel's actual traffic rather than
- * engineered for a concurrency level it won't see.
+ * Claiming is compare-and-set (`update ... where status = ...`), not
+ * `select ... for update skip locked` — supabase-js's REST-based client can't
+ * express row locking. That was previously justified by cron invocations being
+ * effectively serialized, so an overlap cost a wasted read at worst.
+ *
+ * That justification is gone: a tick now wakes its own successor
+ * (wa-render-trigger.server.ts) and an enqueue wakes a tick immediately, so two
+ * ticks running at once is ordinary rather than rare. Overlap is therefore
+ * handled rather than assumed away — `claimTerminal` puts the same
+ * compare-and-set in front of every send, so the tick that loses a race sends
+ * nothing instead of delivering the customer a second copy of their render.
  */
 
 import { timingSafeEqual } from "node:crypto";
@@ -41,6 +45,7 @@ import {
 import type { VisualizeMode } from "@/lib/visualize-prompt";
 import { sendButtons, sendImage, sendText } from "@/lib/wa-client.server";
 import { rehostRender } from "@/lib/wa-media.server";
+import { triggerRenderWorker } from "@/lib/wa-render-trigger.server";
 import { decryptPhone } from "@/lib/wa-phone-crypto.server";
 
 function delay(ms: number): Promise<void> {
@@ -169,6 +174,40 @@ async function fetchGeneratingJobs(limit: number): Promise<RenderJobRow[]> {
   }
 }
 
+/**
+ * Move a job to a terminal state, but only if nobody else already has.
+ *
+ * This is what makes delivery safe to race. `claimPendingJobs` has always
+ * compare-and-set its claim, but `fetchGeneratingJobs` is a plain read: two
+ * overlapping ticks see the same generating job, both poll kie, both get
+ * `success`, and both send the customer the image. That was tolerable while
+ * cron ticks were 60s apart and effectively serialized — the module header
+ * says as much — but self-triggering makes overlap ordinary rather than rare,
+ * so the assumption had to be replaced rather than leaned on harder.
+ *
+ * Returns false when another tick got there first, which is a normal outcome
+ * and means: send nothing, this job is no longer yours.
+ */
+async function claimTerminal(id: string, patch: Record<string, unknown>): Promise<boolean> {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("wa_render_jobs")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("status", "generating")
+      .select("id");
+    if (error) {
+      console.error("claimTerminal failed", error);
+      return false;
+    }
+    return (data?.length ?? 0) > 0;
+  } catch (err) {
+    console.error("claimTerminal failed", err);
+    return false;
+  }
+}
+
 async function updateJob(id: string, patch: Record<string, unknown>): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -255,7 +294,8 @@ async function recordDeliveredRender(job: RenderJobRow, resultUrl: string): Prom
 }
 
 async function deliverFailure(job: RenderJobRow, message: string): Promise<void> {
-  await updateJob(job.id, { status: "failed", error: message });
+  // Claim before speaking, so two racing ticks can't both apologise.
+  if (!(await claimTerminal(job.id, { status: "failed", error: message }))) return;
   try {
     const phone = decryptPhone(job.customer_phone_enc);
     await sendText(phone, message);
@@ -331,7 +371,10 @@ async function deliverImage(
   // as before.
   const caption = buttons.length ? note : note ? `${note}\n\n${cta}` : cta;
 
-  await updateJob(job.id, { status: "done", result_url: durableUrl, attempt });
+  // Claim before sending, not after. Whichever tick wins this update owns the
+  // delivery; the loser returns having sent nothing, which is the only thing
+  // standing between a raced poll and the customer receiving their render twice.
+  if (!(await claimTerminal(job.id, { status: "done", result_url: durableUrl, attempt }))) return;
 
   try {
     const phone = decryptPhone(job.customer_phone_enc);
@@ -508,24 +551,94 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
   }
 }
 
+/**
+ * How often to re-check kie WITHIN one tick, and how long to keep doing it.
+ *
+ * A tick used to poll once and return, which pinned the worst case to the cron
+ * cadence: a render finishing one second after a tick waited a whole minute to
+ * be noticed. Polling in place instead costs nothing but wall-clock the
+ * invocation was going to spend anyway, and brings this in line with the
+ * browser, which polls every 3s and is the reason the web path was ~70s faster
+ * for identical work.
+ *
+ * The budget is what keeps the invocation inside a serverless duration limit
+ * with room to spare, since a render is 70-130s and no single tick will see one
+ * through. Whatever is unfinished when the budget runs out is handed to the
+ * next tick — chained below, or cron.
+ */
+const POLL_INTERVAL_MS = 4000;
+const TICK_BUDGET_MS = 40_000;
+
+/**
+ * A ceiling on how many times a tick may wake its own successor.
+ *
+ * At TICK_BUDGET_MS apiece this is far more than the slowest render needs, so
+ * it never truncates real work — it exists so that a bug, or a job wedged
+ * `generating` in a way pollJob doesn't resolve, cannot bill an unbounded chain
+ * of invocations. STALE_MS retires such a job long before the cap is reached;
+ * this is the backstop behind that backstop.
+ */
+const MAX_CHAIN_DEPTH = 30;
+
+function readDepth(request: Request): number {
+  const raw = Number(new URL(request.url).searchParams.get("depth") ?? 0);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+}
+
 export async function handleRenderWorkerTick(request: Request): Promise<Response> {
   if (!authenticated(request)) return new Response("Unauthorized", { status: 401 });
+
+  const depth = readDepth(request);
+  const startedAt = Date.now();
 
   const pending = await claimPendingJobs(BATCH_SIZE);
   for (const job of pending) await startJob(job);
 
-  const generating = await fetchGeneratingJobs(BATCH_SIZE);
   let done = 0;
   let failed = 0;
   let polled = 0;
-  for (const job of generating) {
-    const outcome = await pollJob(job);
-    if (outcome === "done") done++;
-    else if (outcome === "failed") failed++;
-    else polled++;
+  let rounds = 0;
+  let outstanding = 0;
+
+  // Re-read each round rather than polling one fixed list: a job another tick
+  // has just started belongs in this loop too, and one this loop finished must
+  // drop out of it.
+  for (;;) {
+    const generating = await fetchGeneratingJobs(BATCH_SIZE);
+    outstanding = generating.length;
+    if (!outstanding) break;
+
+    rounds++;
+    for (const job of generating) {
+      const outcome = await pollJob(job);
+      if (outcome === "done") done++;
+      else if (outcome === "failed") failed++;
+      else polled++;
+    }
+
+    if (Date.now() - startedAt + POLL_INTERVAL_MS >= TICK_BUDGET_MS) break;
+    await delay(POLL_INTERVAL_MS);
   }
 
-  const summary = { claimed: pending.length, generating: generating.length, polled, done, failed };
+  // Hand the rest to a successor rather than to the next cron minute. Only when
+  // something is genuinely still in flight — an idle tick must end the chain,
+  // or the worker would run forever on an empty table.
+  let chained = false;
+  if (outstanding > 0 && depth < MAX_CHAIN_DEPTH) {
+    chained = await triggerRenderWorker(depth + 1);
+  }
+
+  const summary = {
+    depth,
+    claimed: pending.length,
+    rounds,
+    polled,
+    done,
+    failed,
+    outstanding,
+    chained,
+    ms: Date.now() - startedAt,
+  };
   return new Response(JSON.stringify(summary), {
     status: 200,
     headers: { "content-type": "application/json" },
