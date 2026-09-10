@@ -98,8 +98,12 @@ describe("handleInboundMessage — the guided build flow", () => {
     // The wall length given during intake means the package promises a
     // zone-by-zone render once a photo arrives.
     expect(state.pendingZoneRender).toBe(true);
-    expect(result.turns).toHaveLength(1);
+    // The summary text, plus one product card per piece in the plan — a
+    // customer asked to see what's actually in a package, not just read a
+    // description of it (see acceptPackageChoice's itemized list + turns).
+    expect(result.turns.length).toBeGreaterThan(1);
     expect(result.turns[0]?.kind).toBe("text");
+    expect(result.turns.slice(1).every((t) => t.kind === "product")).toBe(true);
   });
 
   it("collapses to one option rather than offering three identical prices", async () => {

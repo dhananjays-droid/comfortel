@@ -993,6 +993,18 @@ function Index() {
       packages,
       choice: { stations, budget, note: text, byZone: Boolean(intake.wallCm) },
     });
+
+    // A single surviving package (distinctPackages collapsed lean/balanced/
+    // premium into one) means the budget is bigger than a plan this size
+    // actually needs — not that only "one option" exists. Confirmed
+    // confusing live: "Under budget" read as an arbitrary label with
+    // nothing to contrast it against, and "fullest fit-out" sat right
+    // above a total with thousands left unexplained. Both get spelled out
+    // here instead of left for the customer to puzzle over. Matches
+    // wa-runtime.ts's identical fix.
+    const solo = packages.length === 1 ? packages[0] : undefined;
+    const leftover = solo ? budget - solo.total : 0;
+
     setMessages((prev) => [
       ...prev,
       {
@@ -1002,21 +1014,27 @@ function Index() {
         content: [
           packages.length > 1
             ? `${note} Here are ${packages.length === 2 ? "two" : "three"} ways to do it — each is the most you can get at its price.`
-            : `${note} Here is the fullest ${stations}-station fit-out the range covers at that budget.`,
+            : `${note} A ${stations}-station salon doesn't need $${budget.toLocaleString("en-US")} of range — here's the fullest fit-out it covers${leftover > 0 ? `, with ${formatPrice(leftover)} left over` : ""}. Say the word and I'll break down exactly what's in it.`,
           curated
             ? ""
             : "_Picked by catalogue rules this time — the assistant wasn't reachable, so these are matched on price band rather than on how they look together._",
           "",
-          ...packages.map(
-            (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
-          ),
+          solo
+            ? `*Full fit-out* — ${formatPrice(solo.total)}. ${solo.reasons[0] ?? ""}`
+            : packages
+                .map(
+                  (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
+                )
+                .join("\n"),
         ].join("\n"),
         action: {
           kind: "buttons",
-          buttons: packages.slice(0, 3).map((p) => ({
-            id: `pkg:${p.tier}`,
-            title: TIER_LABEL[p.tier],
-          })),
+          buttons: solo
+            ? [{ id: `pkg:${solo.tier}`, title: "Show me the plan" }]
+            : packages.slice(0, 3).map((p) => ({
+                id: `pkg:${p.tier}`,
+                title: TIER_LABEL[p.tier],
+              })),
         },
       },
     ]);
@@ -1291,7 +1309,7 @@ function Index() {
       role: "assistant",
       kind: "text",
       content: [
-        `Here is the ${TIER_LABEL[result.pkg.tier].toLowerCase()} package — ${summary}.`,
+        `Here is your plan — ${summary}.`,
         ...result.pkg.reasons,
         result.byZone
           ? "Add a photo of your room and I'll render it zone by zone."
