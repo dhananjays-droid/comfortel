@@ -53,6 +53,10 @@ describe("wantsRender — not asks", () => {
     it(`reacts: ${text}`, () => expect(wantsRender(text)).toBe(false));
   }
 
+  it("stays false for every reacting example even with hasRecentRender explicitly false", () => {
+    for (const text of reacting) expect(wantsRender(text, false)).toBe(false);
+  });
+
   /**
    * "Show me X" with no target is a browse request, and the cards answer it.
    * These become an offer button rather than $0.03 — a tap the customer can
@@ -94,6 +98,59 @@ describe("wantsRender — not asks", () => {
   for (const text of bareMake) {
     it(`does not treat bare "make" as a render: ${text}`, () =>
       expect(wantsRender(text)).toBe(false));
+  }
+});
+
+describe("wantsRender — editing a picture already delivered", () => {
+  // The exact "reacting" turns above, now with something to edit. Six of
+  // the eight are clear enough to act on; "I like it" and "what do you
+  // think of it?" stay non-actionable either way — no instruction to act on.
+  const editable = [
+    "the chairs look a bit too big in that",
+    "hmm the colour looks off",
+    "nice, but can the mirrors be bigger",
+    "why does it look so dark",
+    "the trolley is in the wrong place",
+  ];
+  for (const text of editable) {
+    it(`edits when a render exists: ${text}`, () => expect(wantsRender(text, true)).toBe(true));
+    it(`does not, with nothing to edit: ${text}`, () =>
+      expect(wantsRender(text, false)).toBe(false));
+  }
+
+  const nonActionable = [
+    "I like it",
+    "what do you think of it?",
+    "that's not quite the layout I meant",
+  ];
+  for (const text of nonActionable) {
+    it(`stays false even with something to edit, no instruction given: ${text}`, () =>
+      expect(wantsRender(text, true)).toBe(false));
+  }
+
+  const clearImperatives = [
+    "make the chairs blue",
+    "can you add a plant in the corner",
+    "change the mirror to round",
+    "swap the trolley for a black one",
+  ];
+  for (const text of clearImperatives) {
+    it(`edits on an explicit instruction: ${text}`, () =>
+      expect(wantsRender(text, true)).toBe(true));
+  }
+
+  // Ordinary follow-ups after a render that must never be mistaken for a
+  // picture edit, even though they share a verb with EDIT_ASKS.
+  const stillNotEdits = [
+    "add the trolley to my plan",
+    "add this to my plan please",
+    "can you make it cheaper",
+    "get me a quote for the trolley",
+    "what colours does the Harper come in?",
+  ];
+  for (const text of stillNotEdits) {
+    it(`is not an edit even with a render to edit: ${text}`, () =>
+      expect(wantsRender(text, true)).toBe(false));
   }
 });
 

@@ -95,6 +95,7 @@ export type Database = {
           flow: Json;
           handoff: boolean;
           id: string;
+          last_render: Json | null;
           offered: Json | null;
           pending_quote: Json | null;
           pending_zone_render: boolean;
@@ -116,6 +117,7 @@ export type Database = {
           flow?: Json;
           handoff?: boolean;
           id?: string;
+          last_render?: Json | null;
           offered?: Json | null;
           pending_quote?: Json | null;
           pending_zone_render?: boolean;
@@ -137,6 +139,7 @@ export type Database = {
           flow?: Json;
           handoff?: boolean;
           id?: string;
+          last_render?: Json | null;
           offered?: Json | null;
           pending_quote?: Json | null;
           pending_zone_render?: boolean;

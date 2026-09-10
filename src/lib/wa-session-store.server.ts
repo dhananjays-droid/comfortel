@@ -25,6 +25,7 @@ type SessionRow = {
   room_at: string | null;
   room_spec_wall_cm: number | null;
   room_spec_depth_cm: number | null;
+  last_render: unknown;
   offered: unknown;
   pending_zone_render: boolean;
   pending_quote: unknown;
@@ -65,7 +66,7 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
       const { data, error } = await supabaseAdmin
         .from("sessions")
         .select(
-          "transcript, plan, flow, room_url, room_at, room_spec_wall_cm, room_spec_depth_cm, offered, pending_zone_render, pending_quote, handoff, customer_name, phone_last4",
+          "transcript, plan, flow, room_url, room_at, room_spec_wall_cm, room_spec_depth_cm, last_render, offered, pending_zone_render, pending_quote, handoff, customer_name, phone_last4",
         )
         .eq("session_key", sessionKey)
         .maybeSingle();
@@ -96,6 +97,7 @@ function sessionFromRow(row: SessionRow): SessionState {
     flow: row.flow,
     roomSpec,
     room,
+    lastRender: row.last_render,
     offered: row.offered,
     pendingZoneRender: row.pending_zone_render,
     pendingQuote: row.pending_quote,
@@ -120,6 +122,7 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
         room_at: clean.room ? new Date(clean.room.at).toISOString() : null,
         room_spec_wall_cm: clean.roomSpec?.wallCm ?? null,
         room_spec_depth_cm: clean.roomSpec?.depthCm ?? null,
+        last_render: clean.lastRender,
         offered: clean.offered,
         pending_zone_render: clean.pendingZoneRender,
         pending_quote: clean.pendingQuote,

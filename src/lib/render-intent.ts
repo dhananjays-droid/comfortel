@@ -80,14 +80,81 @@ const REFUSALS = [
   /\b(?:text|words)\s+only\b/,
 ];
 
-/** True only when this turn is asking for a picture. */
-export function wantsRender(text: string): boolean {
+/**
+ * Turns of phrase that ask to change something about a render already
+ * delivered — "make the chairs blue", "can you make it bigger", "the
+ * mirror should be round instead". These are exactly the reactions this
+ * module's own docstring names as false positives to guard against
+ * ("the chairs look a bit too big in that") — they were never meant to
+ * fire a brand-new render, and still shouldn't. What changed is there is
+ * now a cheap, surgical edit mode for precisely this shape of request, so
+ * a live one deserves a tap-free "yes, on it" rather than either silence
+ * or an expensive full rebuild.
+ *
+ * Checked ONLY when hasRecentRender is true (see wantsRender below) —
+ * outside that context these same words are ordinary conversation ("make
+ * it cheaper", "add the trolley to my plan") and must not spend on
+ * anything. Confining the blast radius to sessions with something to edit
+ * is the actual safeguard here, not the wording of the patterns.
+ */
+/** How the current picture is described as being wrong — shared between the
+ * "too/so ___" pattern and the "looks ___" pattern below, since both are
+ * really the same complaint said two different ways. */
+const APPEARANCE_ADJ =
+  "big|small|large|tall|short|dark|light|bright|busy|plain|crowded|bare|empty|off|wrong|odd|strange|dull|cramped|tight|narrow|wide";
+
+const EDIT_ASKS = [
+  // make/turn/change/swap + a pointer to something already in the picture
+  /\b(?:make|turn|change|swap)\b[\s\S]{0,25}\b(?:it|them|this|that|these|those|the\s+\S+)\b/,
+  // adding, removing or repositioning something already in the picture
+  /\b(?:add|remove|take\s+out|get\s+rid\s+of|move|shift)\b/,
+  // "too big", "so dark", "a bit off" — an intensifier plus what's wrong,
+  // matching regardless of what comes before it ("the chairs look a bit
+  // too big in that" still hits on "too big").
+  new RegExp(`\\b(?:too|so|kind\\s+of|kinda)\\s+(?:${APPEARANCE_ADJ})\\b`),
+  // "can the mirrors be bigger" — a comparative on its own already implies
+  // a direction to change in, no intensifier needed.
+  /\b(?:bigger|smaller|larger|taller|shorter|darker|lighter|brighter|wider|narrower)\b/,
+  // "the trolley is in the wrong place"
+  /\bwrong\s+(?:place|position|spot|colou?r|size|angle)\b/,
+  // "the mirror should be round instead"
+  /\binstead\s+of\b/,
+  // "the colour looks off", "why does it look so dark" — "so dark" is
+  // already covered above; "looks off"/"look wrong" needs its own pattern
+  // since APPEARANCE_ADJ's other words read oddly after "looks".
+  /\blooks?\s+(?:off|wrong|odd|strange|dull)\b/,
+];
+
+/**
+ * "Make it cheaper" and "add the trolley to my plan" both match EDIT_ASKS's
+ * make/add patterns, but neither is asking to change the picture — they're
+ * price talk and a plan action respectively, exactly the kind of ordinary
+ * follow-up a customer has after seeing a render. The model still decides
+ * whether to actually emit [RENDER: edit] regardless of this function's
+ * answer, so a false positive here isn't independently billable — but
+ * excluding the clearest cases costs nothing and matches the same instinct
+ * that keeps ASKS's own "make" pattern from firing bare.
+ */
+const EDIT_REFUSALS =
+  /\b(?:cheap|cheaper|cheapest|price|priced|pricing|cost|costly|expensive|budget|afford|(?:my|the|a|another)\s+plan|to\s+(?:the\s+)?plan|quote)\b/;
+
+/**
+ * True only when this turn is asking for a picture.
+ *
+ * `hasRecentRender` widens what counts, for one turn only: a customer
+ * reacting to a picture they were just shown ("make the chairs blue") is
+ * asking for an edit exactly as clearly as "render this in my space" asks
+ * for a first render, even though the words themselves look nothing alike
+ * — see EDIT_ASKS above for why this is scoped to that context only.
+ */
+export function wantsRender(text: string, hasRecentRender = false): boolean {
   if (typeof text !== "string") return false;
   const t = text.toLowerCase();
   if (!t.trim()) return false;
 
   if (REFUSALS.some((r) => r.test(t))) return false;
   if (ASKS.some((r) => r.test(t))) return true;
+  if (hasRecentRender && !EDIT_REFUSALS.test(t) && EDIT_ASKS.some((r) => r.test(t))) return true;
   return SHOW.test(t) && POINTS_AT.test(t);
 }
 

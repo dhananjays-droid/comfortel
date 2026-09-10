@@ -96,9 +96,16 @@ export const Route = createFileRoute("/")({
 // the customer reads and the transcript the model reads never drift apart.
 
 type VisualizeJob = {
-  /** One id for the placement modes; several for a refit or a lineup. */
+  /** One id for the placement modes; several for a refit or a lineup.
+   * Empty for edit — it changes something already in the anchor photo
+   * rather than installing a new piece. */
   productIds: string[];
   base64: string;
+  /** edit's anchor: the last delivered render's URL, resolved to base64
+   * server-side (see visualize.functions.ts's roomImageUrl) rather than
+   * client-side, to avoid a cross-origin fetch of whatever's actually
+   * hosting it. Ignored by every other mode, which sends `base64` instead. */
+  roomImageUrl?: string | undefined;
   mode: VisualizeMode;
   aspectRatio: string;
   /** Which part of the salon this render covers, on a zone render. */
@@ -563,6 +570,19 @@ function Index() {
   // A ref, not state: runChat reads it in the same tick that send() sets it.
   const roomPhotoRef = useRef<RoomPhoto | null>(null);
   /**
+   * The last delivered render — what a "make the chairs blue" follow-up
+   * actually edits. A ref, same reasoning as roomPhotoRef: runChat needs it
+   * in the same tick a reply arrives. No TTL, unlike WhatsApp's
+   * liveLastRender — the browser tab itself is the session boundary here,
+   * same as roomPhotoRef never expiring either.
+   */
+  const lastRenderRef = useRef<{
+    imageUrl: string;
+    mode: VisualizeMode;
+    productIds: string[];
+    quantities: Record<string, number> | undefined;
+  } | null>(null);
+  /**
    * Mirrors whether roomPhotoRef holds anything. The ref stays a ref because
    * send() reads it in the same tick it is set; this state exists so the plan
    * tray actually re-renders when a photo arrives, rather than showing a stale
@@ -715,11 +735,23 @@ function Index() {
         // chair into a fact about their floor plan.
         const note = shortfallNote(shortfallFrom(expected, verdict), verdict.elsewhere);
         patchRender(entry.id, { status: "done", imageUrl, ...(note ? { note } : {}) });
+        lastRenderRef.current = {
+          imageUrl,
+          mode: entry.job.mode,
+          productIds: entry.job.productIds,
+          quantities: entry.job.quantities,
+        };
         return;
       } catch {
         // An inspection we could not run is not a reason to withhold the image.
       }
       patchRender(entry.id, { status: "done", imageUrl });
+      lastRenderRef.current = {
+        imageUrl,
+        mode: entry.job.mode,
+        productIds: entry.job.productIds,
+        quantities: entry.job.quantities,
+      };
     },
     [patchRender, runInspect],
   );
@@ -746,6 +778,7 @@ function Index() {
             ...(job.quantities ? { quantities: job.quantities } : {}),
             ...(job.room ? { room: job.room } : {}),
             ...(job.note ? { note: job.note } : {}),
+            ...(job.roomImageUrl ? { roomImageUrl: job.roomImageUrl } : {}),
           },
         });
 
@@ -790,6 +823,64 @@ function Index() {
     runRenderRef.current = runRender;
   }, [runRender]);
 
+  /**
+   * A targeted change to the last render — "make the chairs blue" — not a
+   * new composition. Deliberately not routed through startRender: that
+   * function's whole shape (products, a customer room photo, per-mode
+   * wording) doesn't apply here. edit anchors on the previous RESULT image
+   * via lastRenderRef, never a customer's own photo, and installs nothing
+   * new — see wa-runtime.ts's startEditTurn for the WhatsApp equivalent.
+   * Defined here, before runChat, because runChat's own dependency array
+   * references it — a plain function declared after runChat would still
+   * work inside runChat's *body* (closures resolve late), but not inside
+   * its dependency array, which React reads immediately on every render.
+   */
+  const startEditRender = useCallback(
+    (note: string | undefined) => {
+      const last = lastRenderRef.current;
+      if (!last) return;
+
+      const entry: RenderEntry = {
+        id: nextId(),
+        job: {
+          productIds: [],
+          base64: "",
+          roomImageUrl: last.imageUrl,
+          mode: "edit",
+          aspectRatio: "3:2",
+          ...(note ? { note } : {}),
+        },
+        vis: {
+          productIds: [],
+          label: "Your updated render",
+          // The previous result, not a customer photo — the before/after
+          // toggle compares the edit against what it actually changed.
+          before: last.imageUrl,
+          status: "loading",
+        },
+      };
+
+      const asked: Message = {
+        id: nextId(),
+        role: "user",
+        kind: "text",
+        content: note ? `Change the render: ${note}` : "Update my last render.",
+      };
+      const message: Message = {
+        id: nextId(),
+        role: "assistant",
+        kind: "visualization",
+        content: "",
+        entries: [entry],
+      };
+
+      setPlanCollapsed(true);
+      setMessages((prev) => [...prev, asked, message]);
+      void runRender(entry);
+    },
+    [runRender],
+  );
+
   // ---- chat ---------------------------------------------------------------
   const runChat = useCallback(
     async (history: Message[], photoAttached: boolean) => {
@@ -815,7 +906,12 @@ function Index() {
         );
 
         const res = await sendChat({
-          data: { messages: payload, hasRoomPhoto: photoAttached, plan },
+          data: {
+            messages: payload,
+            hasRoomPhoto: photoAttached,
+            hasRecentRender: lastRenderRef.current !== null,
+            plan,
+          },
         });
 
         const next: Message[] = [
@@ -829,11 +925,18 @@ function Index() {
             // Offered, not spent: the model asked to render on a turn that did
             // not ask for one, so it becomes a button the customer can decline
             // by simply not tapping it.
-            ...(res.offer && (roomPhotoRef.current || res.offer.mode === "staged_room")
+            ...(res.offer &&
+            (roomPhotoRef.current || res.offer.mode === "staged_room" || res.offer.mode === "edit")
               ? { offer: res.offer }
               : {}),
           },
         ];
+
+        if (res.render?.mode === "edit" && lastRenderRef.current) {
+          setMessages(next);
+          startEditRender(res.render.note);
+          return;
+        }
 
         // The assistant can ask for renders itself. Every mode but staged_room
         // needs a photograph; staged_room builds the room from the references,
@@ -871,7 +974,7 @@ function Index() {
         setThinking(false);
       }
     },
-    [sendChat, runRender],
+    [sendChat, runRender, startEditRender],
   );
 
   /**
@@ -1048,6 +1151,10 @@ function Index() {
    * into the thread, which keeps the transcript honest about who asked.
    */
   function acceptOffer(offer: RenderRequest) {
+    if (offer.mode === "edit") {
+      startEditRender(offer.note);
+      return;
+    }
     const staged = offer.mode === "staged_room";
     const photo = roomPhotoRef.current;
     if (!photo && !staged) return;

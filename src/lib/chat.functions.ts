@@ -256,6 +256,12 @@ const CATALOG_BLOCK = JSON.stringify(CATALOG_SLIM);
 export function parseChatInput(input: {
   messages: ChatMessageInput[];
   hasRoomPhoto?: boolean;
+  /** Whether a render was delivered recently enough to still be editable
+   * (see wa-session.ts's liveLastRender / index.tsx's lastRenderRef).
+   * Widens what counts as a render ask for this turn only — see
+   * render-intent.ts's EDIT_ASKS — and is what lets the model use `edit`
+   * mode at all, the same way hasRoomPhoto gates every other mode. */
+  hasRecentRender?: boolean;
   plan?: PlanLine[];
 }) {
   {
@@ -293,7 +299,12 @@ export function parseChatInput(input: {
       .filter((line): line is PlanLine => line !== null)
       .slice(0, MAX_PLAN_LINES);
 
-    return { messages, hasRoomPhoto: input.hasRoomPhoto === true, plan };
+    return {
+      messages,
+      hasRoomPhoto: input.hasRoomPhoto === true,
+      hasRecentRender: input.hasRecentRender === true,
+      plan,
+    };
   }
 }
 
@@ -338,7 +349,10 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
               text: [
                 data.hasRoomPhoto
                   ? "A photo of the customer's salon IS attached to this conversation. You may emit a RENDER line."
-                  : "No photo of the customer's salon is attached yet. Do not emit a RENDER line.",
+                  : "No photo of the customer's salon is attached yet. Do not emit a RENDER line unless it is staged_room or edit, which need no photo.",
+                data.hasRecentRender
+                  ? "A render was delivered to the customer recently enough to still be editable. If their message asks for a specific change to it, use [RENDER: edit] — see the edit mode instructions above."
+                  : "No render is currently editable. Never emit [RENDER: edit] — there is nothing for it to change.",
                 describePlan(data.plan),
               ].join("\n\n"),
             },
@@ -398,7 +412,14 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
         // used to) silently dropped every staged_room request from a
         // customer who had never sent a photo, with no error and no
         // fallback reply — a real production bug, not a hypothetical one.
-        if (!data.hasRoomPhoto && mode !== "staged_room") continue;
+        // edit needs its own gate: it anchors on the last delivered render,
+        // not a customer photo, so hasRoomPhoto says nothing about whether
+        // it's usable.
+        if (mode === "edit") {
+          if (!data.hasRecentRender) continue;
+        } else if (!data.hasRoomPhoto && mode !== "staged_room") {
+          continue;
+        }
         const first = isVisualizeMode(parts[0]) ? 1 : 0;
         // id:count (staged_room, refit_room) names how many of that piece —
         // "three Oakley chairs in an empty salon" with no plan built yet had
@@ -420,7 +441,11 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
               }),
           ),
         ).slice(0, MAX_RENDERS);
-        if (renderIds.length) {
+        // edit is the one mode with no product to name — it changes
+        // something already in the anchor photo rather than installing a
+        // new piece, so an empty renderIds is expected, not a reason to
+        // skip the marker the way it is for every other mode.
+        if (renderIds.length || mode === "edit") {
           const quantities = Object.keys(renderQuantities).length ? renderQuantities : undefined;
           const userTurn = lastUserTurn(data.messages);
           const note = noteFrom(userTurn);
@@ -429,7 +454,9 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
           // from the first upload onwards — which billed for half of an
           // ordinary conversation about a picture the customer already had.
           // Asking for a render is now the customer's move, not the model's.
-          if (wantsRender(userTurn)) {
+          // hasRecentRender widens what counts as asking for THIS turn only
+          // — see render-intent.ts's EDIT_ASKS.
+          if (wantsRender(userTurn, data.hasRecentRender)) {
             render = { mode, productIds: renderIds, quantities, note };
           } else {
             offer = { mode, productIds: renderIds, quantities, note };

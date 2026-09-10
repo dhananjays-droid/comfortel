@@ -13,7 +13,22 @@ export type VisualizeMode =
    * could not use the feature at all. Here the references ARE the input and
    * image 1 is a product, not a room.
    */
-  | "staged_room";
+  | "staged_room"
+  /**
+   * A targeted change to a render the customer was already shown — "make
+   * the chairs blue", "add a plant in the corner" — not a new composition.
+   *
+   * Every other mode anchors on either the customer's own room photo or a
+   * fresh invented one; this is the one mode where image 1 is neither —
+   * it's the PREVIOUS RESULT, fed back in as the thing being edited. No
+   * product references: an edit changes what's already in the picture, it
+   * doesn't install anything new (that's a fresh render, a different ask).
+   * The caller resolves which image "the last one" actually is (see
+   * SessionLastRender on WhatsApp, lastRenderRef on the web) — this module
+   * only ever sees whatever roomImageBase64 it's handed, same as every
+   * other mode.
+   */
+  | "edit";
 
 export const VISUALIZE_MODES: VisualizeMode[] = [
   "replace",
@@ -22,14 +37,17 @@ export const VISUALIZE_MODES: VisualizeMode[] = [
   "refit_room",
   "lineup",
   "staged_room",
+  "edit",
 ];
 
 /** Modes that render ONE image from several product references. */
 export const MULTI_REFERENCE_MODES: VisualizeMode[] = ["refit_room", "lineup", "staged_room"];
 
-/** The one mode that needs no room photograph. */
+/** The two modes that need no CUSTOMER-uploaded room photograph — staged_room
+ * invents one, edit anchors on a previous result instead. Callers still owe
+ * edit an image (the last render), just not one the customer took. */
 export function needsRoomPhoto(mode: VisualizeMode): boolean {
-  return mode !== "staged_room";
+  return mode !== "staged_room" && mode !== "edit";
 }
 
 export function isMultiReferenceMode(mode: VisualizeMode): boolean {
@@ -816,6 +834,33 @@ function buildLineupPrompt(
 }
 
 /**
+ * A targeted edit of a render the customer was already shown.
+ *
+ * No product references, no quantities, no room-preservation clause about
+ * "the customer's real room" — image 1 here is the PREVIOUS RESULT, and the
+ * entire job is changing the one thing asked for while leaving literally
+ * everything else in that photograph alone. Every other builder in this
+ * file assembles a room; this one edits an existing photograph of one.
+ */
+function buildEditPrompt(note?: string, correction?: string): string {
+  const change = note?.trim();
+  return assemble([
+    req(
+      `The first image is a photorealistic photograph of a salon that was already built and shown to this customer. You are editing THIS photograph, not composing a new one.`,
+    ),
+    req(
+      change
+        ? `Make ONLY this change: "${change}". Do not change anything else in the photograph — not the layout, not any other furniture, not the room itself, not the lighting, not the camera angle or framing, not any person or object visible in it. Every pixel outside the area this change actually touches must stay exactly as it already is.`
+        : `Make the smallest, most literal edit you can justify from context — no change was clearly stated, so do not use that as licence to redesign anything else in the photograph.`,
+    ),
+    req(
+      `The edited result must read as the same unedited photograph with one thing different — matching exposure, white balance, resolution and photographic grain exactly at the seam, so nothing looks pasted in or re-lit.`,
+    ),
+    ...correctionClauses(correction),
+  ]);
+}
+
+/**
  * Builds the salon placement prompt, omitting clauses whose source field is
  * missing. Takes a list because refit_room and lineup render one image from
  * several product references; the other modes use the first entry only.
@@ -842,6 +887,7 @@ export function buildSalonPrompt(
     return buildLineupPrompt(products.slice(0, MAX_REFERENCES), correction, note);
   if (mode === "staged_room")
     return buildStagedPrompt(products.slice(0, MAX_REFERENCES), correction, room, note);
+  if (mode === "edit") return buildEditPrompt(note, correction);
 
   const product = products[0];
   if (!product) throw new Error("buildSalonPrompt needs at least one product");
@@ -1052,14 +1098,20 @@ export function buildRenderRequest(
 ): { prompt: string; imageUrls: string[] } {
   const prompt = buildSalonPrompt(products, mode, scene, correction, room, note);
 
-  const imageUrls = isMultiReferenceMode(mode)
-    ? // several views per product, sharing the slots the API leaves free — all
-      // 16 when there is no room photograph taking the first one.
-      allocateReferences(products.slice(0, MAX_REFERENCES), needsRoomPhoto(mode) ? 2 : 1).flatMap(
-        (b) => b.views.map((v) => v.url),
-      )
-    : // several views of THE SAME product
-      referenceViews(products[0] as VisualizeProduct).map((v) => v.url);
+  const imageUrls =
+    mode === "edit"
+      ? // No product references at all — the only image is the anchor photo
+        // itself, sent separately as the "room" (see runVisualizeStart).
+        []
+      : isMultiReferenceMode(mode)
+        ? // several views per product, sharing the slots the API leaves free —
+          // all 16 when there is no room photograph taking the first one.
+          allocateReferences(
+            products.slice(0, MAX_REFERENCES),
+            needsRoomPhoto(mode) ? 2 : 1,
+          ).flatMap((b) => b.views.map((v) => v.url))
+        : // several views of THE SAME product
+          referenceViews(products[0] as VisualizeProduct).map((v) => v.url);
 
   return { prompt, imageUrls };
 }
