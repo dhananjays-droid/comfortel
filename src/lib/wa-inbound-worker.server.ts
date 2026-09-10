@@ -44,10 +44,18 @@ async function processJob(job: QueuedInboundJob): Promise<void> {
 }
 
 export async function runInboundBatch(): Promise<{ claimed: number; chained: boolean }> {
-  const jobs = await claimInboundJobs(BATCH_SIZE);
-  await Promise.all(jobs.map(processJob));
-  const chained = jobs.length > 0 ? await triggerInboundWorker() : false;
-  return { claimed: jobs.length, chained };
+  const deadline = Date.now() + 45_000;
+  let claimed = 0;
+  // Drain successive messages for a customer locally, rather than depending
+  // on another HTTP invocation after every batch.
+  for (;;) {
+    const jobs = await claimInboundJobs(BATCH_SIZE);
+    if (!jobs.length) return { claimed, chained: false };
+    claimed += jobs.length;
+    await Promise.all(jobs.map(processJob));
+    if (Date.now() >= deadline) break;
+  }
+  return { claimed, chained: await triggerInboundWorker() };
 }
 
 export async function handleInboundWorkerTick(request: Request): Promise<Response> {
@@ -55,7 +63,7 @@ export async function handleInboundWorkerTick(request: Request): Promise<Respons
 
   try {
     const result = await runInboundBatch();
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ worker: "wa-inbound", ...result }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });

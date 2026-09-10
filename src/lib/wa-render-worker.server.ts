@@ -604,6 +604,16 @@ export async function handleRenderWorkerTick(request: Request): Promise<Response
   if (!authenticated(request)) return new Response("Unauthorized", { status: 401 });
 
   const depth = readDepth(request);
+  // The existing external scheduler calls this route every minute. Recover
+  // stranded inbound messages here too, without relying on a self-fetch.
+  if (depth === 0) {
+    try {
+      const { runInboundBatch } = await import("@/lib/wa-inbound-worker.server");
+      await runInboundBatch();
+    } catch (error) {
+      console.error("WhatsApp inbound recovery failed", error);
+    }
+  }
   const startedAt = Date.now();
 
   const pending = await claimPendingJobs(BATCH_SIZE);
