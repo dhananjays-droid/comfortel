@@ -323,4 +323,20 @@ describe("roleDiffReason", () => {
   it("is undefined when every role happens to match", () => {
     expect(roleDiffReason(balanced!, { ...balanced!, tier: "lean" })).toBeUndefined();
   });
+
+  it("falls back to naming a quantity difference when every product is identical", () => {
+    // Confirmed live: two tiers priced $549 apart — the exact cost of one
+    // trolley — with every product otherwise identical between them, and
+    // nothing in the reasons saying so. fitToBand only ever swaps a
+    // product, never a quantity, so a quantity-only difference is entirely
+    // the model's own doing and this function used to miss it completely.
+    const withExtraTrolley: Package = {
+      ...balanced!,
+      tier: "premium",
+      lines: balanced!.lines.map((line) =>
+        line.role === "trolley" ? { ...line, qty: line.qty + 1 } : line,
+      ),
+    };
+    expect(roleDiffReason(withExtraTrolley, balanced!)).toMatch(/trolleys? instead of/);
+  });
 });
