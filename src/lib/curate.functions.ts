@@ -281,9 +281,21 @@ export async function runCuratePackages(data: CurateInput): Promise<CuratedResul
         // The model's composition, tuned by code to the tier's price band.
         const target = data.budget * (TIER_TARGET[adopted.tier] ?? 1);
         const fitted = fitToBand(adopted, target);
+        // fitToBand can swap the specific product within a role to hit the
+        // target — the model's rationale describes what IT proposed, and a
+        // swap after the fact can leave that sentence naming a product that
+        // is no longer in the package at all. Confirmed live: a rationale
+        // calling out "the black textured Blake chairs" sitting right above
+        // an itemized list showing Panther chairs instead — fitToBand had
+        // swapped the styling line to hit the balanced target, and the
+        // stale rationale went out unchanged. Safer to drop a sentence than
+        // to tell a customer about a chair they are not being offered.
+        const swapped = fitted.lines.some(
+          (line, i) => line.product.id !== adopted.lines[i]?.product.id,
+        );
         packages.push({
           ...fitted,
-          reasons: reasonsFor(fitted, data.budget, one.rationale),
+          reasons: reasonsFor(fitted, data.budget, swapped ? undefined : one.rationale),
         });
       }
 

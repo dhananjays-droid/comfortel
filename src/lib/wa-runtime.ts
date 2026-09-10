@@ -38,6 +38,7 @@ import {
   distinctPackages,
   idsOf,
   needsFor,
+  packageLine,
   TIER_LABEL,
   type Package,
 } from "@/lib/packages";
@@ -408,13 +409,13 @@ async function offerPackages(
     ? [
         `${note} ${howMany}`,
         "",
-        `*Full fit-out*: ${formatPrice(solo.total)}. ${solo.reasons[0] ?? ""}`,
+        `*Full fit-out*: ${formatPrice(solo.total)}. ${packageLine(solo)}`,
       ].join("\n")
     : [
         `${note} ${howMany}`,
         "",
         ...packages.map(
-          (p) => `*${TIER_LABEL[p.tier]}*: ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
+          (p) => `*${TIER_LABEL[p.tier]}*: ${formatPrice(p.total)}. ${packageLine(p)}`,
         ),
       ].join("\n");
   next = appendTranscript(next, "assistant", replyText);
@@ -464,13 +465,19 @@ function acceptPackageChoice(
   const itemized = pkg.lines
     .map(
       (line) =>
-        `• ${line.qty}× ${line.product.name} — ${formatPrice(line.product.price ?? 0)} each`,
+        `• ${line.qty}× ${line.product.name} — ${formatPrice(line.product.price ?? 0)}${line.qty > 1 ? " each" : ""}`,
     )
     .join("\n");
 
+  // Two sentences, not a run-on of every fact the package data happens to
+  // carry. `pkg.reasons` holds the budget delta, the "why" (a model
+  // rationale or the deterministic packer's own explanation — see
+  // packageLine()), a restatement of the station/piece count the headline
+  // and the bullets below already cover, and (rarely) a missing-role note —
+  // confirmed live: joining all of them with spaces read as one dense,
+  // repetitive paragraph rather than something a person would actually say.
   const replyText = [
-    `Here is your plan, ${summary}.`,
-    ...pkg.reasons,
+    `Here is your plan — ${summary}. ${packageLine(pkg)}`.trim(),
     choice.byZone
       ? "Add a photo of your room and I'll render it zone by zone."
       : "Add a photo of your room and I'll render these into it.",

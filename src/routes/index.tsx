@@ -40,6 +40,7 @@ import {
   distinctPackages,
   idsOf,
   needsFor,
+  packageLine,
   stationsForBudget,
   type Package,
 } from "@/lib/packages";
@@ -1020,11 +1021,9 @@ function Index() {
             : "_Picked by catalogue rules this time — the assistant wasn't reachable, so these are matched on price band rather than on how they look together._",
           "",
           solo
-            ? `*Full fit-out* — ${formatPrice(solo.total)}. ${solo.reasons[0] ?? ""}`
+            ? `*Full fit-out* — ${formatPrice(solo.total)}. ${packageLine(solo)}`
             : packages
-                .map(
-                  (p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${p.reasons[0] ?? ""}`,
-                )
+                .map((p) => `*${TIER_LABEL[p.tier]}* — ${formatPrice(p.total)}. ${packageLine(p)}`)
                 .join("\n"),
         ].join("\n"),
         action: {
@@ -1309,8 +1308,7 @@ function Index() {
       role: "assistant",
       kind: "text",
       content: [
-        `Here is your plan — ${summary}.`,
-        ...result.pkg.reasons,
+        `Here is your plan — ${summary}. ${packageLine(result.pkg)}`.trim(),
         result.byZone
           ? "Add a photo of your room and I'll render it zone by zone."
           : "Add a photo of your room and I'll render these into it.",
