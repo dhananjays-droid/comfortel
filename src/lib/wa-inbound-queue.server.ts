@@ -93,6 +93,8 @@ export async function retryOrFailInboundJob(job: QueuedInboundJob, error: unknow
 function workerBaseUrl(): string | null {
   const explicit = (process.env["PUBLIC_BASE_URL"] ?? "").trim().replace(/\/+$/, "");
   if (explicit) return explicit;
+  const production = (process.env["VERCEL_PROJECT_PRODUCTION_URL"] ?? "").trim();
+  if (process.env["VERCEL_ENV"] === "production" && production) return `https://${production}`;
   const vercel = (process.env["VERCEL_URL"] ?? "").trim();
   return vercel ? `https://${vercel}` : null;
 }
@@ -109,10 +111,15 @@ export async function triggerInboundWorker(): Promise<boolean> {
     const response = await fetch(`${base}/api/cron/wa-inbound-worker`, {
       headers: { authorization: `Bearer ${secret}` },
       signal: controller.signal,
+      redirect: "error",
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const result = await response.json();
+    return result?.worker === "wa-inbound" && Number.isInteger(result.claimed);
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") return true;
+    // A timeout proves nothing about acceptance. The webhook must try the
+    // database-backed fallback; atomic claims prevent double processing.
+    if (error instanceof Error && error.name === "AbortError") return false;
     console.error("triggerInboundWorker failed", error);
     return false;
   } finally {
