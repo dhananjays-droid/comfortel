@@ -63,11 +63,22 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
   for (let attempt = 1; attempt <= MAX_LOAD_ATTEMPTS; attempt++) {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      // `select("*")`, not an explicit column list: this table has had a new
+      // column added and deployed ahead of its migration three separate
+      // times now (pending_quote, customer_name/phone_last4, last_render),
+      // and every one of those times PostgREST failed the WHOLE query over
+      // one column that didn't exist yet — not a transient blip retrying
+      // can fix, so every single load fell back to EMPTY_SESSION and every
+      // single reply re-sent the greeting, mid-conversation, until someone
+      // ran the migration. `select("*")` can't fail this way: it names no
+      // column PostgREST could reject, so a column the code references but
+      // the migration hasn't landed yet just reads as undefined —
+      // sanitizeSession already treats every field as optional and
+      // defaults it — degrading that one feature instead of the entire
+      // session.
       const { data, error } = await supabaseAdmin
         .from("sessions")
-        .select(
-          "transcript, plan, flow, room_url, room_at, room_spec_wall_cm, room_spec_depth_cm, last_render, offered, pending_zone_render, pending_quote, handoff, customer_name, phone_last4",
-        )
+        .select("*")
         .eq("session_key", sessionKey)
         .maybeSingle();
       if (error) throw error;
