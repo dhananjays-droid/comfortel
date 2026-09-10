@@ -1,6 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { buildPackages, needsFor, type Package, type Role, type Tier } from "@/lib/packages";
+import {
+  buildPackages,
+  needsFor,
+  roleDiffReason,
+  type Package,
+  type Role,
+  type Tier,
+} from "@/lib/packages";
 import { adopt, fitToBand, reasonsFor, sampleCandidates, type ProposedPackage } from "@/lib/curate";
 
 /**
@@ -268,7 +275,11 @@ export async function runCuratePackages(data: CurateInput): Promise<CuratedResul
         return fallback();
       }
 
-      const packages: Package[] = [];
+      const fittedPackages: Array<{
+        pkg: Package;
+        rationale: string | undefined;
+        swapped: boolean;
+      }> = [];
       for (const one of proposed) {
         const { package: adopted, issues } = adopt(one);
         if (issues.length) console.warn("curate: rejected lines", JSON.stringify(issues));
@@ -293,27 +304,44 @@ export async function runCuratePackages(data: CurateInput): Promise<CuratedResul
         const swapped = fitted.lines.some(
           (line, i) => line.product.id !== adopted.lines[i]?.product.id,
         );
-        packages.push({
-          ...fitted,
-          reasons: reasonsFor(fitted, data.budget, swapped ? undefined : one.rationale),
-        });
+        fittedPackages.push({ pkg: fitted, rationale: one.rationale, swapped });
       }
 
       // Anything short of three tiers is not the choice we promised the customer.
-      if (packages.length < 3) {
-        console.warn(`curate: only ${packages.length}/3 packages survived validation`);
+      if (fittedPackages.length < 3) {
+        console.warn(`curate: only ${fittedPackages.length}/3 packages survived validation`);
         return fallback();
       }
-      console.log(`curate: adopted ${packages.length} packages from the model`);
+      console.log(`curate: adopted ${fittedPackages.length} packages from the model`);
 
-      // Relabel by what things actually cost. The model names its own tiers, and
-      // band-fitting then moves each package by a different amount depending on
-      // what its composition allows — which produced a "Stretch" that was the
-      // cheapest of the three. A tier name that contradicts the price beside it
-      // is worse than no tier name at all, so the order decides the label.
-      packages.sort((a, b) => a.total - b.total);
+      // Relabel by what things actually cost, BEFORE computing reasons, not
+      // after — the model names its own tiers, and band-fitting then moves
+      // each package by a different amount depending on what its
+      // composition allows, which produced a "Stretch" that was the
+      // cheapest of the three. Reasons compared against the model's
+      // self-assigned "balanced" would then be comparing against the wrong
+      // package once relabelled; comparing against whichever one actually
+      // displays as "balanced" is the only version a customer ever sees.
+      fittedPackages.sort((a, b) => a.pkg.total - b.pkg.total);
       const ORDER: Tier[] = ["lean", "balanced", "premium"];
-      const labelled = packages.map((pkg, i) => ({ ...pkg, tier: ORDER[i] ?? pkg.tier }));
+      const relabelled = fittedPackages.map(({ pkg, rationale, swapped }, i) => ({
+        pkg: { ...pkg, tier: ORDER[i] ?? pkg.tier },
+        rationale,
+        swapped,
+      }));
+      const balanced = relabelled.find((p) => p.pkg.tier === "balanced")?.pkg;
+
+      const labelled = relabelled.map(({ pkg, rationale, swapped }) => {
+        // The mechanical differentiator — see roleDiffReason's own doc
+        // comment for why this, not the model's rationale, is what
+        // packageLine() actually needs to help a customer choose between
+        // three unseen options.
+        const roleDiff = balanced ? roleDiffReason(pkg, balanced) : undefined;
+        return {
+          ...pkg,
+          reasons: reasonsFor(pkg, data.budget, swapped ? undefined : rationale, roleDiff),
+        };
+      });
 
       return { packages: labelled, curated: true };
     } catch (err) {

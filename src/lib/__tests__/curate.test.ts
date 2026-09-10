@@ -183,6 +183,27 @@ describe("reasonsFor", () => {
   it("counts stations and pieces from the lines", () => {
     expect(reasonsFor(pkg, 20000).join(" ")).toMatch(/4 stations, 8 pieces/);
   });
+
+  it("puts the mechanical role diff before the model's rationale", () => {
+    // packageLine() only ever shows reasons[0] and [1] — confirmed live,
+    // showing the rationale there meant a customer saw prose or nothing
+    // (whenever fitToBand swapped a product and the rationale got
+    // dropped), never the one thing that actually helps them choose: what
+    // is physically different between the tiers.
+    const reasons = reasonsFor(
+      pkg,
+      20000,
+      "Boho pieces throughout.",
+      "Saved on the mirrors: A rather than B.",
+    );
+    expect(reasons[1]).toBe("Saved on the mirrors: A rather than B.");
+    expect(reasons).toContain("Boho pieces throughout.");
+  });
+
+  it("still works with no role diff at all — e.g. the balanced tier itself", () => {
+    const reasons = reasonsFor(pkg, 20000, "Boho pieces throughout.", undefined);
+    expect(reasons[1]).toBe("Boho pieces throughout.");
+  });
 });
 
 describe("fitToBand", () => {
