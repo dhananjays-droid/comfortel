@@ -310,7 +310,7 @@ export function parseChatInput(input: {
 
 export type ChatInput = ReturnType<typeof parseChatInput>;
 
-export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
+export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promise<ChatReply> {
   {
     try {
       const apiKey = process.env["ANTHROPIC_API_KEY"];
@@ -321,6 +321,11 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
       const messages = [...data.messages];
       while (messages.length && messages[0]!.role === "assistant") messages.shift();
       if (!messages.length) throw new Error("no user turn in window");
+
+      const channelInstructions =
+        channel === "whatsapp"
+          ? (await import("@/lib/wa-knowledge")).whatsappKnowledgeInstructions()
+          : null;
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -334,6 +339,7 @@ export async function runChatTurn(data: ChatInput): Promise<ChatReply> {
           max_tokens: 1024,
           system: [
             { type: "text", text: SYSTEM_INSTRUCTIONS },
+            ...(channelInstructions ? [{ type: "text", text: channelInstructions }] : []),
             {
               type: "text",
               text: CATALOG_BLOCK,

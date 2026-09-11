@@ -1080,6 +1080,7 @@ async function runChatTurn(
         hasRecentRender: lastRender !== null,
         plan,
       }),
+      "whatsapp",
     );
   } catch (err) {
     console.error("wa-runtime: chat failed", err);

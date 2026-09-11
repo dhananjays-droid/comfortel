@@ -13,6 +13,8 @@
  * session key's HMAC (never read back, only re-derived and compared). The
  * inbound FIFO uses the same encryption because it replies from a separate
  * worker invocation after the original webhook has returned.
+ * The WhatsApp request inbox also uses this primitive for callback contact;
+ * its admin API only reveals the phone on an explicit per-request action.
  *
  * `WHATSAPP_PHONE_ENC_KEY` is deliberately a separate secret from
  * `WHATSAPP_SESSION_SECRET` — a leak of one shouldn't compromise the other.
