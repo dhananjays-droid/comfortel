@@ -827,7 +827,7 @@ describe("proactiveOfferTurn", () => {
     const turn = proactiveOfferTurn([REAL_ID, "another-id"]);
     expect(turn?.kind).toBe("buttons");
     if (turn?.kind === "buttons") {
-      expect(turn.action.buttons).toHaveLength(1);
+      expect(turn.action.buttons).toHaveLength(3);
       expect(turn.action.buttons[0]?.id).toBe(`offer:staged_room:${REAL_ID},another-id`);
       // WhatsApp's own 20-char button-title cap — a title over this silently
       // gets truncated by WhatsApp itself, a real bug a customer flagged

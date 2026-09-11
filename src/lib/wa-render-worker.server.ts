@@ -370,6 +370,10 @@ export function renderCtaButtons(
   return [
     { id: `plan:add:${idQty}`, title: "Add to my plan" },
     { id: `quote:${productIds.join(",")}`, title: "Get a quote" },
+    {
+      id: `docs:quote:${productIds.join(",")}:${productIds.map((id) => quantities?.[id] ?? 1).join(",")}`,
+      title: "PDF estimate",
+    },
   ];
 }
 

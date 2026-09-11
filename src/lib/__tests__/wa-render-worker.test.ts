@@ -42,6 +42,7 @@ describe("renderCtaButtons", () => {
     expect(buttons).toEqual([
       { id: "plan:add:a:3,b:1", title: "Add to my plan" },
       { id: "quote:a,b", title: "Get a quote" },
+      { id: "docs:quote:a,b:3,1", title: "PDF estimate" },
     ]);
   });
 

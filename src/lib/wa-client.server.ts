@@ -94,6 +94,38 @@ export async function sendText(to: string, body: string): Promise<string> {
   return send({ to, type: "text", text: { body: truncate(body, WA.body) } });
 }
 
+/** Upload directly to Meta; no public bucket/link exposing customer documents. */
+export async function sendDocument(
+  to: string,
+  bytes: Uint8Array,
+  filename: string,
+  caption: string,
+): Promise<string> {
+  if (bytes.byteLength > 10_000_000) throw new Error("PDF exceeds document size limit");
+  const { token, phoneNumberId } = credentials();
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", "application/pdf");
+  form.append("file", new Blob([new Uint8Array(bytes)], { type: "application/pdf" }), filename);
+  const response = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/media`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  const result = (await response.json()) as { id?: string };
+  if (!response.ok || !result.id)
+    throw new Error(`WhatsApp PDF upload failed (${response.status})`);
+  return send({
+    to,
+    type: "document",
+    document: { id: result.id, filename, caption: truncate(caption, 1024) },
+  });
+}
+
 export async function sendImage(to: string, imageUrl: string, caption?: string): Promise<string> {
   return send({
     to,

@@ -31,11 +31,13 @@ import {
   sendImage,
   sendList,
   sendText,
+  sendDocument,
 } from "@/lib/wa-client.server";
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
 import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-runtime";
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
 import { handleRequestInbound } from "@/lib/wa-requests.server";
+import { handleDocumentInbound } from "@/lib/wa-documents.server";
 import { waSessionKey } from "@/lib/wa-session.server";
 
 type InboundMessage = {
@@ -284,11 +286,20 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
       wa_message_id: waMessageId,
       direction: "outbound",
       session_key: sessionKey,
-      kind: turn.kind === "text" ? "text" : turn.kind === "product" ? "image" : "interactive",
+      kind:
+        turn.kind === "document"
+          ? "document"
+          : turn.kind === "text"
+            ? "text"
+            : turn.kind === "product"
+              ? "image"
+              : "interactive",
       payload:
-        turn.kind === "product"
-          ? { imageUrl: turn.imageUrl, caption: turn.caption }
-          : { text: turn.text },
+        turn.kind === "document"
+          ? { filename: turn.filename, caption: turn.caption, reference: turn.reference }
+          : turn.kind === "product"
+            ? { imageUrl: turn.imageUrl, caption: turn.caption }
+            : { text: turn.text },
     });
     if (error) console.error("logOutbound failed", error);
   } catch (err) {
@@ -346,18 +357,31 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
         continue;
       }
       const waMessageId =
-        turn.kind === "buttons"
-          ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
-          : turn.kind === "list"
-            ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
-            : turn.kind === "product"
-              ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
-              : await sendText(to, toWhatsAppMarkdown(turn.text));
+        turn.kind === "document"
+          ? await sendDocument(to, turn.bytes, turn.filename, turn.caption)
+          : turn.kind === "buttons"
+            ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
+            : turn.kind === "list"
+              ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
+              : turn.kind === "product"
+                ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
+                : await sendText(to, toWhatsAppMarkdown(turn.text));
       await logOutbound(waMessageId, sessionKey, turn);
     } catch (err) {
       // One turn failing to send (e.g. a rejected token) shouldn't stop the
       // rest of the reply, and must never bubble up into a non-200 ack.
       console.error("WhatsApp outbound send failed", err);
+      if (turn.kind === "document") {
+        try {
+          await sendText(
+            to,
+            "Sorry, the PDF couldn't be delivered. Please ask for it again in a moment. Your plan is unchanged.",
+          );
+        } catch {
+          /* Existing delivery-status monitoring handles provider outages. */
+        }
+        break; // Do not send a success/follow-up CTA after a failed attachment.
+      }
     }
   }
 }
@@ -464,12 +488,15 @@ export async function processQueuedInbound(input: {
 
   const session = await loadSession(input.sessionKey);
   try {
-    const requestTurns = await handleRequestInbound({
-      ...input,
-      salesIntakeActive: Boolean(
-        session.flow.awaiting || session.pendingQuote || session.rolePicker,
-      ),
-    });
+    const documentTurns = await handleDocumentInbound(session, input.event, input.waMessageId);
+    const requestTurns =
+      documentTurns ??
+      (await handleRequestInbound({
+        ...input,
+        salesIntakeActive: Boolean(
+          session.flow.awaiting || session.pendingQuote || session.rolePicker,
+        ),
+      }));
     // Legacy handoffs silently stopped the bot without assigning a human.
     // The new request inbox is explicit, persisted and never freezes shopping.
     const activeSession = { ...session, handoff: false };
