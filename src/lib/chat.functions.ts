@@ -329,6 +329,17 @@ export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promis
         channel === "whatsapp"
           ? (await import("@/lib/wa-knowledge")).whatsappKnowledgeInstructions()
           : null;
+      let specContext = "";
+      if (channel === "whatsapp") {
+        const { productSpecificationContext } = await import("@/lib/product-specifications");
+        const recent = messages.filter((m) => m.role === "user").slice(-2);
+        specContext =
+          productSpecificationContext(recent.at(-1)?.content ?? "") ||
+          productSpecificationContext(
+            recent.length > 1 ? recent[0]!.content : "",
+            data.plan.map((p) => p.id),
+          );
+      }
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -363,6 +374,7 @@ export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promis
                   ? "A render was delivered to the customer recently enough to still be editable. If their message asks for a specific change to it, use [RENDER: edit] — see the edit mode instructions above."
                   : "No render is currently editable. Never emit [RENDER: edit] — there is nothing for it to change.",
                 describePlan(data.plan),
+                ...(specContext ? [specContext] : []),
               ].join("\n\n"),
             },
           ],

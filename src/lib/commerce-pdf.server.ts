@@ -11,7 +11,7 @@ import {
 import sharp from "sharp";
 import { categoryLabel } from "@/lib/catalog";
 import {
-  comparisonFields,
+  comparisonFieldsFor,
   comparisonSummary,
   documentTotals,
   productSpec,
@@ -326,16 +326,24 @@ export async function buildCommercePdf(
         data.lines.map((l) => (l.unitCents === null ? "Price to confirm" : usd(l.unitCents))),
       ],
       ["SKU", data.lines.map((l) => l.product.sku ?? l.product.id)],
-      ...comparisonFields.map(([label, keys]): [string, string[]] => [
-        label,
-        data.lines.map((l) => productSpec(l.product, keys)),
-      ]),
+      ...comparisonFieldsFor(data.lines.map((l) => l.product)).map(
+        ([label, keys]): [string, string[]] => [
+          label,
+          data.lines.map((l) => productSpec(l.product, keys)),
+        ],
+      ),
     ];
     const missingFields = rows
       .filter(([, values]) => values.every((v) => v === "Not listed - ask our team"))
       .map(([label]) => label);
     for (const [label, values] of rows.filter(([label]) => !missingFields.includes(label))) {
-      const rowHeight = Math.max(...values.map((v) => wrap(v, col - 20, 9).length)) * 13 + 12;
+      const rowHeight =
+        Math.max(
+          wrap(label, labelWidth - 16, 9, bold).length,
+          ...values.map((v) => wrap(v, col - 20, 9).length),
+        ) *
+          13 +
+        12;
       if (y + rowHeight > height - 50) {
         newPage();
         data.lines.forEach((l, i) =>
@@ -376,14 +384,7 @@ export async function buildCommercePdf(
   }
   pdf.getPages().forEach((p, i) => {
     page = p;
-    text(
-      "comfortelfurniture.com  |  Keep this document with your project notes",
-      margin,
-      height - 29,
-      8,
-      regular,
-      muted,
-    );
+    text("comfortelfurniture.com", margin, height - 29, 8, regular, muted);
     text(`${i + 1} / ${pdf.getPageCount()}`, width - margin - 32, height - 29, 8, regular, muted);
   });
   // Referencing PDFName here makes URI annotations easy to verify in tests.

@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 output/pdf/
 tmp/pdfs/
+tmp/product-specs/
 dist
 dist-ssr
 .output
