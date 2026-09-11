@@ -91,9 +91,16 @@ import {
 const DEFAULT_STATIONS = 4;
 const DEFAULT_BUDGET = 15000;
 
-/** Matches `isGreeting()`'s style: a fixed phrase list, not a model call. */
+/** Matches `isGreeting()`'s style: a fixed phrase list, not a model call.
+ * "call me" is in here on purpose: a customer asking to be called has no
+ * outbound-call capability behind it (see chat.functions.ts's SYSTEM_INSTRUCTIONS
+ * note against promising one) — routing it to a human here, the same as an
+ * explicit "talk to a person", beats the model improvising a callback it
+ * cannot schedule. Verified against a live probe: unhandled, the model replied
+ * "Yes, I can have someone call you, what's the best number and time?" — a
+ * promise nothing in this codebase acts on. */
 const HANDOFF_PHRASE =
-  /\b(talk to (a )?(person|human|agent)|speak to (a )?(person|human|agent)|real (person|human)|human please|agent please)\b/i;
+  /\b(talk to (a )?(person|human|agent)|speak to (a )?(person|human|agent)|real (person|human)|human please|agent please|call me)\b/i;
 const HANDOFF_ACK =
   "Got it, I'll get a person to pick this up from here. They'll reply in this chat shortly.";
 
