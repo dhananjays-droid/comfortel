@@ -1,4 +1,5 @@
 import { CATALOG_FULL, type FullProduct } from "@/lib/catalog";
+import { withProductSpecifications } from "@/lib/product-specifications";
 
 export type DocumentLine = { product: FullProduct; qty: number; unitCents: number | null };
 export type CommerceDocument = {
@@ -23,7 +24,7 @@ export function documentLines(
     if (!Number.isInteger(qty) || qty < 1 || qty > 99)
       throw new Error("Quantities must be whole numbers from 1 to 99.");
     return {
-      product,
+      product: withProductSpecifications(product),
       qty,
       unitCents:
         product.price !== null && Number.isFinite(product.price) && product.price >= 0
@@ -44,23 +45,77 @@ export function documentTotals(lines: DocumentLine[]) {
 /** Only exact catalog spec labels; carton dimensions and shipping weight are
  * deliberately NOT substituted for installed dimensions or load capacity. */
 export const comparisonFields = [
-  ["Finish", ["Colour", "Color"]],
-  ["Overall width", ["Total Width", "Width"]],
-  ["Seat width", ["Seat Width"]],
+  ["Finish", ["Colour", "Color", "Finish"]],
+  ["Overall width", ["Total Width", "Full Width", "Chair width", "Width"]],
+  ["Seat width", ["Seat Width", "Internal Seat Width"]],
   ["Depth", ["Total Depth", "Depth"]],
   ["Height / range", ["Height range", "Height Range", "Height", "Total Height"]],
+  ["Length", ["Length"]],
+  ["Seat height range", ["Seat Height Range"]],
+  ["Recline length", ["Recline Length Range"]],
+  ["Upholstery", ["Upholstery"]],
+  ["Material / frame", ["Material", "Materials", "Base/Frame", "Frame"]],
   ["Base", ["Base"]],
+  ["Base options", ["Base options"]],
+  ["Lift options", ["Lift options"]],
+  ["Included footrest", ["Included footrest"]],
+  ["Footrest options", ["Footrest options"]],
+  ["Basin height", ["Basin Height"]],
+  ["Mirror width", ["Mirror Width"]],
+  ["Mirror height", ["Mirror Height"]],
+  ["Bench width", ["Bench Width"]],
+  ["Bench depth", ["Bench Depth", "Glass Bench"]],
+  ["Bench height", ["Bench Height"]],
+  ["Installation", ["Installation", "Mounting"]],
+  ["Electrical input", ["Electrical Requirements", "Input", "Voltage"]],
+  ["Power / outlets", ["Power"]],
+  ["Compatibility", ["Compatibility", "Suitable Model"]],
+  ["Listed with", ["Listed with"]],
   [
     "Load capacity",
     ["Weight Capacity", "Weight capacity", "Maximum Weight Capacity", "Max Weight"],
   ],
 ] as const;
 
+/** Always show useful published fields. Only flag missing fields where they
+ * matter for the selected category; don't ask a mirror for a chair's load rating. */
+export function comparisonFieldsFor(products: FullProduct[]) {
+  const categories = products.map((p) => p.category ?? "").join(" ");
+  const required = new Set(["Finish", "Overall width"]);
+  if (!/styling-chairs|barber-chairs|all-purpose-chairs/.test(categories))
+    required.add("Height / range");
+  if (/chairs|stools|treatment-tables/.test(categories))
+    ["Upholstery", "Load capacity"].forEach((k) => required.add(k));
+  if (/styling-chairs|barber-chairs|all-purpose-chairs/.test(categories))
+    ["Seat width", "Seat height range"].forEach((k) => required.add(k));
+  if (/mirrors/.test(categories)) required.add("Installation");
+  if (/electrical|treatment-tables/.test(categories)) required.add("Electrical input");
+  return comparisonFields.filter(
+    ([label, keys]) =>
+      required.has(label) ||
+      products.some((p) => productSpec(p, keys) !== "Not listed - ask our team"),
+  );
+}
+
 export function productSpec(product: FullProduct, keys: readonly string[]): string {
   const specs = product.specs ?? {};
   for (const key of keys) {
     const value = specs[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim()) {
+      if (/options$/i.test(key)) {
+        const options = value.split("; ");
+        return options.length > 2
+          ? `${options.slice(0, 2).join("; ")}; +${options.length - 2} more options on product page`
+          : value.trim();
+      }
+      if (key === "Listed with") {
+        const models = value.split("; ");
+        return models.length > 2
+          ? `${models.slice(0, 2).join("; ")}; +${models.length - 2} other listed models - ask our team`
+          : value;
+      }
+      return value.trim();
+    }
   }
   return "Not listed - ask our team";
 }

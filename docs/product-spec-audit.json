@@ -1,0 +1,5142 @@
+{
+  "checkedAt": "2026-09-11",
+  "baseline": [
+    {
+      "id": "3911",
+      "name": "Princess Blowdryer Holder",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/princess-blowdryer-holder/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "3960",
+      "name": "Black Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/salon-stool-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "3961",
+      "name": "Black Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/salon-stool-black-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "4013",
+      "name": "Omega Brushed Round",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-brushed-round/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "4017",
+      "name": "Omega Brushed Square",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-square-brushed/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "4020",
+      "name": "Hair Repellent Wheel – 3″ | 75mm (each)",
+      "category": null,
+      "url": "https://comfortelfurniture.com/shop/uncategorized/hair-repellent-wheel-75mm/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "4072",
+      "name": "Aquarius II Treatment Table – Sand",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/aquarius-beauty-bed/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "4124",
+      "name": "Metal Square Product or Towel Holder",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/metal-square-box/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "4126",
+      "name": "Metal Rectangle Product or Towel Holder",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/metal-rectangle-box/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "4162",
+      "name": "Tuscany Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/tuscany-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "4165",
+      "name": "Sienna Black Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/sienna-black-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "5054",
+      "name": "Shorter Hydraulic 125mm Chrome",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-125mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "5055",
+      "name": "Hydraulic Standard Height 165mm Chrome",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-165mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "5108",
+      "name": "Capital Base Aluminum",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-aluminium/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "5109",
+      "name": "Capital Base Matte Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-matte-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "5380",
+      "name": "Double bench – Natural Walnut",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-natural-walnut/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "5381",
+      "name": "Double bench – Black Diamond",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-black-diamond/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "5448",
+      "name": "Comfortneck III",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/comfortneck-iii/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "5460",
+      "name": "cUPC Certified Universal Single Handle Fixture",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/upc-valve-single-handle-fixture/",
+      "missing": [
+        "width / size",
+        "height / length"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "5674",
+      "name": "Shorter Hydraulic 125mm Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-black-125mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "5870",
+      "name": "Black Basin – XL Basin",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/black-basin-only-diamond/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "6211",
+      "name": "Black Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/black-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "6229",
+      "name": "Sola Magazine Rack",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/sola-magazine-rack/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "6230",
+      "name": "Adele Retail Shelves",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/adele-retail-shelves/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "6574",
+      "name": "Maverick Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/maverick-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "6897",
+      "name": "Princess Blowdryer Holder – Black",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/princess-blowdryer-holder-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "7938",
+      "name": "Claudia Reclining Salon Chair Stone",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/claudia-reclining-salon-chair-stone/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "8069",
+      "name": "Tan Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/tan-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "8070",
+      "name": "Hazel Tan II Shampoo System with White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-tan-shampoo-system/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "8073",
+      "name": "Tan Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/cutting-stool-tan-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "8075",
+      "name": "Willow Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/willow-reception-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "8077",
+      "name": "Taylor Reception Desk White",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/taylor-reception-desk-white/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "8208",
+      "name": "Shorter Hydraulic 125mm White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-standard-125mm-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "8210",
+      "name": "Mova Salon Trolley – Black on Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/mova-hairdressing-trolley-black-with-power/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "8214",
+      "name": "Pallazio Wall Station / Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/pallazio-salon-mirror-workstation/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "8218",
+      "name": "Capital Base White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "8220",
+      "name": "Villa II Salon Mirror – Box 1 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/villa-salon-mirror/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "8221",
+      "name": "Nero Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-black-round-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "8222",
+      "name": "Circa LED Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-round-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "9619",
+      "name": "Salon Mirror Joiner Frame with Metal Shelf & Wheels Option",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-mirror-with-wheels/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "9620",
+      "name": "Salon Mirror Joiner – Wheel Option",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-mirror-joiner-wheel-option/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "300024",
+      "name": "Double Bench – Natural Ash",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-natural-ash/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "300856",
+      "name": "Supernova Footrest",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/supernova-footrest/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300859",
+      "name": "Comet Footrest Black",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/comet-footrest-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300860",
+      "name": "Comet Footrest Brass",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/comet-footrest-brass/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300862",
+      "name": "Crow Barbers Chair",
+      "category": "barbers/barber-chairs",
+      "url": "https://comfortelfurniture.com/shop/barbers-furniture-equipment/barbers-chairs/crow-barbers-chair/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "300864",
+      "name": "Ivy Waiting Sofa II Sage Green",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/ivy-waiting-sofa-sage-green/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300865",
+      "name": "Textured Black Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/textured-black-salon-stool-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "300870",
+      "name": "Studio 4 Drawer Steel Locking Salon Trolley Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/studio-4-drawer-trolley/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300964",
+      "name": "Studio 3 Drawer Steel Salon Trolley Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/studio-3-drawer-trolley/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "300980",
+      "name": "Venus Treatment Table – Sand",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/venus-treatment-table-sand/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "300985",
+      "name": "Naomi II Reclining Salon Chair Textured Black",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/naomi-ii-reclining-salon-chair-textured-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "300992",
+      "name": "Lara Reclining Salon Chair Blush",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/lara-reclining-salon-chair-blush/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "301087",
+      "name": "Salon Mirror Joiner Frame – Shelf Only",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-mirror-joiner-frame-shelf/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "301097",
+      "name": "Halo Double Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/halo-double-salon-mirror/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "313296",
+      "name": "Black Saddle Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/black-saddle-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "313300",
+      "name": "Black Saddle Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/black-saddle-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316317",
+      "name": "Textured Black Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/textured-black-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316320",
+      "name": "Blush Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/blush-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316321",
+      "name": "Blush Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/blush-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316322",
+      "name": "Sage Green Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sage-green-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316358",
+      "name": "Sage Green Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sage-green-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316359",
+      "name": "Superior Salon Stool Black",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/superior-salon-stool-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316364",
+      "name": "Tan Saddle Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-saddle-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316365",
+      "name": "Tan Saddle Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-saddle-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "316366",
+      "name": "White Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/white-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "317275",
+      "name": "Tan Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "320071",
+      "name": "cUPC Certified Vacuum Breaker Kit",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/vacuum-breaker-kit/",
+      "missing": [
+        "width / size",
+        "height / length"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "320073",
+      "name": "cUPC Certified Hair Trap",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hair-trap/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "320076",
+      "name": "cUPC Certified Braided Chrome Shower Hose",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/shampoo-spray-hose-black/",
+      "missing": [
+        "width / size",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "320358",
+      "name": "cUPC Certified Chrome Shower Head",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/upc-chrome-shower-head/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "324960",
+      "name": "Mova Salon Trolley – Bronze",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/mova-salon-trolley-bronze/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "326472",
+      "name": "Hazel Black Shampoo System with White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-black-shampoo-system/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "329914",
+      "name": "Roxanne Styling Chair Textured Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/roxanne-styling-chair-textured-black-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330036",
+      "name": "Omega Round Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-black-base/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "330040",
+      "name": "Hydraulic Standard Height 165mm Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-foot-pump-extra-tall-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "330271",
+      "name": "Dawn Sage Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/dawn-sage-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330276",
+      "name": "Blake Styling Chair Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330283",
+      "name": "Blake Styling Chair Textured Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-textured-black-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330299",
+      "name": "Harper Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/harper-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330309",
+      "name": "Aria Tan Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/aria-tan-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330322",
+      "name": "Franka Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/franka-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330334",
+      "name": "Chloe Tan Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-tan-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "330353",
+      "name": "Rosie Blush Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/rosie-blush-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "331021",
+      "name": "Chloe Black Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "331330",
+      "name": "Hazel Sage Green Shampoo System with White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-sage-green-shampoo-system/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "331340",
+      "name": "Sage Green Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/sage-green-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "331349",
+      "name": "Chloe Sage Green Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-sage-green-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "331774",
+      "name": "Eco Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/eco-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "332159",
+      "name": "Halo Round Brass Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/halo-round-brass-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "332235",
+      "name": "Panther Barbers Chair",
+      "category": "barbers/barber-chairs",
+      "url": "https://comfortelfurniture.com/shop/barbers-furniture-equipment/barbers-chairs/panther-barbers-chair/",
+      "missing": [
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "334978",
+      "name": "Taylor Reception Desk Black",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/taylor-reception-desk/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "342380",
+      "name": "Flex Drain Hose",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/flex-drain-hose/",
+      "missing": [
+        "width / size"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "342465",
+      "name": "Presto Brush Cleaner",
+      "category": "salon/electrical",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-electrical-equipment/presto-brush-cleaner/",
+      "missing": [
+        "material / finish"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "342589",
+      "name": "Hazel Sage Green Shampoo System with Black Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-sage-green-shampoo-system-with-black-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "342591",
+      "name": "Hazel Black Shampoo System with Black Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-black-shampoo-system-with-black-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "342592",
+      "name": "Hazel Tan II Shampoo System with Black Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-tan-ii-shampoo-system-with-black-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "342806",
+      "name": "Omega Round Black XL",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-black-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "343150",
+      "name": "Blast Footrest Stainless Steel",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/blast-footrest-chrome-stainless/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "343225",
+      "name": "Oval LED Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/oval-led-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343609",
+      "name": "Blake Styling Chair Tan",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-tan/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343614",
+      "name": "Club Sand Wash Lounge with White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/club-sand-wash-lounge-with-white-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "343628",
+      "name": "Chloe Sand Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-sand-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343660",
+      "name": "Omega Round Base – Brushed Brass",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-base-brushed-brass/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "343662",
+      "name": "Dyson Dryer Holder – Trolley Accessory Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/dyson-dryer-holder-for-metal-trolleys/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "343669",
+      "name": "Product & Tool Holder – Trolley Accessory Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/product-tool-holder-for-metal-trolleys/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "343689",
+      "name": "Arch LED Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343692",
+      "name": "Onyx Oval Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/onyx-oval-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343709",
+      "name": "Verona Arch Salon Mirror Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-arch-salon-mirror-black/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343726",
+      "name": "Verona Grande Blanco Terrazzo Freestanding Salon Mirror – Double",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-grande-blanco-terrazzo-freestanding-salon-mirror-double/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343727",
+      "name": "Verona Grande Blanco Terrazzo Salon Mirror – Single",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-grande-blanco-terrazzo-salon-mirror-single/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343746",
+      "name": "Walker Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/walker-reception-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343761",
+      "name": "Sand Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sand-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343762",
+      "name": "Sand Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sand-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "343866",
+      "name": "Grande Blanco Table & Base",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/grande-blanco-table-base/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "343976",
+      "name": "Tint Bowl / Dryer Holder – Trolley Accessory Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/tint-bowl-dryer-holder-for-metal-trolleys/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "343984",
+      "name": "Gemini II Treatment Table – Stone",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/gemini-ii-treatment-table-stone/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "344003",
+      "name": "San Remo Arch Salon Mirror Brass",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/san-remo-arch-salon-mirror-brass/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "344013",
+      "name": "Nero Double Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-double-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "344021",
+      "name": "Floating Curved Double Bench – Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/floating-curved-double-bench-black/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "344256",
+      "name": "Black T Footrest",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/black-footrest/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "344545",
+      "name": "Villa II Salon Mirror Bench – Box 2 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/villa-bench-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "344548",
+      "name": "Pallazio Salon Mirror – Box 2 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/pallazio-salon-mirror-bench-box-2-of-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "344701",
+      "name": "Sand Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/sand-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "345212",
+      "name": "Basin Assembled Black XL",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/basin-assembled-black-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "345215",
+      "name": "Basin Assembled White XL",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/basin-assembled-white-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "345216",
+      "name": "Basin Stand II – Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/basin-stand-ii-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "345218",
+      "name": "Harriet Connect Tan II Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harriet-connect-tan-ii-wash-lounge-with-massage/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "345424",
+      "name": "USA Hazel Black Basin with Tilt",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/usa-hazel-black-basin-with-tilt/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "345427",
+      "name": "USA Hazel White Basin with Tilt",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/usa-hazel-white-basin-with-tilt/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "345593",
+      "name": "Chrome T Footrest",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/chrome-t-footrest/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "345751",
+      "name": "Aria Stone Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/aria-stone-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "345792",
+      "name": "Cloud Waiting Sofa",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/cloud-waiting-sofa/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "345804",
+      "name": "Amara Stone Curve Waiting Sofa",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/amara-stone-curve-waiting-sofa/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "345805",
+      "name": "Grande Double Wheel Option",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/grande-double-wheel-option/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "345980",
+      "name": "Omega Collar – Brushed",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-collar-brushed/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "345983",
+      "name": "Omega Collar – Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-collar-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346173",
+      "name": "Zippy Textured Black Wash Lounge With White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/zippy-textured-black-wash-lounge-with-white-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346190",
+      "name": "Zippy Textured Black Wash Lounge With Black Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/zippy-textured-black-wash-lounge-with-black-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346191",
+      "name": "Zippy Stone Wash Lounge With White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/zippy-stone-wash-lounge-with-white-basin/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346202",
+      "name": "Stone Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/stone-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346233",
+      "name": "Arch Retail Shelves",
+      "category": "salon/waiting-retail",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/waiting-area-retail-storage/arch-retail-shelves/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346237",
+      "name": "Studio 3 Drawer Steel Salon Trolley White",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/studio-3-drawer-steel-salon-trolley-white/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "346251",
+      "name": "Hydraulic Standard Height 165mm White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-standard-height-165mm-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346253",
+      "name": "Omega Round White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346255",
+      "name": "Salon Mirror Pole Joiner Frame Black (Box 2)",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-mirror-pole-joiner-frame-black-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346273",
+      "name": "Pole Frame Base Plate Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/pole-frame-base-plate-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346305",
+      "name": "Salon Mirror Pole Joiner Frame White (Box 2)",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-mirror-pole-joiner-frame-white-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "346868",
+      "name": "Textured Black Ottoman",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/textured-black-ottoman/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "347982",
+      "name": "Product & Tool Holder – Trolley Accessory White",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/white-product-tool-holder-trolley-accessory/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "347985",
+      "name": "Tint Bowl / Dryer Holder – Trolley Accessory White",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/white-tint-bowl-dryer-holder-trolley-accessory/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "348239",
+      "name": "Archie Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/archie-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "348673",
+      "name": "Villa II with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/villa-ii-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "348674",
+      "name": "Circa LED with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "348676",
+      "name": "Salon Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-pole-frame-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "348677",
+      "name": "Salon Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-pole-frame-white/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "348679",
+      "name": "Villa II Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/villa-ii-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "348693",
+      "name": "Nero with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349104",
+      "name": "Circa LED with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349111",
+      "name": "Arch LED with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349116",
+      "name": "Arch LED with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349285",
+      "name": "Smart Step Elite Series 4 x 5 Anti-Fatigue Mat Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-4-x-5-anti-fatigue-mat-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349289",
+      "name": "Smart Step Elite Series 3 x 5 Half Circle Anti-Fatigue Mat Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-half-circle-anti-fatigue-mat-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349292",
+      "name": "Smart Step Elite Series 3 x 5 Rectangle Anti-Fatigue Mat Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-rectangle-anti-fatigue-mat-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349302",
+      "name": "Smart Step Elite Bella Series 4 x 5 Anti-Fatigue Mat Bella Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-4-x-5-anti-fatigue-mat-bella-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349304",
+      "name": "Smart Step Elite Bella Series 3 x 5 Half Circle Anti-Fatigue Mat Bella Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-3-x-5-half-circle-anti-fatigue-mat-bella-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349306",
+      "name": "Smart Step Elite Bella Series 3 x 5 Rectangle Anti-Fatigue Mat Bella Black",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-3-x-5-rectangle-anti-fatigue-mat-bella-black/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349324",
+      "name": "Smart Step Elite Series 3 x 5 Rectangle Anti-Fatigue Mat Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-rectangle-anti-fatigue-mat-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349326",
+      "name": "Smart Step Elite Series 4 x 5 Anti-Fatigue Mat Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-4-x-5-anti-fatigue-mat-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349329",
+      "name": "Smart Step Elite Series 3 x 5 Half Circle Anti-Fatigue Mat Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-half-circle-anti-fatigue-mat-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349333",
+      "name": "Smart Step Elite Series 3 x 5 Rectangle Anti-Fatigue Mat Granite Copper",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-rectangle-anti-fatigue-mat-granite-copper/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349334",
+      "name": "Smart Step Elite Series 3 x 5 Half Circle Anti-Fatigue Mat Granite Copper",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-3-x-5-half-circle-anti-fatigue-mat-granite-copper/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349335",
+      "name": "Smart Step Elite Series 4 x 5 Anti-Fatigue Mat Granite Copper",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-series-4-x-5-anti-fatigue-mat-granite-copper/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349364",
+      "name": "Smart Step Elite Bella Series 4 x 5 Anti-Fatigue Mat Bella Black Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-4-x-5-anti-fatigue-mat-bella-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349366",
+      "name": "Smart Step Elite Bella Series 3 x 5 Rectangle Anti-Fatigue Mat Bella Black Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-3-x-5-rectangle-anti-fatigue-mat-bella-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349367",
+      "name": "Smart Step Elite Bella Series 3 x 5 Half Circle Anti-Fatigue Mat Bella Black Granite Steel",
+      "category": "salon/mats",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/anti-fatigue-salon-mats/elite-bella-series-3-x-5-half-circle-anti-fatigue-mat-bella-granite-steel/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "349762",
+      "name": "Hair Extensions Holder – Trolley Accessory Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/hair-extensions-holder-trolley-accessory-black/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349772",
+      "name": "Hair Extensions Holder – Trolley Accessory White",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/hair-extensions-holder-trolley-accessory-white/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349865",
+      "name": "Blake Styling Chair Merlot",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-merlot/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349867",
+      "name": "Blake Styling Chair Midnight",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-midnight/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349869",
+      "name": "RX Basin Stand",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/rx-basin-stand/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "349871",
+      "name": "Harlow Tan Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-tan-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349893",
+      "name": "Harlow Midnight Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-midnight-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349909",
+      "name": "Harlow Textured Black Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-textured-black-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349912",
+      "name": "Salon Stool Base Aluminium",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-stool-base-aluminium/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "349919",
+      "name": "Salon Stool Base Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-stool-base-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "349920",
+      "name": "Merlot Salon Stool Top",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/merlot-salon-stool-top/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "349923",
+      "name": "Midnight Salon Stool Top",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/midnight-salon-stool-top/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "349924",
+      "name": "Merlot Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/merlot-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349931",
+      "name": "Merlot Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/merlot-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349932",
+      "name": "Midnight Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/midnight-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "349933",
+      "name": "Midnight Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/midnight-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "350102",
+      "name": "Oakley Styling Chair Merlot",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-merlot/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "350103",
+      "name": "Oakley Styling Chair Midnight",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-midnight/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "350104",
+      "name": "Oakley Styling Chair Tan",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-tan-usa/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "350150",
+      "name": "Studio 3 Drawer Steel Salon Trolley Champagne Beige",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/studio-3-drawer-steel-salon-trolley-champagne-beige/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "350162",
+      "name": "Studio 3 Drawer Steel Salon Trolley Mist Green",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/studio-3-drawer-steel-salon-trolley-mist-green/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "350179",
+      "name": "Product & Tool Holder – Trolley Accessory Champagne Beige",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/product-tool-holder-trolley-accessory-champagne-beige/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "350180",
+      "name": "Product & Tool Holder – Trolley Accessory Mist Green",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/product-tool-holder-trolley-accessory-mist-green/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "350181",
+      "name": "Tint Bowl / Dryer Holder – Trolley Accessory Champagne Beige",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/tint-bowl-dryer-holder-trolley-accessory-champagne-beige/",
+      "missing": [],
+      "priority": "low"
+    },
+    {
+      "id": "350186",
+      "name": "Tint Bowl / Dryer Holder – Trolley Accessory Mist Green",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/tint-bowl-dryer-holder-trolley-accessory-mist-green/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium"
+    }
+  ],
+  "results": [
+    {
+      "id": "3911",
+      "name": "Princess Blowdryer Holder",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/princess-blowdryer-holder/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ]
+    },
+    {
+      "id": "3960",
+      "name": "Black Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/salon-stool-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "3961",
+      "name": "Black Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/salon-stool-black-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "4013",
+      "name": "Omega Brushed Round",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-brushed-round/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "4017",
+      "name": "Omega Brushed Square",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-square-brushed/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "4072",
+      "name": "Aquarius II Treatment Table – Sand",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/aquarius-beauty-bed/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "4162",
+      "name": "Tuscany Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/tuscany-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "4165",
+      "name": "Sienna Black Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/sienna-black-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 2,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "5054",
+      "name": "Shorter Hydraulic 125mm Chrome",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-125mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "5055",
+      "name": "Hydraulic Standard Height 165mm Chrome",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-165mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "5108",
+      "name": "Capital Base Aluminum",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-aluminium/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "5109",
+      "name": "Capital Base Matte Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-matte-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "5380",
+      "name": "Double bench – Natural Walnut",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-natural-walnut/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "5381",
+      "name": "Double bench – Black Diamond",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-black-diamond/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "5460",
+      "name": "cUPC Certified Universal Single Handle Fixture",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/upc-valve-single-handle-fixture/",
+      "missing": [
+        "width / size",
+        "height / length"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length"
+      ]
+    },
+    {
+      "id": "5674",
+      "name": "Shorter Hydraulic 125mm Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-black-125mm-single-lever/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "5870",
+      "name": "Black Basin – XL Basin",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/black-basin-only-diamond/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "6574",
+      "name": "Maverick Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/maverick-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 7,
+      "conflicts": {},
+      "remaining": []
+    },
+    {
+      "id": "6897",
+      "name": "Princess Blowdryer Holder – Black",
+      "category": "salon/footrests-dryer-holders",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-footrests-hair-dryer-holders/princess-blowdryer-holder-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish"
+      ]
+    },
+    {
+      "id": "7938",
+      "name": "Claudia Reclining Salon Chair Stone",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/claudia-reclining-salon-chair-stone/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "8073",
+      "name": "Tan Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/cutting-stool-tan-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "8075",
+      "name": "Willow Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/willow-reception-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 7,
+      "conflicts": {},
+      "remaining": []
+    },
+    {
+      "id": "8208",
+      "name": "Shorter Hydraulic 125mm White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-standard-125mm-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "8214",
+      "name": "Pallazio Wall Station / Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/pallazio-salon-mirror-workstation/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "8218",
+      "name": "Capital Base White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/capital-base-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "8220",
+      "name": "Villa II Salon Mirror – Box 1 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/villa-salon-mirror/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "8221",
+      "name": "Nero Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-black-round-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "8222",
+      "name": "Circa LED Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-round-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "9620",
+      "name": "Salon Mirror Joiner – Wheel Option",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-mirror-joiner-wheel-option/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "300024",
+      "name": "Double Bench – Natural Ash",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/double-bench-natural-ash/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "300862",
+      "name": "Crow Barbers Chair",
+      "category": "barbers/barber-chairs",
+      "url": "https://comfortelfurniture.com/shop/barbers-furniture-equipment/barbers-chairs/crow-barbers-chair/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "300865",
+      "name": "Textured Black Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/textured-black-salon-stool-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "300980",
+      "name": "Venus Treatment Table – Sand",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/venus-treatment-table-sand/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "300985",
+      "name": "Naomi II Reclining Salon Chair Textured Black",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/naomi-ii-reclining-salon-chair-textured-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options"
+      ],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "300992",
+      "name": "Lara Reclining Salon Chair Blush",
+      "category": "salon/all-purpose-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/makeup-all-purpose-salon-chairs/lara-reclining-salon-chair-blush/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options"
+      ],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "301087",
+      "name": "Salon Mirror Joiner Frame – Shelf Only",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/salon-mirror-joiner-frame-shelf/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "installation / mounting",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "301097",
+      "name": "Halo Double Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/halo-double-salon-mirror/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "313296",
+      "name": "Black Saddle Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/black-saddle-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "313300",
+      "name": "Black Saddle Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/black-saddle-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316317",
+      "name": "Textured Black Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/textured-black-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316320",
+      "name": "Blush Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/blush-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316321",
+      "name": "Blush Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/blush-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316322",
+      "name": "Sage Green Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sage-green-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316358",
+      "name": "Sage Green Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sage-green-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316359",
+      "name": "Superior Salon Stool Black",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/superior-salon-stool-black/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316364",
+      "name": "Tan Saddle Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-saddle-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316365",
+      "name": "Tan Saddle Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-saddle-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "316366",
+      "name": "White Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/white-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "317275",
+      "name": "Tan Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/tan-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "320071",
+      "name": "cUPC Certified Vacuum Breaker Kit",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/vacuum-breaker-kit/",
+      "missing": [
+        "width / size",
+        "height / length"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length"
+      ]
+    },
+    {
+      "id": "320073",
+      "name": "cUPC Certified Hair Trap",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hair-trap/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "320076",
+      "name": "cUPC Certified Braided Chrome Shower Hose",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/shampoo-spray-hose-black/",
+      "missing": [
+        "width / size",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "320358",
+      "name": "cUPC Certified Chrome Shower Head",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/upc-chrome-shower-head/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "329914",
+      "name": "Roxanne Styling Chair Textured Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/roxanne-styling-chair-textured-black-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330036",
+      "name": "Omega Round Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-black-base/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "330040",
+      "name": "Hydraulic Standard Height 165mm Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-foot-pump-extra-tall-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "330271",
+      "name": "Dawn Sage Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/dawn-sage-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330276",
+      "name": "Blake Styling Chair Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330283",
+      "name": "Blake Styling Chair Textured Black",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-textured-black-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330299",
+      "name": "Harper Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/harper-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330309",
+      "name": "Aria Tan Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/aria-tan-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330322",
+      "name": "Franka Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/franka-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330334",
+      "name": "Chloe Tan Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-tan-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "330353",
+      "name": "Rosie Blush Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/rosie-blush-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "331021",
+      "name": "Chloe Black Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "331330",
+      "name": "Hazel Sage Green Shampoo System with White Basin",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/hazel-sage-green-shampoo-system/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": []
+    },
+    {
+      "id": "331349",
+      "name": "Chloe Sage Green Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-sage-green-styling-chair-with-footrest/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "331774",
+      "name": "Eco Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/eco-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options"
+      ],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "332159",
+      "name": "Halo Round Brass Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/halo-round-brass-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 3,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "332235",
+      "name": "Panther Barbers Chair",
+      "category": "barbers/barber-chairs",
+      "url": "https://comfortelfurniture.com/shop/barbers-furniture-equipment/barbers-chairs/panther-barbers-chair/",
+      "missing": [
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "342380",
+      "name": "Flex Drain Hose",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/flex-drain-hose/",
+      "missing": [
+        "width / size"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size"
+      ]
+    },
+    {
+      "id": "342465",
+      "name": "Presto Brush Cleaner",
+      "category": "salon/electrical",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-electrical-equipment/presto-brush-cleaner/",
+      "missing": [
+        "material / finish"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish"
+      ]
+    },
+    {
+      "id": "342806",
+      "name": "Omega Round Black XL",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-black-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "343225",
+      "name": "Oval LED Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/oval-led-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343609",
+      "name": "Blake Styling Chair Tan",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-tan/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "343628",
+      "name": "Chloe Sand Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/chloe-sand-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "343660",
+      "name": "Omega Round Base – Brushed Brass",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-base-brushed-brass/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "343689",
+      "name": "Arch LED Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343692",
+      "name": "Onyx Oval Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/onyx-oval-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 7,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343709",
+      "name": "Verona Arch Salon Mirror Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-arch-salon-mirror-black/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343726",
+      "name": "Verona Grande Blanco Terrazzo Freestanding Salon Mirror – Double",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-grande-blanco-terrazzo-freestanding-salon-mirror-double/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343727",
+      "name": "Verona Grande Blanco Terrazzo Salon Mirror – Single",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/verona-grande-blanco-terrazzo-salon-mirror-single/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 7,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "343746",
+      "name": "Walker Reception Desk",
+      "category": "salon/reception-desks",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-reception-desks/walker-reception-desk/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 4,
+      "conflicts": {},
+      "remaining": []
+    },
+    {
+      "id": "343761",
+      "name": "Sand Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sand-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "343762",
+      "name": "Sand Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/sand-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "343866",
+      "name": "Grande Blanco Table & Base",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/grande-blanco-table-base/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "343984",
+      "name": "Gemini II Treatment Table – Stone",
+      "category": "spa/treatment-tables",
+      "url": "https://comfortelfurniture.com/shop/spa-massage-furniture-equipment/massage-treatment-tables/gemini-ii-treatment-table-stone/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "344003",
+      "name": "San Remo Arch Salon Mirror Brass",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/san-remo-arch-salon-mirror-brass/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 6,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "344013",
+      "name": "Nero Double Round Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-double-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "344021",
+      "name": "Floating Curved Double Bench – Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/floating-curved-double-bench-black/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 3,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "344256",
+      "name": "Black T Footrest",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/black-footrest/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "344545",
+      "name": "Villa II Salon Mirror Bench – Box 2 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/villa-bench-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "344548",
+      "name": "Pallazio Salon Mirror – Box 2 of 2",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/pallazio-salon-mirror-bench-box-2-of-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345212",
+      "name": "Basin Assembled Black XL",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/basin-assembled-black-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345215",
+      "name": "Basin Assembled White XL",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/basin-assembled-white-xl/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345216",
+      "name": "Basin Stand II – Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/basin-stand-ii-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345424",
+      "name": "USA Hazel Black Basin with Tilt",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/usa-hazel-black-basin-with-tilt/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345427",
+      "name": "USA Hazel White Basin with Tilt",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/usa-hazel-white-basin-with-tilt/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345593",
+      "name": "Chrome T Footrest",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/chrome-t-footrest/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345751",
+      "name": "Aria Stone Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/aria-stone-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 8,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "345805",
+      "name": "Grande Double Wheel Option",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/grande-double-wheel-option/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "345980",
+      "name": "Omega Collar – Brushed",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-collar-brushed/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "345983",
+      "name": "Omega Collar – Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-collar-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "346251",
+      "name": "Hydraulic Standard Height 165mm White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/hydraulic-standard-height-165mm-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "346253",
+      "name": "Omega Round White",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/omega-round-white/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "346255",
+      "name": "Salon Mirror Pole Joiner Frame Black (Box 2)",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-mirror-pole-joiner-frame-black-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "346273",
+      "name": "Pole Frame Base Plate Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/pole-frame-base-plate-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "346305",
+      "name": "Salon Mirror Pole Joiner Frame White (Box 2)",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-mirror-pole-joiner-frame-white-box-2/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "348239",
+      "name": "Archie Styling Chair",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/archie-styling-chair/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "348673",
+      "name": "Villa II with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/villa-ii-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "348674",
+      "name": "Circa LED with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "348679",
+      "name": "Villa II Salon Mirror",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/villa-ii-salon-mirror/",
+      "missing": [
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 7,
+      "conflicts": {},
+      "remaining": [
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "348693",
+      "name": "Nero with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/nero-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "349104",
+      "name": "Circa LED with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/circa-led-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "349111",
+      "name": "Arch LED with Pole Frame White",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-with-pole-frame-white/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "349116",
+      "name": "Arch LED with Pole Frame Black",
+      "category": "salon/mirrors",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-stations-mirrors/arch-led-with-pole-frame-black/",
+      "missing": [
+        "material / finish",
+        "installation / mounting"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "material / finish",
+        "installation / mounting"
+      ]
+    },
+    {
+      "id": "349762",
+      "name": "Hair Extensions Holder – Trolley Accessory Black",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/hair-extensions-holder-trolley-accessory-black/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349772",
+      "name": "Hair Extensions Holder – Trolley Accessory White",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/hair-extensions-holder-trolley-accessory-white/",
+      "missing": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349865",
+      "name": "Blake Styling Chair Merlot",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-merlot/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "349867",
+      "name": "Blake Styling Chair Midnight",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/blake-styling-chair-midnight/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Included footrest",
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 5,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity"
+      ]
+    },
+    {
+      "id": "349869",
+      "name": "RX Basin Stand",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/rx-basin-stand/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349871",
+      "name": "Harlow Tan Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-tan-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349893",
+      "name": "Harlow Midnight Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-midnight-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349909",
+      "name": "Harlow Textured Black Electric Recline Wash Lounge With Massage",
+      "category": "salon/shampoo-area",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/shampoo-area-backwash-systems/harlow-textured-black-electric-recline-wash-lounge/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349912",
+      "name": "Salon Stool Base Aluminium",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-stool-base-aluminium/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349919",
+      "name": "Salon Stool Base Black",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/salon-stool-base-black/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349920",
+      "name": "Merlot Salon Stool Top",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/merlot-salon-stool-top/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349923",
+      "name": "Midnight Salon Stool Top",
+      "category": "components",
+      "url": "https://comfortelfurniture.com/shop/child/midnight-salon-stool-top/",
+      "missing": [
+        "product specifications",
+        "width / size",
+        "height / length",
+        "material / finish",
+        "model compatibility",
+        "features / configuration"
+      ],
+      "priority": "high",
+      "status": "checked",
+      "addedFields": [
+        "Listed with"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "width / size",
+        "height / length",
+        "material / finish",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "349924",
+      "name": "Merlot Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/merlot-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "349931",
+      "name": "Merlot Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/merlot-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "349932",
+      "name": "Midnight Salon Stool",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/midnight-salon-stool/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "349933",
+      "name": "Midnight Salon Stool with Aluminium Base",
+      "category": "salon/stools",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-stools/midnight-salon-stool-with-aluminium-base/",
+      "missing": [
+        "load capacity"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "load capacity"
+      ]
+    },
+    {
+      "id": "350102",
+      "name": "Oakley Styling Chair Merlot",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-merlot/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "350103",
+      "name": "Oakley Styling Chair Midnight",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-midnight/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "350104",
+      "name": "Oakley Styling Chair Tan",
+      "category": "salon/styling-chairs",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/styling-chairs/oakley-styling-chair-tan-usa/",
+      "missing": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [
+        "Lift options",
+        "Base options",
+        "Footrest options"
+      ],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "height / length",
+        "height adjustment range",
+        "load capacity",
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "350180",
+      "name": "Product & Tool Holder – Trolley Accessory Mist Green",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/product-tool-holder-trolley-accessory-mist-green/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "features / configuration"
+      ]
+    },
+    {
+      "id": "350186",
+      "name": "Tint Bowl / Dryer Holder – Trolley Accessory Mist Green",
+      "category": "salon/trolleys",
+      "url": "https://comfortelfurniture.com/shop/salon-furniture-equipment/salon-trolleys-carts/tint-bowl-dryer-holder-trolley-accessory-mist-green/",
+      "missing": [
+        "features / configuration"
+      ],
+      "priority": "medium",
+      "status": "checked",
+      "addedFields": [],
+      "featureCount": 0,
+      "conflicts": {},
+      "remaining": [
+        "features / configuration"
+      ]
+    }
+  ]
+}
