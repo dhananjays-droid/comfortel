@@ -8,6 +8,45 @@ export type Database = {
   };
   public: {
     Tables: {
+      wa_requests: {
+        Row: {
+          reference: string;
+          session_key: string;
+          source_message_id: string;
+          category: string;
+          status: string;
+          stage: string;
+          details: Json;
+          customer_phone_enc: string;
+          last_inbound_id: string | null;
+          last_reply: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          reference: string;
+          session_key: string;
+          source_message_id: string;
+          category: string;
+          status?: string;
+          stage?: string;
+          details?: Json;
+          customer_phone_enc: string;
+          last_inbound_id?: string | null;
+          last_reply?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: string;
+          stage?: string;
+          details?: Json;
+          last_inbound_id?: string | null;
+          last_reply?: Json | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       shared_designs: {
         Row: {
           created_at: string;

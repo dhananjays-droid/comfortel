@@ -22,7 +22,7 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
-function authenticated(request: Request): boolean {
+export function authenticated(request: Request): boolean {
   const secret = process.env["CRON_SECRET"];
   if (!secret) return false;
   const header = request.headers.get("authorization") ?? "";

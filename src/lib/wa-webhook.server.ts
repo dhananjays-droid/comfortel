@@ -35,6 +35,7 @@ import {
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
 import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-runtime";
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
+import { handleRequestInbound } from "@/lib/wa-requests.server";
 import { waSessionKey } from "@/lib/wa-session.server";
 
 type InboundMessage = {
@@ -463,7 +464,18 @@ export async function processQueuedInbound(input: {
 
   const session = await loadSession(input.sessionKey);
   try {
-    const result = await handleInboundMessage(session, input.sessionKey, input.phone, input.event);
+    const requestTurns = await handleRequestInbound({
+      ...input,
+      salesIntakeActive: Boolean(
+        session.flow.awaiting || session.pendingQuote || session.rolePicker,
+      ),
+    });
+    // Legacy handoffs silently stopped the bot without assigning a human.
+    // The new request inbox is explicit, persisted and never freezes shopping.
+    const activeSession = { ...session, handoff: false };
+    const result = requestTurns
+      ? { session: activeSession, turns: requestTurns }
+      : await handleInboundMessage(activeSession, input.sessionKey, input.phone, input.event);
     const digits = input.phone.replace(/\D/g, "");
     await saveSession(input.sessionKey, {
       ...result.session,

@@ -37,6 +37,8 @@ export const Route = createFileRoute("/admin/logs")({
   component: AdminLogs,
 });
 
+import { RequestsInbox } from "@/components/wa-requests-inbox";
+
 const TOKEN_KEY = "comfortel-admin-token";
 const POLL_MS = 4000;
 
@@ -510,6 +512,7 @@ function AdminLogs() {
   const [loading, setLoading] = useState(false);
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showRequests, setShowRequests] = useState(false);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
@@ -577,6 +580,12 @@ function AdminLogs() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            className="rounded-lg border border-white/20 px-3 py-1 text-sm"
+            onClick={() => setShowRequests((value) => !value)}
+          >
+            {showRequests ? "Conversation logs" : "Requests inbox"}
+          </button>
           <label className="flex items-center gap-1.5 text-xs text-slate-400">
             <input
               type="checkbox"
@@ -629,7 +638,15 @@ function AdminLogs() {
         </aside>
 
         <main className="min-h-0 flex-1 bg-[#0a0d14]">
-          {selected ? (
+          {showRequests ? (
+            <RequestsInbox
+              token={token}
+              onSession={(key) => {
+                setSelected(key);
+                setShowRequests(false);
+              }}
+            />
+          ) : selected ? (
             <SessionPane sessionKey={selected} token={token} />
           ) : (
             <div className="flex h-full items-center justify-center">
