@@ -109,6 +109,7 @@ function wantsHandoff(text: string): boolean {
 }
 
 export type WaTurn =
+  | { kind: "document"; bytes: Uint8Array; filename: string; caption: string; reference: string }
   | { kind: "text"; text: string }
   | { kind: "buttons"; text: string; action: WaAction & { kind: "buttons" } }
   | { kind: "list"; text: string; action: WaAction & { kind: "list" } }
@@ -144,10 +145,16 @@ export function proactiveOfferTurn(productIds: string[]): WaTurn | null {
   if (!productIds.length) return null;
   return {
     kind: "buttons",
-    text: "Want to see it in your space?",
+    text: "What would help you decide?",
     action: {
       kind: "buttons",
-      buttons: [{ id: `offer:staged_room:${productIds.join(",")}`, title: "See it in your space" }],
+      buttons: [
+        { id: `offer:staged_room:${productIds.join(",")}`, title: "See it in your space" },
+        { id: `docs:quote:${productIds.join(",")}`, title: "PDF estimate" },
+        ...(productIds.length >= 2 && productIds.length <= 3
+          ? [{ id: `docs:compare:${productIds.join(",")}`, title: "Compare products" }]
+          : []),
+      ],
     },
   };
 }
@@ -959,7 +966,7 @@ function addToPlanTurn(session: SessionState, tappedId: string): RuntimeResult {
   const products = plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
   const lines = linesFrom(products, plan.qty);
   const pieces = planPieces(lines);
-  const replyText = `Added ${names} to your plan, now ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Want a quote, or should I keep going?`;
+  const replyText = `Added ${names} to your plan, now ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Type 'PDF quote' for an itemised estimate, or tell me what you'd like to add next.`;
   return { session: { ...session, plan }, turns: [{ kind: "text", text: replyText }] };
 }
 

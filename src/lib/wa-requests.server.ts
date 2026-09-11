@@ -4,6 +4,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { encryptPhone } from "@/lib/wa-phone-crypto.server";
 import type { InboundEvent, WaTurn } from "@/lib/wa-runtime";
 import { knowledgeAnswer } from "@/lib/wa-knowledge";
+import { quoteRequestContext } from "@/lib/commerce-documents";
 import {
   confirmationTurn,
   detailFrom,
@@ -202,8 +203,15 @@ export async function handleRequestInbound(
     );
   if (category) {
     const reference = `CF-${createHash("sha256").update(`${sessionKey}:${waMessageId}`).digest("hex").slice(0, 16).toUpperCase()}`;
-    const detail = detailFrom(event, waMessageId);
-    const turns = textTurn(requestDetailsPrompt(category));
+    const quoteContext = quoteRequestContext(button);
+    const detail = quoteContext
+      ? { messageId: waMessageId, text: quoteContext }
+      : detailFrom(event, waMessageId);
+    const turns = textTurn(
+      quoteContext
+        ? "I've included the products, quantities and estimate reference in your draft request. What is your delivery postcode and country, and are there any options you'd like checked? You can review everything before sending it to our team. Type 'cancel request' to stop."
+        : requestDetailsPrompt(category),
+    );
     await db.create({
       reference,
       session_key: sessionKey,
