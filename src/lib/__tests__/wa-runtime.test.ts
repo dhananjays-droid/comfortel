@@ -628,6 +628,19 @@ describe("handleInboundMessage — compliance handoff", () => {
     expect(result.turns).toHaveLength(0);
     expect(result.session).toBe(state);
   });
+
+  it("escalates on 'call me' instead of letting the model promise a callback", async () => {
+    const state: SessionState = {
+      ...fresh(),
+      transcript: [{ role: "assistant", content: "already greeted" }],
+    };
+    const result = await handleInboundMessage(state, SESSION_KEY, TEST_PHONE, {
+      kind: "text",
+      text: "can someone call me instead of chatting here?",
+    });
+    expect(result.session.handoff).toBe(true);
+    expect(result.turns).toHaveLength(1);
+  });
 });
 
 describe("handleInboundMessage — unsupported input", () => {
