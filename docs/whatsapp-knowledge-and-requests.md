@@ -16,7 +16,9 @@ These are internal requests, **not** completed purchases, live order tracking, r
 
 Open `/admin/logs` and select **Requests inbox**, using the existing admin access gate. Only submitted requests appear. Filter by type; open the conversation or customer photo; explicitly reveal the contact when needed. Mark requests open, in progress or resolved. These changes do not send customer messages or modify actual orders.
 
-This remains an administrator-only interface using the existing shared admin credential—not a new multi-user helpdesk. Do not distribute the cron/admin secret broadly. Individual staff accounts, assignment, outbound replies, notification routing and SLA enforcement remain future work.
+The inbox now includes conversation history, direct text replies, WhatsApp delivery updates, and explicit **Take over / Return to bot** controls. Take over before replying; new customer messages then stay in the inbox without starting a bot response. Status changes are internal only: send a reply when the customer needs an update. See [admin reply rollout and limits](whatsapp-admin-replies.md).
+
+This remains an administrator-only interface using the existing shared admin credential—not a new multi-user helpdesk. Do not distribute the cron/admin secret broadly. Individual staff accounts, assignment, external notification routing and SLA enforcement remain future work.
 
 ## The knowledge file actually used by WhatsApp
 

@@ -36,7 +36,7 @@ function credentials(): { token: string; phoneNumberId: string } {
 
 type SendResult = { messages?: Array<{ id?: string }> };
 
-async function send(payload: Record<string, unknown>): Promise<string> {
+async function send(payload: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
   const { token, phoneNumberId } = credentials();
   const res = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
@@ -47,6 +47,7 @@ async function send(payload: Record<string, unknown>): Promise<string> {
         "content-type": "application/json",
       },
       body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
+      ...(signal ? { signal } : {}),
     },
   );
 
@@ -66,7 +67,7 @@ async function send(payload: Record<string, unknown>): Promise<string> {
  * started. This endpoint returns a status acknowledgement rather than a new
  * outbound message id, so it deliberately does not go through send().
  */
-export async function markReadAndType(messageId: string): Promise<void> {
+export async function markReadAndType(messageId: string, showTyping = true): Promise<void> {
   const { token, phoneNumberId } = credentials();
   const res = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
@@ -80,7 +81,7 @@ export async function markReadAndType(messageId: string): Promise<void> {
         messaging_product: "whatsapp",
         status: "read",
         message_id: messageId,
-        typing_indicator: { type: "text" },
+        ...(showTyping ? { typing_indicator: { type: "text" } } : {}),
       }),
     },
   );
@@ -90,8 +91,14 @@ export async function markReadAndType(messageId: string): Promise<void> {
   }
 }
 
-export async function sendText(to: string, body: string): Promise<string> {
-  return send({ to, type: "text", text: { body: truncate(body, WA.body) } });
+export async function sendText(to: string, body: string, signal?: AbortSignal): Promise<string> {
+  return send({ to, type: "text", text: { body: truncate(body, WA.body) } }, signal);
+}
+
+/** Staff replies must never be silently truncated by the bot's shorter limit. */
+export async function sendStaffText(to: string, body: string): Promise<string> {
+  if (!body.trim() || body.length > 4000) throw new Error("Invalid staff reply length");
+  return send({ to, type: "text", text: { body } }, AbortSignal.timeout(15_000));
 }
 
 /** Upload directly to Meta; no public bucket/link exposing customer documents. */
