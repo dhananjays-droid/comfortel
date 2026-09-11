@@ -10,6 +10,8 @@ import {
   requestDetailsPrompt,
   requestIntent,
   requestMenu,
+  requestReceipt,
+  requestStatusText,
   REQUEST_CATEGORIES,
   type RequestCategory,
   type RequestRecord,
@@ -92,7 +94,7 @@ export async function handleRequestInbound(
     return [requestMenu()];
   if (button === "request:faq" || /^(?:faq|faqs|policies)$/i.test(text))
     return textTurn(
-      "Ask about shipping, returns, warranty, payment, financing or showrooms. I'll share the relevant US website source and flag anything that needs staff confirmation.",
+      "What would you like to know? I can help with delivery, returns, warranty, payments, financing and showroom visits.",
     );
 
   let latest: Row | null;
@@ -108,7 +110,7 @@ export async function handleRequestInbound(
     // Do not break existing greetings/designs if a migration is unavailable.
     if (category || button.startsWith("request:") || /^(?:submit|cancel) request$/i.test(text))
       return textTurn(
-        "I can't access the request inbox right now, so nothing has been submitted. Please retry or contact https://comfortelfurniture.com/contact-us/",
+        "Sorry, I couldn't open your request just now. Please try again in a moment. If you need help sooner, contact our team: https://comfortelfurniture.com/contact-us/",
       );
     const answer = input.salesIntakeActive ? null : knowledgeAnswer(text);
     return answer ? textTurn(answer) : null;
@@ -126,8 +128,8 @@ export async function handleRequestInbound(
   if (button === "request:status" || /^(?:my requests|ticket status|request status)$/i.test(text)) {
     return textTurn(
       record
-        ? `Your latest request ${record.reference}: ${record.status.replace("_", " ")}. ${record.status === "draft" ? "Not submitted yet. Add details, then confirm." : "This is the internal request status, not your order or delivery status. For a time-sensitive issue contact https://comfortelfurniture.com/contact-us/"}`
-        : "You have no saved requests in this WhatsApp conversation. Type 'help' to start one.",
+        ? requestStatusText(record)
+        : "I couldn't find a request from this chat yet. Type 'help' and I'll help you get started.",
     );
   }
   if (record?.status === "draft") {
@@ -142,7 +144,7 @@ export async function handleRequestInbound(
       return saveReply(
         { status: "cancelled" },
         textTurn(
-          "Draft discarded. Your salon plan is unchanged. Type 'menu' to continue shopping or designing.",
+          "Okay, I haven't submitted this request. Your salon plan is still here—type 'menu' whenever you're ready to continue.",
         ),
       );
     }
@@ -150,7 +152,7 @@ export async function handleRequestInbound(
       return saveReply(
         { stage: "details" },
         textTurn(
-          "Send the extra details or photos you want included. Type 'cancel request' to discard this draft.",
+          "Of course—send any extra details or photos you'd like to include, and I'll show you the updated request.",
         ),
       );
     if (
@@ -160,14 +162,9 @@ export async function handleRequestInbound(
     ) {
       if (record.stage !== "confirm")
         return textTurn(
-          "Please add the request details first so you can review them before submitting.",
+          "Please add a few details first so our team knows what you need help with. I'll then show you the request to review.",
         );
-      return saveReply(
-        { status: "open" },
-        textTurn(
-          `Saved in the admin inbox as ${record.reference} (${record.category}). This is a request for staff review—not a confirmed appointment, order change or refund. Reply times are not guaranteed. For urgent help: https://comfortelfurniture.com/contact-us/\n\nType 'request status' to check it, or 'menu' to continue shopping.`,
-        ),
-      );
+      return saveReply({ status: "open" }, textTurn(requestReceipt(record)));
     }
     if (
       /^(?:menu|hi|hello|help)$/i.test(text) ||
@@ -177,19 +174,19 @@ export async function handleRequestInbound(
       return [
         confirmationTurn(record),
         ...textTurn(
-          "A draft is still open. Submit it, add details, or type 'cancel request' before starting something else.",
+          "We haven't sent this request yet. You can submit it, add details, or type 'cancel request' to do something else.",
         ),
       ];
     const detail = detailFrom(event, waMessageId);
     if (!detail?.text)
       return textTurn(
-        "For this request, send text or a photo with a description. Voice messages and videos aren't processed; please keep videos for staff.",
+        "Could you send that as text or a photo with a short description? I can't read voice messages or videos here. Keep any videos handy in case our team needs them later.",
       );
     if (record.details.length >= 12)
       return [
         confirmationTurn(record),
         ...textTurn(
-          "This draft has reached its attachment/message limit. Please submit it or cancel and start again.",
+          "That's all I can attach to one request. You can submit it now, or type 'cancel request' to start again.",
         ),
       ];
     const next = { ...record, stage: "confirm" as const, details: [...record.details, detail] };
@@ -200,8 +197,8 @@ export async function handleRequestInbound(
   if (/^request:(submit|edit|cancel):/.test(button))
     return textTurn(
       record
-        ? `Request ${record.reference} is ${record.status.replace("_", " ")}; that draft action is no longer available. Type 'help' to create another request.`
-        : "That request is no longer available. Type 'help' to start a new one.",
+        ? `${requestStatusText(record)}\n\nThat review button is no longer active. Type 'help' if you need anything else.`
+        : "That request is no longer available. Type 'help' and I'll help you start a new one.",
     );
   if (category) {
     const reference = `CF-${createHash("sha256").update(`${sessionKey}:${waMessageId}`).digest("hex").slice(0, 16).toUpperCase()}`;
@@ -228,11 +225,11 @@ export async function handleRequestInbound(
         ...textTurn(answer),
         {
           kind: "buttons",
-          text: "Need help with your own purchase or situation?",
+          text: "How would you like to continue?",
           action: {
             kind: "buttons",
             buttons: [
-              { id: "request:support", title: "Support request" },
+              { id: "request:support", title: "Product support" },
               { id: "request:sales", title: "Sales / visit" },
               { id: "request:order", title: "Order help" },
             ],

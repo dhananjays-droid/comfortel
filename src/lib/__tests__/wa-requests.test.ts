@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
 import { handleRequestInbound, type RequestStore } from "@/lib/wa-requests.server";
-import { requestIntent, requestMenu } from "@/lib/wa-requests";
+import {
+  requestIntent,
+  requestMenu,
+  requestReceipt,
+  requestStatusText,
+  type RequestRecord,
+} from "@/lib/wa-requests";
 import { knowledgeAnswer, whatsappKnowledgeInstructions } from "@/lib/wa-knowledge";
 import type { InboundEvent } from "@/lib/wa-runtime";
 
@@ -104,7 +110,8 @@ describe("durable request intake", () => {
     const saved = await text("yes");
     expect(rows[0]?.status).toBe("open");
     expect(JSON.stringify(saved)).toContain(rows[0]!.reference);
-    expect(JSON.stringify(saved)).toContain("not a confirmed");
+    expect(JSON.stringify(saved)).toContain("waiting for our support team's review");
+    expect(JSON.stringify(saved)).not.toContain("admin inbox");
     expect(await text("Hi")).toBeNull();
   });
   it("stores photos as request evidence, never room renders", async () => {
@@ -152,7 +159,7 @@ describe("durable request intake", () => {
   it("unsupported media does not submit or start a render", async () => {
     await text("support");
     const reply = await send({ kind: "unsupported" });
-    expect(JSON.stringify(reply)).toContain("Voice messages and videos");
+    expect(JSON.stringify(reply)).toContain("can't read voice messages or videos");
     expect(rows[0]?.status).toBe("draft");
   });
   it("does not report a saved ticket after write failure", async () => {
@@ -191,7 +198,7 @@ describe("durable request intake", () => {
       event: { kind: "text" as const, text: "support" },
     };
     expect(JSON.stringify(await handleRequestInbound(input, brokenDb))).toContain(
-      "nothing has been submitted",
+      "couldn't open your request",
     );
     expect(
       await handleRequestInbound({ ...input, event: { kind: "text", text: "Hi" } }, brokenDb),
@@ -208,14 +215,56 @@ describe("sourced WhatsApp knowledge", () => {
     expect(answer).toContain("/service-support/warranty/");
   });
   it("holds contradictory returns for human review", () => {
-    expect(knowledgeAnswer("refund policy", now)).toContain("inconsistent");
+    expect(knowledgeAnswer("refund policy", now)).toContain("confirm the return window, any fees");
+    expect(knowledgeAnswer("refund policy", now)).not.toContain("inconsistent");
   });
   it("expires static facts instead of silently using old policies", () => {
-    expect(knowledgeAnswer("warranty", Date.parse("2027-01-01"))).toContain("due for review");
+    expect(knowledgeAnswer("warranty", Date.parse("2027-01-01"))).toContain(
+      "check the latest details",
+    );
     expect(whatsappKnowledgeInstructions(Date.parse("2027-01-01"))).not.toContain("one-year");
   });
   it("does not inject the old duties-inclusive claim", () => {
     expect(whatsappKnowledgeInstructions(now)).toContain("not the earlier Common questions");
     expect(knowledgeAnswer("Canadian tariff", now)).not.toContain("final total");
+  });
+});
+
+describe("customer-facing request copy", () => {
+  const request: RequestRecord = {
+    reference: "CF-1234567890ABCDEF",
+    category: "support",
+    session_key: "wa:test",
+    status: "open",
+    stage: "confirm",
+    details: [],
+  };
+  it("keeps support receipts relevant and avoids delivery promises", () => {
+    const receipt = requestReceipt(request);
+    expect(receipt).toContain("support request has been received");
+    expect(receipt).toContain(request.reference);
+    expect(receipt).not.toMatch(/admin inbox|refund|appointment|shortly|reply times|notified/i);
+  });
+  it("retains the relevant confirmation safeguard for order and visit enquiries", () => {
+    expect(requestReceipt({ ...request, category: "order" })).toContain(
+      "still needs their confirmation",
+    );
+    expect(requestReceipt({ ...request, category: "sales" })).toContain(
+      "time still needs to be confirmed",
+    );
+  });
+  it("does not describe an open ticket as already being reviewed", () => {
+    expect(requestStatusText(request)).toContain("waiting for our team's review");
+    expect(requestStatusText(request)).not.toContain("internal");
+    expect(requestStatusText({ ...request, status: "in_progress" })).toContain(
+      "marked your request as being reviewed",
+    );
+  });
+  it("keeps audit notes out of the model's customer-answer data", () => {
+    const prompt = whatsappKnowledgeInstructions(Date.parse("2026-09-11"));
+    expect(prompt).not.toContain('"reviewNote"');
+    expect(prompt).not.toContain("30 days from purchase versus receipt");
+    expect(prompt).not.toContain("AU footer links");
+    expect(prompt).toContain("Never imply that a person has been notified");
   });
 });

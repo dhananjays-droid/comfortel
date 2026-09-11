@@ -20,7 +20,7 @@
         "duties",
         "tariff"
       ],
-      "answer": "The US shipping page estimates 10–15 business days from order for in-stock items, not a guaranteed arrival date. Freight is curbside with a signature; assembly and packaging removal are excluded. Shipping costs and special destinations need confirmation for your address. I cannot verify live stock or tracking here.",
+      "answer": "In-stock items usually arrive in about 10–15 business days after ordering. This is an estimate, so please check with our team if you need delivery by a particular date. Large furniture is delivered to the curb and needs a signature; assembly and packaging removal aren't included. Delivery costs and options depend on your address.",
       "source": "https://comfortelfurniture.com/service-support/delivery-shipping/",
       "status": "published",
       "reviewNote": "General FAQ describes dispatch in 2–5 business days; this is not delivery. Canada coverage conflicts with US-only wording in terms. Do not promise Canadian duties-inclusive totals or excluded-region forwarding arrangements."
@@ -37,7 +37,7 @@
         "restocking",
         "rma"
       ],
-      "answer": "Returns need Kanar approval and an RMA before shipping anything back. The published page has inconsistent deadline and fee wording, so staff must confirm your eligibility and exact charges. A WhatsApp request does not cancel an order or approve a refund.",
+      "answer": "Thinking of returning an item? Please contact our team before sending it back. They'll need to check your purchase and confirm the return window, any fees and a return authorization number. To get started here, choose Order help below.",
       "source": "https://comfortelfurniture.com/service-support/returns-refunds/",
       "status": "review_required",
       "reviewNote": "30 days from purchase versus receipt; 20% restocking and 3% administrative fees versus full pre-dispatch refund wording. Do not calculate a refund or reject a claim automatically."
@@ -45,7 +45,7 @@
     {
       "id": "warranty",
       "topics": ["warranty", "warranties", "guarantee"],
-      "answer": "The US warranty page publishes a standard one-year limited warranty with conditions and exclusions. Staff must check your product, purchase and issue before confirming coverage. Australian warranty terms are not a substitute for US coverage.",
+      "answer": "Comfortel products in the US have a standard one-year limited warranty, subject to the policy's conditions and exclusions. If something has gone wrong, choose Product support below. Share the model, order number if available, and a description or photo of the issue so our team can review whether it's covered.",
       "source": "https://comfortelfurniture.com/service-support/warranty/",
       "status": "review_required",
       "reviewNote": "US warranty page exists despite AU footer links. Its coverage wording conflicts with disclaimers in US terms; never decide a claim automatically."
@@ -64,7 +64,7 @@
         "public",
         "account"
       ],
-      "answer": "The US FAQ says prices are in USD, sales are to businesses and industry professionals, and dispatch tracking is sent by email. You can order through the website or sales team. This chat can record an order enquiry, but cannot access live order status, take payment or place an order.",
+      "answer": "Prices are in US dollars, and Comfortel supplies businesses and industry professionals. You can purchase through our website or sales team. Tracking details are emailed when your order ships. Need help with an existing purchase? Choose Order help below—I'll collect the details for a request to our team.",
       "source": "https://comfortelfurniture.com/service-support/general-faq/",
       "status": "published",
       "reviewNote": "Do not infer live inventory, final taxes, financing eligibility, deposit terms or order changes from static data."
@@ -72,7 +72,7 @@
     {
       "id": "damage",
       "topics": ["damage", "damaged", "shortage", "missing item", "transit"],
-      "answer": "Report delivery damage or missing items promptly and keep the packaging and evidence. The FAQ and terms use different reporting windows, so contact staff now rather than waiting. Share an order reference and description here to prepare a support request; photos can be attached during intake. Keep any videos for staff—the bot does not process video.",
+      "answer": "If something arrived damaged or is missing, please contact our team as soon as possible. Keep the packaging and take photos of the item and any damage. Choose Product support below to share what happened and your order number, if available. Keep any videos handy in case the team needs them later.",
       "source": "https://comfortelfurniture.com/service-support/general-faq/",
       "status": "review_required",
       "reviewNote": "FAQ says 48 hours and requests video evidence; terms say two business days for shortages/rejection. Never deny a late report."
@@ -80,7 +80,7 @@
     {
       "id": "showrooms",
       "topics": ["showroom", "showrooms", "visit", "appointment", "address", "hours", "location"],
-      "answer": "The contact page lists appointment-based showrooms in Carlstadt, NJ; Katy, TX; and Richmond Hill, Ontario. It lists weekday hours of 9 am–4 pm; confirm with the location before travelling. I can record your preferred location and date as a visit request, not a confirmed appointment.",
+      "answer": "You can visit a showroom in Carlstadt, NJ; Katy, TX; or Richmond Hill, Ontario by appointment. Listed hours are Monday–Friday, 9 am–4 pm. Choose Sales / visit below to request a visit. Let us know the location and time you'd prefer, and wait for the team's confirmation before travelling.",
       "source": "https://comfortelfurniture.com/contact-us/",
       "status": "published",
       "reviewNote": "Contact page lists all three addresses. Do not infer slot availability or that a particular item is on display."
@@ -88,7 +88,7 @@
     {
       "id": "finance",
       "topics": ["finance", "financing", "installment", "installments", "loan", "credit"],
-      "answer": "Comfortel's US finance page links to Beneficial Capital for business financing. Approval, rates and repayment terms come from the provider. Please use the official finance page; do not send bank details, card numbers or identity documents in this chat.",
+      "answer": "Business financing is available through Beneficial Capital, subject to their approval and terms. You can find the application link on our finance page below. For your security, use that application rather than sharing financial or identity documents here.",
       "source": "https://comfortelfurniture.com/finance/",
       "status": "published",
       "reviewNote": "Do not quote rates, guarantee approval or offer tax advice."
@@ -110,7 +110,7 @@
         "plumbing",
         "weight capacity"
       ],
-      "answer": "Please share the exact model and your question. I do not have an approved model-specific answer for installation, cleaning compatibility, load limits or certifications. Staff should verify the relevant manual or documentation before advising you.",
+      "answer": "The right advice depends on the exact model. Choose Product support below and share the product name and what you'd like to check. Our team will need to confirm the relevant product guidance before advising on installation, cleaning, weight limits or certifications.",
       "source": "https://comfortelfurniture.com/contact-us/",
       "status": "review_required",
       "reviewNote": "Do not infer certifications or provide electrical/plumbing repair instructions from product photos or unrelated regional manuals."
@@ -118,7 +118,7 @@
     {
       "id": "contact",
       "topics": ["contact", "email", "phone number", "customer service"],
-      "answer": "The US general FAQ lists Customer Service at 646-204-2591 and info@comfortelfurniture.com. For showroom-specific contacts use the contact page. You can also prepare a request here for the admin inbox; response times are not guaranteed.",
+      "answer": "You can reach our US customer service team at 646-204-2591 or info@comfortelfurniture.com. Prefer to start here? Choose an option below and I'll help you put together a request.",
       "source": "https://comfortelfurniture.com/service-support/general-faq/",
       "status": "published",
       "reviewNote": "Other pages list other sales/showroom numbers. Label this as the general FAQ contact, not the only company number."

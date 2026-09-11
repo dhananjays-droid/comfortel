@@ -24,6 +24,12 @@ This remains an administrator-only interface using the existing shared admin cre
 
 **Website-published is not owner-approved.** Clear published facts are attributed; conflicting or model-specific claims require staff confirmation. Snapshot review is due 11 October 2026. Once expired, the bot stops quoting static policy details and directs customers to the current official contact page.
 
+### Customer wording
+
+Customer replies use plain, friendly language: the request has been received, its reference, and the relevant next step. They do not expose the admin inbox, database states, internal policy audits or unrelated disclaimers. An order enquiry still needs team confirmation before any requested change takes effect; a visit time still needs confirmation. Nothing promises a response time or implies a person has been assigned.
+
+Policy answers have short topic labels and source links. Uncertain details are described as something the team needs to confirm for the customer's purchase. The audit findings below remain available to the business, but are not included in the model's customer-answer data. Existing WhatsApp messages and replay records are not rewritten; revised wording applies to new replies.
+
 ### Sources and review findings
 
 | Topic | Official source | How WhatsApp handles it |
