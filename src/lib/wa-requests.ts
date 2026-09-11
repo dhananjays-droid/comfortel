@@ -53,7 +53,7 @@ export function requestIntent(text: string): RequestCategory | null {
 export function requestMenu(): WaTurn {
   return {
     kind: "list",
-    text: "What can we help with? Requests are saved for staff review; bookings and order changes need their confirmation.",
+    text: "How can I help? Choose an option below, or tell me what you need.",
     action: {
       kind: "list",
       button: "Choose help",
@@ -72,15 +72,47 @@ export function requestMenu(): WaTurn {
 export function requestDetailsPrompt(category: RequestCategory): string {
   const prompts: Record<RequestCategory, string> = {
     sales:
-      "Share the product/quantity or what you need help buying. For a showroom visit or callback, include your location, preferred date/time and timezone.",
+      "Happy to help. Tell me which products you're interested in and how many you need. If you'd like a showroom visit or a call, share your location and preferred date/time, including your timezone.",
     support:
-      "Share the product/model, what went wrong and your order reference if you have it. You can attach photos; describe what each shows. No order number? Say 'unknown'.",
+      "I'll help you put together a support request. Which product do you need help with, and what's happened? Include your order number if you have it, and feel free to add photos. It's okay if you can't find the order number.",
     order:
-      "Share your order reference and what you need checked or changed. If you don't have it, say 'unknown' and describe the purchase. Do not send payment details.",
+      "What would you like help with on your order? Share your order number and what you need checked or changed. If you can't find the number, tell me what you purchased instead.",
     complaint:
-      "I'm sorry this has been frustrating. Describe what happened and the outcome you would like; add your order reference if available. If equipment appears unsafe, stop using it and seek qualified help; this chat is not an emergency service.",
+      "I'm sorry you've had a frustrating experience. Tell me what happened and how you'd like us to help. Include your order number if you have it. If equipment seems unsafe, stop using it and get qualified help before using it again.",
   };
-  return `${prompts[category]}\n\nThis prepares a ${category} request for the admin inbox. Nothing is submitted until you confirm. Don't send card numbers, passwords or identity documents. Type 'cancel request' to leave this intake.`;
+  return `${prompts[category]}\n\nYou'll be able to review everything before sending. Please leave out card details, passwords and ID documents. Type 'cancel request' if you'd like to stop.`;
+}
+
+const requestLabels: Record<RequestCategory, string> = {
+  sales: "sales enquiry",
+  support: "support request",
+  order: "order enquiry",
+  complaint: "complaint",
+};
+
+export function requestReceipt(request: RequestRecord): string {
+  const next: Record<RequestCategory, string> = {
+    sales:
+      "It's waiting for our team's review. If you've requested a visit or call, the time still needs to be confirmed.",
+    support:
+      "It's waiting for our support team's review. Keep any photos or order details handy in case they're needed.",
+    order:
+      "It's waiting for our team's review. Any change, cancellation or refund still needs their confirmation.",
+    complaint: "Your concerns have been recorded for our team's review.",
+  };
+  return `Thank you—your ${requestLabels[request.category]} has been received.\nReference: ${request.reference}\n\n${next[request.category]}\n\nType 'request status' to check progress, or 'menu' to continue browsing.`;
+}
+
+export function requestStatusText(request: RequestRecord): string {
+  const states: Record<RequestRecord["status"], string> = {
+    draft: "Not sent yet. Add your details, then review and submit when you're ready.",
+    open: "Received—waiting for our team's review.",
+    in_progress: "Our team has marked your request as being reviewed.",
+    resolved:
+      "Our team has marked this request as resolved. Still need help? Type 'help' to start another request.",
+    cancelled: "This draft wasn't submitted. Type 'help' if you'd like to start again.",
+  };
+  return `Your ${requestLabels[request.category]}\nReference: ${request.reference}\n\n${states[request.status]}${request.category === "order" ? "\nThis update is about your enquiry. For shipment tracking, check your dispatch email." : ""}`;
 }
 
 export function confirmationTurn(request: RequestRecord): WaTurn {
@@ -90,7 +122,7 @@ export function confirmationTurn(request: RequestRecord): WaTurn {
     .slice(0, 2200);
   return {
     kind: "buttons",
-    text: `Review your ${request.category} request:\n${summary}\n\nSubmit to the admin inbox? This is not an order, refund approval or confirmed booking.`,
+    text: `Here's your ${requestLabels[request.category]}:\n\n${summary}\n\nDoes that look right? Tap Submit request to send it for our team to review, or Add details if there's anything else.`,
     action: {
       kind: "buttons",
       buttons: [
