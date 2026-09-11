@@ -39,6 +39,8 @@ import { loadSession, saveSession } from "@/lib/wa-session-store.server";
 import { handleRequestInbound } from "@/lib/wa-requests.server";
 import { handleDocumentInbound } from "@/lib/wa-documents.server";
 import { waSessionKey } from "@/lib/wa-session.server";
+import { staffHandling, touchStaffRequest } from "@/lib/wa-staff.server";
+import { customerTimestamp } from "@/lib/wa-staff";
 
 type InboundMessage = {
   waMessageId: string;
@@ -52,6 +54,7 @@ type InboundMessage = {
   buttonReplyTitle?: string;
   imageId?: string;
   imageCaption?: string;
+  customerSentAt?: string | null;
 };
 
 function timingSafeEqualStrings(a: string, b: string): boolean {
@@ -101,6 +104,7 @@ type WebhookEnvelope = {
           errors?: Array<Record<string, unknown>>;
         }>;
         messages?: Array<{
+          timestamp?: string;
           id?: string;
           from?: string;
           type?: string;
@@ -158,7 +162,11 @@ function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
         if (!m.id || !m.from) continue;
-        const base = { waMessageId: m.id, from: m.from };
+        const base = {
+          waMessageId: m.id,
+          from: m.from,
+          customerSentAt: customerTimestamp(m.timestamp),
+        };
         if (m.type === "text" && m.text?.body) {
           out.push({ ...base, kind: "text", text: m.text.body });
         } else if (m.type === "interactive") {
@@ -212,7 +220,11 @@ function extractContactNames(envelope: WebhookEnvelope): Map<string, string> {
  * possibly twice" rather than dropping inbound traffic — the same resilience
  * stance wa-session-store.server.ts takes for load/save.
  */
-async function recordInboundIfNew(message: InboundMessage, sessionKey: string): Promise<boolean> {
+async function recordInboundIfNew(
+  message: InboundMessage,
+  sessionKey: string,
+  event?: InboundEvent,
+): Promise<boolean> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("wa_messages").insert({
@@ -225,6 +237,9 @@ async function recordInboundIfNew(message: InboundMessage, sessionKey: string): 
         buttonReplyId: message.buttonReplyId ?? null,
         buttonReplyTitle: message.buttonReplyTitle ?? null,
         imageId: message.imageId ?? null,
+        imageCaption: message.imageCaption ?? null,
+        imageUrl: event?.kind === "photo" ? event.url : null,
+        customerSentAt: message.customerSentAt ?? null,
       },
     });
     if (!error) return true;
@@ -412,7 +427,7 @@ async function handleReceive(request: Request): Promise<Response> {
     // Best effort and deliberately before media resolution/queueing: show
     // acknowledgement as soon as the signed event has been accepted.
     try {
-      await markReadAndType(message.waMessageId);
+      await markReadAndType(message.waMessageId, !(await staffHandling(sessionKey)));
     } catch (err) {
       console.error("WhatsApp read/typing update failed", err);
     }
@@ -433,6 +448,8 @@ async function handleReceive(request: Request): Promise<Response> {
             buttonReplyTitle: message.buttonReplyTitle ?? null,
             imageId: message.imageId ?? null,
             imageCaption: message.imageCaption ?? null,
+            imageUrl: event.kind === "photo" ? event.url : null,
+            customerSentAt: message.customerSentAt ?? null,
           },
         },
         ...(customerName ? { customerName } : {}),
@@ -450,7 +467,7 @@ async function handleReceive(request: Request): Promise<Response> {
       // Migration/env compatibility fallback. The atomic RPC cannot partially
       // commit, so the old idempotency insert is safe to use after it fails.
       console.error("WhatsApp inbound enqueue failed; processing inline", error);
-      if (!(await recordInboundIfNew(message, sessionKey))) {
+      if (!(await recordInboundIfNew(message, sessionKey, event))) {
         // The RPC may have committed even if its response was lost. Wake the
         // queue once more before treating this as an ordinary Meta retry.
         await triggerInboundWorker();
@@ -479,6 +496,12 @@ export async function processQueuedInbound(input: {
   event: InboundEvent;
   customerName?: string;
 }): Promise<void> {
+  // Inbound messages are already durably logged. Staff mode leaves the salon
+  // plan untouched and keeps all follow-ups visible in the shared timeline.
+  if (await staffHandling(input.sessionKey)) {
+    await touchStaffRequest(input.sessionKey);
+    return;
+  }
   if (input.event.kind === "photo_error") {
     await deliver(input.phone, input.sessionKey, [
       { kind: "text", text: "I couldn't quite read that photo. Could you try sending it again?" },
@@ -509,9 +532,11 @@ export async function processQueuedInbound(input: {
       customerName: input.customerName ?? result.session.customerName,
       phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
     });
-    await deliver(input.phone, input.sessionKey, result.turns);
+    if (!(await staffHandling(input.sessionKey)))
+      await deliver(input.phone, input.sessionKey, result.turns);
   } catch (error) {
     console.error("wa-runtime dispatch failed", error);
+    if (await staffHandling(input.sessionKey)) return;
     await deliver(input.phone, input.sessionKey, [
       { kind: "text", text: "Sorry, something went wrong on our end. Try that again?" },
     ]);

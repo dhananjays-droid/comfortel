@@ -8,6 +8,43 @@ export type Database = {
   };
   public: {
     Tables: {
+      wa_staff_conversations: {
+        Row: { session_key: string; manual_mode: boolean; updated_at: string };
+        Insert: { session_key: string; manual_mode?: boolean; updated_at?: string };
+        Update: { manual_mode?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      wa_staff_replies: {
+        Row: {
+          id: string;
+          request_reference: string;
+          session_key: string;
+          body: string;
+          state: string;
+          wa_message_id: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          request_reference: string;
+          session_key: string;
+          body: string;
+          state?: string;
+          wa_message_id?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          state?: string;
+          wa_message_id?: string | null;
+          error?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       wa_requests: {
         Row: {
           reference: string;
@@ -400,6 +437,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      set_wa_staff_mode: {
+        Args: { p_session_key: string; p_manual_mode: boolean };
+        Returns: boolean;
+      };
+      claim_wa_staff_reply: {
+        Args: { p_id: string; p_reference: string; p_session_key: string; p_body: string };
+        Returns: boolean;
+      };
       claim_wa_inbound_jobs: {
         Args: { p_limit?: number };
         Returns: Database["public"]["Tables"]["wa_inbound_jobs"]["Row"][];
