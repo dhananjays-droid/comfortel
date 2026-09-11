@@ -466,7 +466,9 @@ export async function processQueuedInbound(input: {
   try {
     const requestTurns = await handleRequestInbound({
       ...input,
-      salesIntakeActive: Boolean(session.flow.awaiting || session.pendingQuote || session.rolePicker),
+      salesIntakeActive: Boolean(
+        session.flow.awaiting || session.pendingQuote || session.rolePicker,
+      ),
     });
     // Legacy handoffs silently stopped the bot without assigning a human.
     // The new request inbox is explicit, persisted and never freezes shopping.
