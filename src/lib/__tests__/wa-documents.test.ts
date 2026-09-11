@@ -34,6 +34,7 @@ describe("WhatsApp PDF journey", () => {
     const follow = turns?.[1];
     expect(follow?.kind).toBe("buttons");
     if (follow?.kind === "buttons") {
+      expect(follow.text).toBe("Would you like our team to confirm delivery?");
       expect(follow.action.buttons[0]!.id).toContain(":4,2:");
       expect(follow.action.buttons[0]!.id.length).toBeLessThanOrEqual(256);
       expect(follow.action.buttons[0]!.title.length).toBeLessThanOrEqual(20);

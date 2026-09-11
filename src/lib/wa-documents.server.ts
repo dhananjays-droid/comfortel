@@ -101,7 +101,7 @@ export async function handleDocumentInbound(
       {
         kind: "buttons",
         text: quote
-          ? "Would you like our team to confirm pricing and delivery?"
+          ? "Would you like our team to confirm delivery?"
           : "Ready to take the next step?",
         action: {
           kind: "buttons",
