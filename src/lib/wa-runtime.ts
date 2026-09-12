@@ -335,7 +335,6 @@ async function startRenderTurn(
   confirmed = false,
 ): Promise<RuntimeResult> {
   const active = await getActiveRenderState(sessionKey);
-  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (!confirmed)
     return proposeRender(session, {
@@ -346,6 +345,11 @@ async function startRenderTurn(
       roomSpec: session.roomSpec,
       ...(note ? { note } : {}),
     });
+  // A proposal is safe during a transient database outage because it cannot
+  // enqueue work. The confirmed path remains fail-closed and checks again
+  // before accepting the Start button, so an outage can never create a
+  // duplicate or untracked render.
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ids = products.map((p) => p.id);
@@ -409,7 +413,6 @@ async function startEditTurn(
   confirmed = false,
 ): Promise<RuntimeResult> {
   const active = await getActiveRenderState(sessionKey);
-  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (!confirmed)
     return proposeRender(session, {
@@ -420,6 +423,7 @@ async function startEditTurn(
       roomSpec: session.roomSpec,
       ...(note ? { note } : {}),
     });
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ok = await enqueueRenderJob(sessionKey, phone, {
@@ -453,7 +457,6 @@ async function renderPlanByZoneTurn(
   const planProducts = planProductsOf(session);
   if (!planProducts.length) return { session, turns: [] };
   const active = await getActiveRenderState(sessionKey);
-  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
   if (!confirmed)
     return proposeRender(session, {
@@ -463,6 +466,7 @@ async function renderPlanByZoneTurn(
       room: liveRoom(session.room),
       roomSpec: session.roomSpec,
     });
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const photo = liveRoom(session.room);

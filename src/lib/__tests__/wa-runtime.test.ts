@@ -498,17 +498,11 @@ describe("handleInboundMessage — the role-by-role picker", () => {
 
 describe("handleInboundMessage — render request", () => {
   /**
-   * enqueueRenderJob has no Supabase credentials in this test environment
-   * (same as every other DB-touching path in this suite), so — correctly,
-   * since Phase 5's reliability fix — it fails even after its internal
-   * retries, and startRenderTurn/renderPlanByZoneTurn now report that
-   * honestly instead of sending a confirmation for a render that was never
-   * actually queued. These two tests assert on that honest failure path;
-   * the "real render actually gets queued" path needs a real database and
-   * is verified manually, same testing-boundary stance as the render
-   * worker's own orchestration.
+   * This suite has no Supabase credentials. An unavailable active-job lookup
+   * must not block the harmless proposal step, but the tests never tap Start:
+   * the confirmed path still fails closed before any enqueue is attempted.
    */
-  it("reports honestly, rather than falsely confirming, when a zone render can't be enqueued", async () => {
+  it("offers an unstarted zone confirmation when the active-job lookup is unavailable", async () => {
     let state: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
@@ -546,13 +540,15 @@ describe("handleInboundMessage — render request", () => {
     expect(state.pendingZoneRender).toBe(false);
     expect(state.room?.url).toBe("https://example.com/room.jpg");
     expect(result.turns).toHaveLength(1);
-    expect(result.turns[0]?.kind).toBe("text");
-    if (result.turns[0]?.kind === "text") {
-      expect(result.turns[0].text.toLowerCase()).toContain("can’t check");
-    }
+    expect(result.turns[0]).toMatchObject({
+      kind: "buttons",
+      imageUrl: "https://example.com/room.jpg",
+    });
+    expect(state.pendingRender).not.toBeNull();
+    expect(state.transcript.at(-1)?.content).toContain("Nothing is generating yet");
   }, 10_000);
 
-  it("reports honestly, rather than falsely confirming, when a tapped offer can't be enqueued", async () => {
+  it("offers an unstarted confirmation after a product offer tap during a lookup outage", async () => {
     const withRoom: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
@@ -563,10 +559,12 @@ describe("handleInboundMessage — render request", () => {
       id: `offer:add:${REAL_ID}`,
     });
     expect(turns).toHaveLength(1);
-    expect(turns[0]?.kind).toBe("text");
-    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("can’t check");
-    // No phantom "here's your render" turn was recorded into history either.
-    expect(session.transcript.at(-1)?.content).toContain("haven’t started");
+    expect(turns[0]).toMatchObject({
+      kind: "buttons",
+      imageUrl: "https://example.com/room.jpg",
+    });
+    expect(session.pendingRender).not.toBeNull();
+    expect(session.transcript.at(-1)?.content).toContain("Nothing is generating yet");
   }, 10_000);
 
   it("declines a placement-mode offer once the room photo has expired", async () => {
