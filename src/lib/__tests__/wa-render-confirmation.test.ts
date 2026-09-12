@@ -170,10 +170,18 @@ describe("WhatsApp explicit render confirmation", () => {
     expect(words(r)).toContain("longer than expected");
     expect(m.chat).not.toHaveBeenCalled();
   });
-  it("fails closed when the job lookup fails", async () => {
+  it("still offers a harmless confirmation when the job lookup fails", async () => {
     m.active.mockResolvedValue({ count: 0, unavailable: true });
     expect(words(await text(fresh(), "render status"))).toContain("can’t check");
-    expect(words(await tap(fresh(), `offer:auto:${id}`))).toContain("can’t check");
+    const proposed = await tap(fresh(), `offer:auto:${id}`);
+    expect(words(proposed)).toContain("Nothing is generating yet");
+    expect(proposed.session.pendingRender).not.toBeNull();
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+  it("fails closed if the job lookup fails after Start generation", async () => {
+    const proposed = await text(fresh(), "Show me on the photo i shared");
+    m.active.mockResolvedValue({ count: 0, unavailable: true });
+    expect(words(await confirm(proposed.session))).toContain("can’t check");
     expect(m.enqueue).not.toHaveBeenCalled();
   });
   it("never claims a start when the confirmed enqueue fails", async () => {
