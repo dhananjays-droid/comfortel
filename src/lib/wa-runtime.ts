@@ -114,6 +114,7 @@ export type WaTurn =
   | { kind: "text"; text: string }
   | { kind: "buttons"; text: string; action: WaAction & { kind: "buttons" } }
   | { kind: "list"; text: string; action: WaAction & { kind: "list" } }
+  | { kind: "image"; imageUrl: string; caption: string }
   | { kind: "product"; imageUrl: string; caption: string };
 
 /**
@@ -209,7 +210,18 @@ function confirmationText(p: PendingRender): string {
 }
 function confirmationResponse(session: SessionState, p: PendingRender): RuntimeResult {
   const text = confirmationText(p);
-  const details: WaTurn[] = [];
+  const details: WaTurn[] = p.room
+    ? [
+        {
+          kind: "image",
+          imageUrl: p.room.url,
+          caption:
+            p.mode === "edit"
+              ? "I’ll update this image after you confirm."
+              : "I’ll use this salon photo after you confirm.",
+        },
+      ]
+    : [];
   if (text.length > 1000) {
     for (let i = 0; i < text.length; i += 900)
       details.push({ kind: "text", text: text.slice(i, i + 900) });
