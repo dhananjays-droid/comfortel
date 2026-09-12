@@ -145,6 +145,7 @@ export async function sendButtons(
   to: string,
   body: string,
   action: WaAction & { kind: "buttons" },
+  imageUrl?: string,
 ): Promise<string> {
   const buttons = action.buttons.slice(0, WA.buttons).map((b) => ({
     type: "reply",
@@ -155,6 +156,7 @@ export async function sendButtons(
     type: "interactive",
     interactive: {
       type: "button",
+      ...(imageUrl ? { header: { type: "image", image: { link: imageUrl } } } : {}),
       body: { text: truncate(body, WA.body) },
       action: { buttons },
     },

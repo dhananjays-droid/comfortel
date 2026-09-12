@@ -306,15 +306,18 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
           ? "document"
           : turn.kind === "text"
             ? "text"
-            : turn.kind === "product" || turn.kind === "image"
+            : turn.kind === "product"
               ? "image"
               : "interactive",
       payload:
         turn.kind === "document"
           ? { filename: turn.filename, caption: turn.caption, reference: turn.reference }
-          : turn.kind === "product" || turn.kind === "image"
+          : turn.kind === "product"
             ? { imageUrl: turn.imageUrl, caption: turn.caption }
-            : { text: turn.text },
+            : {
+                text: turn.text,
+                ...(turn.kind === "buttons" && turn.imageUrl ? { imageUrl: turn.imageUrl } : {}),
+              },
     });
     if (error) console.error("logOutbound failed", error);
   } catch (err) {
@@ -339,7 +342,7 @@ const DUPLICATE_SEND_WINDOW_MS = 15 * 1000;
  * send might happen. Fails open (never blocks a real send) on any error,
  * matching this codebase's resilience stance everywhere else. */
 async function wasJustSent(sessionKey: string, turn: WaTurn): Promise<boolean> {
-  if (turn.kind !== "text" && turn.kind !== "buttons" && turn.kind !== "image") return false;
+  if (turn.kind !== "text" && turn.kind !== "buttons") return false;
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
@@ -352,17 +355,9 @@ async function wasJustSent(sessionKey: string, turn: WaTurn): Promise<boolean> {
       .maybeSingle();
     if (error || !data) return false;
 
-    const last = data as {
-      kind: string;
-      payload: { text?: unknown; imageUrl?: unknown; caption?: unknown };
-      created_at: string;
-    };
-    const expectedKind = turn.kind === "buttons" ? "interactive" : turn.kind;
-    const sameContent =
-      turn.kind === "image"
-        ? last.payload?.imageUrl === turn.imageUrl && last.payload?.caption === turn.caption
-        : last.payload?.text === turn.text;
-    if (last.kind !== expectedKind || !sameContent) return false;
+    const last = data as { kind: string; payload: { text?: unknown }; created_at: string };
+    const expectedKind = turn.kind === "buttons" ? "interactive" : "text";
+    if (last.kind !== expectedKind || last.payload?.text !== turn.text) return false;
 
     const elapsed = Date.now() - new Date(last.created_at).getTime();
     return elapsed >= 0 && elapsed < DUPLICATE_SEND_WINDOW_MS;
@@ -383,10 +378,10 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
         turn.kind === "document"
           ? await sendDocument(to, turn.bytes, turn.filename, turn.caption)
           : turn.kind === "buttons"
-            ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
+            ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action, turn.imageUrl)
             : turn.kind === "list"
               ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
-              : turn.kind === "product" || turn.kind === "image"
+              : turn.kind === "product"
                 ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
                 : await sendText(to, toWhatsAppMarkdown(turn.text));
       await logOutbound(waMessageId, sessionKey, turn);
@@ -405,7 +400,7 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
         }
         break; // Do not send a success/follow-up CTA after a failed attachment.
       }
-      if (turn.kind === "image") {
+      if (turn.kind === "buttons" && turn.imageUrl) {
         try {
           await sendText(
             to,
@@ -414,7 +409,7 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
         } catch {
           /* Existing delivery-status monitoring handles provider outages. */
         }
-        break; // The customer must see the source image before a Start button is useful.
+        break; // The photo and Start button are one atomic interactive message.
       }
     }
   }
