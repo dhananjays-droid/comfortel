@@ -339,7 +339,7 @@ const DUPLICATE_SEND_WINDOW_MS = 15 * 1000;
  * send might happen. Fails open (never blocks a real send) on any error,
  * matching this codebase's resilience stance everywhere else. */
 async function wasJustSent(sessionKey: string, turn: WaTurn): Promise<boolean> {
-  if (turn.kind !== "text" && turn.kind !== "buttons") return false;
+  if (turn.kind !== "text" && turn.kind !== "buttons" && turn.kind !== "image") return false;
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
@@ -352,9 +352,17 @@ async function wasJustSent(sessionKey: string, turn: WaTurn): Promise<boolean> {
       .maybeSingle();
     if (error || !data) return false;
 
-    const last = data as { kind: string; payload: { text?: unknown }; created_at: string };
-    const expectedKind = turn.kind === "buttons" ? "interactive" : "text";
-    if (last.kind !== expectedKind || last.payload?.text !== turn.text) return false;
+    const last = data as {
+      kind: string;
+      payload: { text?: unknown; imageUrl?: unknown; caption?: unknown };
+      created_at: string;
+    };
+    const expectedKind = turn.kind === "buttons" ? "interactive" : turn.kind;
+    const sameContent =
+      turn.kind === "image"
+        ? last.payload?.imageUrl === turn.imageUrl && last.payload?.caption === turn.caption
+        : last.payload?.text === turn.text;
+    if (last.kind !== expectedKind || !sameContent) return false;
 
     const elapsed = Date.now() - new Date(last.created_at).getTime();
     return elapsed >= 0 && elapsed < DUPLICATE_SEND_WINDOW_MS;
@@ -396,6 +404,17 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
           /* Existing delivery-status monitoring handles provider outages. */
         }
         break; // Do not send a success/follow-up CTA after a failed attachment.
+      }
+      if (turn.kind === "image") {
+        try {
+          await sendText(
+            to,
+            "I couldn’t display the saved photo, so I haven’t asked you to start. Please send the room photo again.",
+          );
+        } catch {
+          /* Existing delivery-status monitoring handles provider outages. */
+        }
+        break; // The customer must see the source image before a Start button is useful.
       }
     }
   }
