@@ -104,6 +104,12 @@ describe("WhatsApp explicit render confirmation", () => {
   it("the exact screenshot request produces a confirmation, not a false start", async () => {
     const r = await text(fresh(), "Show me on the photo i shared");
     expect(m.enqueue).not.toHaveBeenCalled();
+    expect(r.turns[0]).toEqual({
+      kind: "image",
+      imageUrl: room.url,
+      caption: "I’ll use this salon photo after you confirm.",
+    });
+    expect(r.turns.at(-1)?.kind).toBe("buttons");
     expect(words(r)).toContain("Nothing is generating yet");
     expect(words(r)).toContain("saved salon photo");
     expect(words(r)).not.toMatch(/rendering it now|ready in a minute/);
@@ -239,6 +245,7 @@ describe("WhatsApp explicit render confirmation", () => {
   it("explicitly labels an example room when no photo is available", async () => {
     const r = await tap({ ...fresh(), room: null }, `offer:auto:${id}`);
     expect(words(r)).toContain("example salon (not your uploaded photo)");
+    expect(r.turns.some((turn) => turn.kind === "image")).toBe(false);
     expect(m.enqueue).not.toHaveBeenCalled();
   });
   it("does not silently stage a room when the user asks for their photo", async () => {
@@ -281,6 +288,11 @@ describe("WhatsApp explicit render confirmation", () => {
       },
       note,
     );
+    expect(r.turns[0]).toEqual({
+      kind: "image",
+      imageUrl: room.url,
+      caption: "I’ll update this image after you confirm.",
+    });
     expect(words(r)).toContain(note);
     expect(m.enqueue).not.toHaveBeenCalled();
     await confirm(r.session);

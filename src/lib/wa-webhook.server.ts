@@ -306,13 +306,13 @@ async function logOutbound(waMessageId: string, sessionKey: string, turn: WaTurn
           ? "document"
           : turn.kind === "text"
             ? "text"
-            : turn.kind === "product"
+            : turn.kind === "product" || turn.kind === "image"
               ? "image"
               : "interactive",
       payload:
         turn.kind === "document"
           ? { filename: turn.filename, caption: turn.caption, reference: turn.reference }
-          : turn.kind === "product"
+          : turn.kind === "product" || turn.kind === "image"
             ? { imageUrl: turn.imageUrl, caption: turn.caption }
             : { text: turn.text },
     });
@@ -378,7 +378,7 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
             ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action)
             : turn.kind === "list"
               ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
-              : turn.kind === "product"
+              : turn.kind === "product" || turn.kind === "image"
                 ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
                 : await sendText(to, toWhatsAppMarkdown(turn.text));
       await logOutbound(waMessageId, sessionKey, turn);
