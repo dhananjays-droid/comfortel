@@ -174,6 +174,7 @@ export type Database = {
           last_render: Json | null;
           offered: Json | null;
           pending_quote: Json | null;
+          pending_render: Json | null;
           pending_zone_render: boolean;
           phone_last4: string | null;
           plan: Json;
@@ -197,6 +198,7 @@ export type Database = {
           last_render?: Json | null;
           offered?: Json | null;
           pending_quote?: Json | null;
+          pending_render?: Json | null;
           pending_zone_render?: boolean;
           phone_last4?: string | null;
           plan?: Json;
@@ -220,6 +222,7 @@ export type Database = {
           last_render?: Json | null;
           offered?: Json | null;
           pending_quote?: Json | null;
+          pending_render?: Json | null;
           pending_zone_render?: boolean;
           phone_last4?: string | null;
           plan?: Json;

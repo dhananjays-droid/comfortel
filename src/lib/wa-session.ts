@@ -17,8 +17,8 @@ import type { Package, Role } from "@/lib/packages";
 import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 import type { Await, FlowState } from "@/lib/wa-flow";
 
-/** Matches kie's own tempfile expiry — see visualize.functions.ts / GUIDE.md. */
-export const ROOM_TTL_MS = 15 * 60 * 1000;
+/** WhatsApp photos are durably re-hosted, not Kie's temporary upload URLs. */
+export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 /** The session keeps a slightly wider window than any single chat() call sends. */
 export const MAX_TRANSCRIPT = 24;
 /** A package offer older than this is re-curated rather than accepted stale. */
@@ -58,11 +58,8 @@ export type SessionRoomSpec = { wallCm: number; depthCm?: number };
  */
 export type SessionRoomPhoto = { url: string; at: number };
 
-/** How long a delivered render stays editable via "make it blue"-style
- * follow-ups. Wider than ROOM_TTL_MS — a customer looking at a finished
- * picture and deciding what to tweak takes longer than uploading a photo,
- * but this still shouldn't outlive the conversation that produced it. */
-export const LAST_RENDER_TTL_MS = 30 * 60 * 1000;
+/** A durable delivered image remains editable for the current day's conversation. */
+export const LAST_RENDER_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The most recently delivered render — what a "make the chairs blue"
@@ -124,6 +121,41 @@ export type SessionRolePicker = {
  * button tap. */
 export type SessionPendingQuote = { productIds: string[] };
 
+export type PendingRender = {
+  id: string;
+  at: number;
+  mode: VisualizeMode | "zones";
+  productIds: string[];
+  quantities: Record<string, number>;
+  room: SessionRoomPhoto | null;
+  roomSpec: SessionRoomSpec | null;
+  note?: string;
+};
+
+export function sanitizePendingRender(input: unknown): PendingRender | null {
+  const r = input as Partial<PendingRender> | null;
+  if (
+    !r ||
+    typeof r.id !== "string" ||
+    !/^[0-9a-f-]{36}$/.test(r.id) ||
+    typeof r.at !== "number" ||
+    !Number.isFinite(r.at) ||
+    !(r.mode === "zones" || isVisualizeMode(r.mode))
+  )
+    return null;
+  const plan = sanitizePlan({ ids: r.productIds, qty: r.quantities });
+  return {
+    id: r.id,
+    at: r.at,
+    mode: r.mode,
+    productIds: plan.ids,
+    quantities: plan.qty,
+    room: sanitizeRoom(r.room),
+    roomSpec: sanitizeRoomSpec(r.roomSpec),
+    ...(typeof r.note === "string" ? { note: r.note.slice(0, 800) } : {}),
+  };
+}
+
 export type SessionState = {
   transcript: ChatMessageInput[];
   plan: SessionPlan;
@@ -137,6 +169,7 @@ export type SessionState = {
    * matches index.tsx's `pendingZoneRender` state. */
   pendingZoneRender: boolean;
   pendingQuote: SessionPendingQuote | null;
+  pendingRender?: PendingRender | null;
   handoff: boolean;
   /** WhatsApp's own contacts[].profile.name for this number — the display
    * name the customer set in their own app, not something Comfortel asked
@@ -159,6 +192,7 @@ export const EMPTY_SESSION: SessionState = {
   rolePicker: null,
   pendingZoneRender: false,
   pendingQuote: null,
+  pendingRender: null,
   handoff: false,
   customerName: null,
   phoneLast4: null,
@@ -171,9 +205,7 @@ export function liveRoom(room: SessionRoomPhoto | null, now = Date.now()): Sessi
   return now - room.at > ROOM_TTL_MS ? null : room;
 }
 
-/** A render older than LAST_RENDER_TTL_MS is treated as gone — "make it
- * blue" against a picture from an hour ago re-starts the conversation
- * instead of editing something the customer may not even remember. */
+/** A render older than LAST_RENDER_TTL_MS requires a fresh reference. */
 export function liveLastRender(
   render: SessionLastRender | null,
   now = Date.now(),
@@ -454,6 +486,7 @@ export function sanitizeSession(input: unknown): SessionState {
     rolePicker: sanitizeRolePicker(raw?.rolePicker),
     pendingZoneRender: raw?.pendingZoneRender === true,
     pendingQuote: sanitizePendingQuote(raw?.pendingQuote),
+    pendingRender: sanitizePendingRender(raw?.pendingRender),
     handoff: raw?.handoff === true,
     customerName: sanitizeShortString(raw?.customerName, 120),
     phoneLast4: sanitizeShortString(raw?.phoneLast4, 4),

@@ -67,7 +67,7 @@ describe("liveRoom", () => {
   });
 
   it("expires a room photo past the TTL", () => {
-    expect(liveRoom(room, 1_000_000 + 16 * 60_000)).toBeNull();
+    expect(liveRoom(room, 1_000_000 + 25 * 60 * 60_000)).toBeNull();
   });
 
   it("passes null through", () => {
@@ -299,6 +299,7 @@ describe("sanitizeSession", () => {
       },
       pendingZoneRender: true,
       pendingQuote: { productIds: [REAL_ID] },
+      pendingRender: null,
       handoff: true,
       customerName: "Jamie Lee",
       phoneLast4: "4567",

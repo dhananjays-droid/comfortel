@@ -29,7 +29,6 @@ import {
   parseChatInput,
   runChatTurn as runChatCore,
   type ChatMessageInput,
-  type RenderRequest,
 } from "@/lib/chat.functions";
 import { parseCurateInput, runCuratePackages } from "@/lib/curate.functions";
 import { parseEnquiryInput, runSubmitEnquiry } from "@/lib/enquiry.functions";
@@ -51,6 +50,7 @@ import {
 import { expectedFrom, linesFrom, planPieces, planTotal, quantitiesFor } from "@/lib/plan";
 import { wantsZoneSplit } from "@/lib/render-intent";
 import { tooManyRenderRequests } from "@/lib/wa-rate-limit.server";
+import { claimRenderAction } from "@/lib/wa-render-guards.server";
 import { genericCapacity } from "@/lib/room";
 import {
   cancelActiveRenderJobs,
@@ -64,6 +64,7 @@ import {
   liveRolePicker,
   liveRoom,
   sanitizeRoomSpec,
+  type PendingRender,
   type SessionLastRender,
   type SessionOffered,
   type SessionOfferedChoice,
@@ -138,8 +139,8 @@ export function productTurns(productIds: string[]): WaTurn[] {
  * The default next step whenever products were shown but the model did not
  * already offer or trigger a render for them — a customer should never have
  * to find the exact right phrasing to get a picture; a tap should always be
- * on offer instead. staged_room is always the mode here since it is the one
- * that works whether or not a room photo exists.
+ * on offer instead. The auto action chooses the current saved photo when
+ * available, and always describes the source before the separate start tap.
  */
 export function proactiveOfferTurn(productIds: string[]): WaTurn | null {
   if (!productIds.length) return null;
@@ -149,7 +150,7 @@ export function proactiveOfferTurn(productIds: string[]): WaTurn | null {
     action: {
       kind: "buttons",
       buttons: [
-        { id: `offer:staged_room:${productIds.join(",")}`, title: "See it in your space" },
+        { id: `offer:auto:${productIds.join(",")}`, title: "Preview in a room" },
         { id: `docs:quote:${productIds.join(",")}`, title: "PDF estimate" },
         ...(productIds.length >= 2 && productIds.length <= 3
           ? [{ id: `docs:compare:${productIds.join(",")}`, title: "Compare products" }]
@@ -164,7 +165,7 @@ export function proactiveOfferTurn(productIds: string[]): WaTurn | null {
  * rather than a dropped request. See wa-rate-limit.server.ts. */
 const RATE_LIMITED_TURN: WaTurn = {
   kind: "text",
-  text: "That's a few renders in a row, give it a few minutes and ask again and I'll get started.",
+  text: "You’ve reached the image request limit for now. Please wait a few minutes, then ask again for a fresh confirmation. I haven’t started another image.",
 };
 
 /** Sent instead of a false "rendering now" confirmation when
@@ -185,19 +186,93 @@ export type InboundEvent =
 
 export type RuntimeResult = { session: SessionState; turns: WaTurn[] };
 
+const STATUS_UNAVAILABLE =
+  "I can’t check your image status right now, so I won’t guess. I haven’t started another image. Please ask me to check again shortly.";
+const CONFIRM_TTL = 30 * 60 * 1000;
+function confirmationText(p: PendingRender): string {
+  const items = p.productIds
+    .map((id) => `${p.quantities[id] ?? 1} × ${getProduct(id)?.name ?? id}`)
+    .join("\n");
+  const target =
+    p.mode === "edit"
+      ? "update the last image I sent you"
+      : p.room
+        ? "use your saved salon photo"
+        : "create an example salon (not your uploaded photo)";
+  const count =
+    p.mode === "zones"
+      ? "one image per salon area"
+      : !isMultiReferenceMode(p.mode) && p.productIds.length > 1
+        ? `${p.productIds.length} separate images`
+        : "one image";
+  return `Please confirm before I start. I’ll ${target}${p.mode === "edit" ? "." : ` and generate ${count}.`}\n\n${items}${p.note ? `\nYour request: ${p.note}` : ""}\n\nNothing is generating yet. Tap Start generation to continue, or tell me what to change.`;
+}
+function confirmationResponse(session: SessionState, p: PendingRender): RuntimeResult {
+  const text = confirmationText(p);
+  const details: WaTurn[] = [];
+  if (text.length > 1000) {
+    for (let i = 0; i < text.length; i += 900)
+      details.push({ kind: "text", text: text.slice(i, i + 900) });
+  }
+  const turn: Extract<WaTurn, { kind: "buttons" }> = {
+    kind: "buttons",
+    text:
+      text.length <= 1000
+        ? text
+        : "Please review the image details above. Nothing is generating yet. Tap Start generation to continue, or tell me what to change.",
+    action: {
+      kind: "buttons",
+      buttons: [
+        { id: `render:confirm:${p.id}`, title: "Start generation" },
+        { id: `render:dismiss:${p.id}`, title: "Not now" },
+      ],
+    },
+  };
+  return {
+    session: appendTranscript(session, "assistant", text),
+    turns: [...details, turn],
+  };
+}
+function proposeRender(
+  session: SessionState,
+  proposal: Omit<PendingRender, "id" | "at">,
+): RuntimeResult {
+  // Reflect the renderer's actual quantity limit, not a larger shopping quantity.
+  const quantities = Object.fromEntries(
+    proposal.productIds.map((id) => [
+      id,
+      proposal.mode === "zones" || proposal.mode === "refit_room" || proposal.mode === "staged_room"
+        ? Math.max(1, Math.min(20, Math.floor(proposal.quantities[id] ?? 1)))
+        : 1,
+    ]),
+  );
+  const pendingRender = {
+    ...proposal,
+    room: proposal.room ? { ...proposal.room } : null,
+    roomSpec: proposal.roomSpec ? { ...proposal.roomSpec } : null,
+    quantities,
+    id: crypto.randomUUID(),
+    at: Date.now(),
+  };
+  return confirmationResponse({ ...session, pendingRender }, pendingRender);
+}
+function messageResult(session: SessionState, text: string): RuntimeResult {
+  return { session: appendTranscript(session, "assistant", text), turns: [{ kind: "text", text }] };
+}
+
 function renderBusyTurn(
   active: ActiveRenderState,
   photoSaved = false,
 ): Extract<WaTurn, { kind: "buttons" }> {
   const progress = active.generating
-    ? `${active.generating} generating`
-    : `${active.pending} waiting to start`;
+    ? `${active.generating} image${active.generating === 1 ? " is" : "s are"} generating`
+    : `${active.pending} image${active.pending === 1 ? " is" : "s are"} queued`;
   const intro = photoSaved
     ? "I saved this as the room photo for your next render."
     : "A render is already in progress, so I haven’t started another one.";
   return {
     kind: "buttons",
-    text: `${intro} Your current request is still active (${progress}).`,
+    text: `${intro} ${progress}.`,
     action: {
       kind: "buttons",
       buttons: [
@@ -233,14 +308,6 @@ function appendTranscript(
 // rendering
 // ---------------------------------------------------------------------------
 
-/** Matches buildRenderMessage's per-entry label in index.tsx. */
-function entryLabel(mode: VisualizeMode, ids: string[]): string {
-  if (mode === "refit_room") return "Your salon, refitted";
-  if (mode === "staged_room") return "Your plan, staged in a salon";
-  if (mode === "lineup") return `${ids.length} options in your space`;
-  return getProduct(ids[0]!)?.name ?? "Your render";
-}
-
 /**
  * Enqueues one wa_render_jobs row per group and returns the confirmation text
  * — the server-side equivalent of buildRenderMessage + runRender, minus the
@@ -259,9 +326,20 @@ async function startRenderTurn(
   quantities: Record<string, number> | undefined,
   /** The customer's own words for this request — see visualize-prompt.ts's noteClause(). */
   note?: string | undefined,
+  confirmed = false,
 ): Promise<RuntimeResult> {
   const active = await getActiveRenderState(sessionKey);
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
+  if (!confirmed)
+    return proposeRender(session, {
+      mode,
+      productIds: products.map((p) => p.id),
+      quantities: quantities ?? {},
+      room: photo,
+      roomSpec: session.roomSpec,
+      ...(note ? { note } : {}),
+    });
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ids = products.map((p) => p.id);
@@ -296,17 +374,8 @@ async function startRenderTurn(
       ? `Build a salon around these ${pieceCount(products, quantities)} pieces.`
       : `Show me the ${products[0]?.name ?? "this piece"} in a salon.`;
 
-  const names = products.map((p) => p.name).filter(Boolean);
-  const contentText =
-    mode === "refit_room"
-      ? "I’ve started refitting your salon with those Comfortel pieces. This usually takes 1–2 minutes ⏳"
-      : mode === "staged_room"
-        ? "I’ve started building that salon. This usually takes 1–2 minutes ⏳"
-        : mode === "lineup"
-          ? `I’ve started placing ${names.join(", ")} side by side. This usually takes 1–2 minutes ⏳`
-          : groups.length > 1
-            ? `I’ve started ${groups.length} options for your space. This usually takes 1–2 minutes ⏳`
-            : `I’ve started rendering the ${entryLabel(mode, groups[0]!)} in your space. This usually takes 1–2 minutes ⏳`;
+  const subject = photo ? "your salon photo" : "an example salon";
+  const contentText = `${enqueued === 1 ? "Your image" : `${enqueued} images`} using ${subject} ${enqueued === 1 ? "is" : "are"} queued. I’ll send ${enqueued === 1 ? "it" : "them"} here when ready. Tap Check status below for a verified update.${enqueued < groups.length ? " Some options could not be queued; only the confirmed images will be generated." : ""}`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -331,9 +400,20 @@ async function startEditTurn(
   phone: string,
   lastRender: SessionLastRender,
   note: string | undefined,
+  confirmed = false,
 ): Promise<RuntimeResult> {
   const active = await getActiveRenderState(sessionKey);
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
+  if (!confirmed)
+    return proposeRender(session, {
+      mode: "edit",
+      productIds: [],
+      quantities: {},
+      room: { url: lastRender.resultUrl, at: lastRender.at },
+      roomSpec: session.roomSpec,
+      ...(note ? { note } : {}),
+    });
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const ok = await enqueueRenderJob(sessionKey, phone, {
@@ -345,7 +425,8 @@ async function startEditTurn(
   if (!ok) return { session, turns: [RENDER_FAILED_TURN] };
 
   const askedText = note ? `Change the render: ${note}` : "Update my last render.";
-  const contentText = "I’ve started updating that render. This usually takes 1–2 minutes ⏳";
+  const contentText =
+    "Your image update is queued. I’ll send the edited image here when it’s ready. Ask me to check the status any time for a verified update.";
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -361,11 +442,21 @@ async function renderPlanByZoneTurn(
   session: SessionState,
   sessionKey: string,
   phone: string,
+  confirmed = false,
 ): Promise<RuntimeResult> {
   const planProducts = planProductsOf(session);
   if (!planProducts.length) return { session, turns: [] };
   const active = await getActiveRenderState(sessionKey);
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
   if (active.count) return { session, turns: [renderBusyTurn(active)] };
+  if (!confirmed)
+    return proposeRender(session, {
+      mode: "zones",
+      productIds: session.plan.ids,
+      quantities: session.plan.qty,
+      room: liveRoom(session.room),
+      roomSpec: session.roomSpec,
+    });
   if (await tooManyRenderRequests(sessionKey)) return { session, turns: [RATE_LIMITED_TURN] };
 
   const photo = liveRoom(session.room);
@@ -390,7 +481,7 @@ async function renderPlanByZoneTurn(
   if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
-  const contentText = `I’ve started the zone renders for ${zones}. They usually take 1–2 minutes each ⏳`;
+  const contentText = `Queued ${enqueued} image${enqueued === 1 ? "" : "s"} for your salon areas (${zones}). I’ll send each result here when it’s ready.${enqueued < groups.length ? " Some areas could not be queued." : ""}`;
   const next = appendTranscript(session, "assistant", contentText);
   return { session: next, turns: [{ kind: "text", text: contentText }] };
 }
@@ -877,20 +968,43 @@ async function acceptOfferRequest(
   phone: string,
   tappedId: string,
 ): Promise<RuntimeResult> {
-  const [, mode, idsPart] = tappedId.split(":");
+  const [, requestedMode, idsPart] = tappedId.split(":");
+  // Old generic staged-room buttons also go through a fresh confirmation.
+  const mode =
+    requestedMode === "auto"
+      ? liveRoom(session.room)
+        ? "refit_room"
+        : "staged_room"
+      : requestedMode;
   if (!mode || !isVisualizeMode(mode)) return { session, turns: [] };
 
   if (mode === "edit") {
     const lastRender = liveLastRender(session.lastRender);
-    if (!lastRender) return { session, turns: [] };
-    const note = idsPart ? decodeURIComponent(idsPart) : undefined;
+    if (!lastRender)
+      return messageResult(
+        session,
+        "That image is no longer available for editing. Please send the image you want to use again.",
+      );
+    let note: string | undefined;
+    try {
+      note = idsPart ? decodeURIComponent(idsPart) : undefined;
+    } catch {
+      return messageResult(
+        session,
+        "That edit button is no longer valid. Please describe your change again.",
+      );
+    }
     return startEditTurn(session, sessionKey, phone, lastRender, note);
   }
   if (!idsPart) return { session, turns: [] };
 
   const staged = mode === "staged_room";
   const room = liveRoom(session.room);
-  if (!room && !staged) return { session, turns: [] };
+  if (!room && !staged)
+    return messageResult(
+      session,
+      "Please upload your salon photo again before we prepare this image. Nothing has started.",
+    );
 
   const ids = idsPart
     .split(",")
@@ -1104,88 +1218,82 @@ async function runChatTurn(
     };
   }
 
-  const next = appendTranscript(session, "assistant", res.text);
-  const turns: WaTurn[] = [];
-
-  if (res.offer && (room || res.offer.mode === "staged_room" || res.offer.mode === "edit")) {
-    const offer: RenderRequest = res.offer;
-    const action: WaAction & { kind: "buttons" } = {
-      kind: "buttons",
-      buttons: [
-        {
-          // edit has no product ids to name — "offer:edit:" (empty third
-          // segment) is a valid, expected id acceptOfferRequest handles.
-          id:
-            offer.mode === "edit"
-              ? // The note is the whole instruction — with nothing else
-                // carrying it, tapping the button would edit nothing.
-                // encodeURIComponent keeps it to one colon-free segment,
-                // same reasoning as every other id: prefix-parsed by
-                // acceptOfferRequest, never trusted as-is.
-                `offer:edit:${encodeURIComponent(offer.note ?? "")}`
-              : `offer:${offer.mode}:${offer.productIds.join(",")}`,
-          // Exactly WA.buttonTitle (20 chars) — "See this in your
-          // space" (22) was silently truncated by WhatsApp itself into
-          // "See this in your sp…", a real bug a customer flagged.
-          title: offer.mode === "edit" ? "Yes, update it" : "See it in your space",
-        },
-      ],
-    };
-    turns.push({ kind: "buttons", text: res.text, action });
-  } else {
-    turns.push({ kind: "text", text: res.text });
-  }
-
-  if (res.render?.mode === "edit" && lastRender) {
-    const edited = await startEditTurn(next, sessionKey, phone, lastRender, res.render.note);
-    // Same reasoning as the products branch below: the reply already says
-    // what's being changed, so nothing else needs to follow it here.
-    return { session: edited.session, turns: [...turns, ...edited.turns] };
-  }
-
-  if (res.render && (room || res.render.mode === "staged_room")) {
-    const products = res.render.productIds
+  // WhatsApp never forwards a model's promise as proof that work started.
+  // Both immediate markers and offers become persisted, explicit confirmations.
+  const request = res.render ?? res.offer;
+  const userText = session.transcript.filter((m) => m.role === "user").at(-1)?.content ?? "";
+  const ownPhoto =
+    /(?:photo|picture|image).*(?:shared|sent|uploaded)|(?:my|our|this|the) (?:photo|picture)|(?:on|in) (?:the|my) (?:photo|picture)/i.test(
+      userText,
+    );
+  const claimedWork =
+    /(?:render|generat|process|ready|minute)/i.test(res.text) &&
+    /(?:I.?m|I am|I.?ll|started|starting|processing|shortly|minute|on its way)/i.test(res.text);
+  if (request) {
+    if (request.mode === "edit") {
+      if (!lastRender)
+        return messageResult(
+          session,
+          "I don’t have a recent generated image to edit. Please send the image you want to use.",
+        );
+      return startEditTurn(session, sessionKey, phone, lastRender, request.note);
+    }
+    const mode = ownPhoto && request.mode === "staged_room" ? "refit_room" : request.mode;
+    if (mode !== "staged_room" && !room)
+      return messageResult(
+        { ...session, pendingRender: null },
+        "Your earlier salon photo is no longer available for a new image. Please upload it again. I haven’t started anything or switched to an example room.",
+      );
+    const products = request.productIds
       .map((id) => getProduct(id))
       .filter((p): p is FullProduct => Boolean(p));
-    if (products.length) {
-      // The plan's saved quantities are the default source, but a count
-      // named right in this request ("three Oakley chairs") describes this
-      // render specifically and was never added to the plan, so it wins for
-      // any id it names.
-      const quantities = res.render.quantities
-        ? { ...session.plan.qty, ...res.render.quantities }
-        : session.plan.qty;
-      const rendered = await startRenderTurn(
-        next,
+    if (products.length)
+      return startRenderTurn(
+        session,
         sessionKey,
         phone,
         products,
-        res.render.mode,
-        res.render.mode === "staged_room" ? null : room,
-        quantities,
-        res.render.note,
+        mode,
+        mode === "staged_room" ? null : room,
+        { ...session.plan.qty, ...request.quantities },
+        request.note,
       );
-      // No product cards here on purpose — a customer just told a render
-      // is starting, then immediately shown the same cards again, reads as
-      // "that's the whole response" rather than "a render is in progress",
-      // a real complaint from live testing. The reply text already named
-      // what's being built; the cards would only repeat it.
-      return { session: rendered.session, turns: [...turns, ...rendered.turns] };
-    }
+    return messageResult(
+      session,
+      "Which products would you like in the image? I’ll show you the details to confirm before starting.",
+    );
   }
-
-  // The web app shows a ProductCard per id via ProductStrip; this is the
-  // WhatsApp equivalent — one image message per product, right after the
-  // reply that named them. Only reached when no render fired above.
-  turns.push(...productTurns(res.productIds));
-
-  // Neither an offer nor a render already came with these cards — give the
-  // customer a tap instead of leaving the next step to whatever they type.
-  if (!res.offer && res.productIds.length) {
+  if (claimedWork || (ownPhoto && /show|place|put|render/i.test(userText))) {
+    const products = (res.productIds.length ? res.productIds : session.plan.ids)
+      .map((id) => getProduct(id))
+      .filter((p): p is FullProduct => Boolean(p));
+    if (ownPhoto && !room)
+      return messageResult(
+        { ...session, pendingRender: null },
+        "Please upload your salon photo again so I can use the right room. I haven’t started a new image.",
+      );
+    if (products.length)
+      return startRenderTurn(
+        session,
+        sessionKey,
+        phone,
+        products,
+        room ? "refit_room" : "staged_room",
+        room,
+        session.plan.qty,
+        userText,
+      );
+    return messageResult(
+      session,
+      "I haven’t started a new image. Tell me which products to include, and I’ll ask you to confirm before generating it.",
+    );
+  }
+  const next = appendTranscript(session, "assistant", res.text);
+  const turns: WaTurn[] = [{ kind: "text", text: res.text }, ...productTurns(res.productIds)];
+  if (res.productIds.length) {
     const offerTurn = proactiveOfferTurn(res.productIds);
     if (offerTurn) turns.push(offerTurn);
   }
-
   return { session: next, turns };
 }
 
@@ -1202,13 +1310,149 @@ async function route(
 ): Promise<RuntimeResult> {
   const command = (tappedId ?? text.replace(/^wa:/i, "")).trim().toLowerCase();
 
-  if (command === "render:status" || /^(check )?render status$/.test(command)) {
+  if (tappedId?.startsWith("render:confirm:")) {
+    const p = session.pendingRender;
+    // An old button must not discard the newer proposal the customer is reviewing.
+    if (
+      p &&
+      tappedId !== `render:confirm:${p.id}` &&
+      Date.now() - p.at <= CONFIRM_TTL &&
+      p.at <= Date.now()
+    ) {
+      const current = confirmationResponse(session, p);
+      return {
+        ...current,
+        turns: [
+          {
+            kind: "text",
+            text: "That confirmation is no longer current. Nothing new has started. Please review your latest request below.",
+          },
+          ...current.turns,
+        ],
+      };
+    }
+    if (
+      !p ||
+      tappedId !== `render:confirm:${p.id}` ||
+      Date.now() - p.at > CONFIRM_TTL ||
+      p.at > Date.now()
+    )
+      return messageResult(
+        { ...session, pendingRender: null },
+        "That confirmation is no longer current. Tell me what you’d like to generate and I’ll show you a fresh confirmation. Nothing new has started.",
+      );
+    const next = { ...session, pendingRender: null, roomSpec: p.roomSpec };
+    if (p.room && !liveRoom(p.room))
+      return messageResult(
+        next,
+        "Your saved photo has expired since that confirmation. Please upload it again. Nothing has started.",
+      );
+    let claimed = false;
+    try {
+      claimed = await claimRenderAction(p.id, sessionKey, "customer-confirmed");
+    } catch {
+      /* Fail closed on database outages. */
+    }
+    if (!claimed)
+      return messageResult(
+        next,
+        "I couldn’t accept that start button again. It may already have been used. Please check render status before creating a new request.",
+      );
+    if (p.mode === "edit") {
+      if (!p.room)
+        return messageResult(
+          next,
+          "Please send the image you want to edit again. Nothing has started.",
+        );
+      return startEditTurn(
+        next,
+        sessionKey,
+        phone,
+        { resultUrl: p.room.url, at: p.room.at, mode: "edit", productIds: [], quantities: {} },
+        p.note,
+        true,
+      );
+    }
+    if (p.mode === "zones") {
+      const result = await renderPlanByZoneTurn(
+        { ...next, room: p.room, plan: { ids: p.productIds, qty: p.quantities } },
+        sessionKey,
+        phone,
+        true,
+      );
+      return { ...result, session: { ...result.session, room: session.room, plan: session.plan } };
+    }
+    if (p.mode !== "staged_room" && !p.room)
+      return messageResult(next, "Please upload your salon photo again. Nothing has started.");
+    const products = p.productIds
+      .map((id) => getProduct(id))
+      .filter((p): p is FullProduct => Boolean(p));
+    if (!products.length)
+      return messageResult(
+        next,
+        "Those products are no longer available. Please choose them again before generating.",
+      );
+    return startRenderTurn(
+      next,
+      sessionKey,
+      phone,
+      products,
+      p.mode,
+      p.room,
+      p.quantities,
+      p.note,
+      true,
+    );
+  }
+
+  if (tappedId?.startsWith("render:dismiss:")) {
+    const p = session.pendingRender;
+    if (!p || tappedId !== `render:dismiss:${p.id}`)
+      return messageResult(
+        session,
+        "That image proposal is no longer current. I haven’t started or cancelled any generation.",
+      );
+    return messageResult(
+      { ...session, pendingRender: null },
+      "No problem — I haven’t started the image. Tell me whenever you’d like to prepare a new one.",
+    );
+  }
+
+  const progressQuestion =
+    /^(?:[?]+|any update[s]?[?]?|status[?]?|still (?:waiting|processing)[?]?|is it ready[?]?|where(?:'s| is) (?:my|the) (?:image|render|photo)[?]?|how long[?]?)$/i.test(
+      command,
+    ) ||
+    /(?:render|image|generation).*(?:status|progress|ready|done|taking|waiting)|(?:status|progress|update|where|waiting|how long).*(?:render|image|generation)/i.test(
+      command,
+    );
+  const renderContext = Boolean(
+    session.pendingRender ||
+    session.lastRender ||
+    session.transcript.some((m) => /render|generat|image request/i.test(m.content)),
+  );
+
+  if (
+    command === "render:status" ||
+    /^(check )?render status[?]?$/.test(command) ||
+    (progressQuestion && renderContext)
+  ) {
     const active = await getActiveRenderState(sessionKey);
+    if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
+    if (
+      !active.count &&
+      session.pendingRender &&
+      Date.now() - session.pendingRender.at <= CONFIRM_TTL
+    ) {
+      return confirmationResponse(session, session.pendingRender);
+    }
+    const ageMinutes = active.oldestCreatedAt
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(active.oldestCreatedAt)) / 60000))
+      : 0;
     const textOut = active.count
-      ? `Your render is active: ${active.generating || active.pending} ${active.generating ? "generating" : "waiting to start"}. I’ll send it here as soon as it is ready.`
-      : "You don’t have a render in progress right now.";
+      ? `Your image request is ${active.generating ? "generating" : "queued and waiting to start"}${ageMinutes ? ` (${ageMinutes} minutes since it was queued)` : ""}.${ageMinutes >= 10 ? " It’s taking longer than expected. You can check again or cancel it below." : " I’ll send the result here when it’s ready."}`
+      : "You don’t have a render in progress right now. No new image is being generated. Tell me what you’d like to create and I’ll ask you to confirm first.";
     return {
-      session,
+      session: appendTranscript(session, "assistant", textOut),
       turns: [
         {
           kind: "buttons",
@@ -1217,8 +1461,8 @@ async function route(
             kind: "buttons",
             buttons: active.count
               ? [
+                  { id: "render:status", title: "Check status" },
                   { id: "render:cancel", title: "Cancel render" },
-                  { id: "nav:menu", title: "Main menu" },
                 ]
               : [{ id: "nav:menu", title: "Main menu" }],
           },
@@ -1226,6 +1470,17 @@ async function route(
       ],
     };
   }
+
+  if (
+    !tappedId &&
+    session.pendingRender &&
+    /^(yes|ok|okay|go ahead|do it|start)[.!]?$/.test(command) &&
+    Date.now() - session.pendingRender.at <= CONFIRM_TTL
+  )
+    return confirmationResponse(session, session.pendingRender);
+  // New instructions invalidate old start buttons, even if the model asks a
+  // clarifying question instead of proposing a replacement immediately.
+  if (!tappedId && session.pendingRender) session = { ...session, pendingRender: null };
 
   if (command === "render:cancel" || command === "cancel render" || command === "cancel") {
     const cancelled = await cancelActiveRenderJobs(sessionKey);
@@ -1236,6 +1491,7 @@ async function route(
       rolePicker: null,
       pendingQuote: null,
       pendingZoneRender: false,
+      pendingRender: null,
     };
     return {
       session: next,
@@ -1271,6 +1527,7 @@ async function route(
       offered: null,
       rolePicker: null,
       pendingZoneRender: false,
+      pendingRender: null,
       pendingQuote: null,
       handoff: false,
       customerName: session.customerName,
@@ -1298,6 +1555,7 @@ async function route(
         rolePicker: null,
         pendingQuote: null,
         pendingZoneRender: false,
+        pendingRender: null,
       },
       "assistant",
       reply.text,
@@ -1501,7 +1759,7 @@ async function handlePhoto(
 ): Promise<RuntimeResult> {
   const content =
     caption?.trim() || "Here is a photo of my salon. What would you put in this space?";
-  let next: SessionState = { ...session, room: { url, at: Date.now() } };
+  let next: SessionState = { ...session, pendingRender: null, room: { url, at: Date.now() } };
   next = appendTranscript(next, "user", content);
 
   const active = await getActiveRenderState(sessionKey);

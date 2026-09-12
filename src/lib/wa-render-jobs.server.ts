@@ -17,6 +17,7 @@ export type RenderJobInput = {
 };
 
 export type ActiveRenderState = {
+  unavailable?: boolean;
   count: number;
   pending: number;
   generating: number;
@@ -50,9 +51,8 @@ export async function getActiveRenderState(sessionKey: string): Promise<ActiveRe
     };
   } catch (err) {
     console.error("getActiveRenderState failed", err);
-    // Fail open: a temporary status-query failure must not permanently block
-    // a customer from rendering.
-    return NO_ACTIVE_RENDERS;
+    // Unknown is not idle: don't claim progress or start duplicate work.
+    return { ...NO_ACTIVE_RENDERS, unavailable: true };
   }
 }
 

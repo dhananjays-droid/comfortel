@@ -17,6 +17,8 @@ describe("wantsRender — asks", () => {
     "how does that look with four stations",
     "put them in my room",
     "try it in the photo",
+    "show me on the photo I shared",
+    "show it using my salon picture",
     "I want to see it",
     "regenerate it again",
     "can you redo that",
@@ -67,6 +69,7 @@ describe("wantsRender — not asks", () => {
     "can you show me the Harper",
     "show me your barber chairs",
     "show me what you have",
+    "show me the product photos",
   ];
   for (const text of browsing) {
     it(`browses: ${text}`, () => expect(wantsRender(text)).toBe(false));
