@@ -548,7 +548,7 @@ describe("handleInboundMessage — render request", () => {
     expect(result.turns).toHaveLength(1);
     expect(result.turns[0]?.kind).toBe("text");
     if (result.turns[0]?.kind === "text") {
-      expect(result.turns[0].text.toLowerCase()).toContain("went wrong");
+      expect(result.turns[0].text.toLowerCase()).toContain("can’t check");
     }
   }, 10_000);
 
@@ -564,22 +564,24 @@ describe("handleInboundMessage — render request", () => {
     });
     expect(turns).toHaveLength(1);
     expect(turns[0]?.kind).toBe("text");
-    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("went wrong");
+    if (turns[0]?.kind === "text") expect(turns[0].text.toLowerCase()).toContain("can’t check");
     // No phantom "here's your render" turn was recorded into history either.
-    expect(session.transcript).toEqual(withRoom.transcript);
+    expect(session.transcript.at(-1)?.content).toContain("haven’t started");
   }, 10_000);
 
   it("declines a placement-mode offer once the room photo has expired", async () => {
     const staleRoom: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
-      room: { url: "https://example.com/room.jpg", at: Date.now() - 16 * 60 * 1000 }, // past ROOM_TTL_MS (15 min)
+      room: { url: "https://example.com/room.jpg", at: Date.now() - 25 * 60 * 60 * 1000 },
     };
     const { turns } = await handleInboundMessage(staleRoom, SESSION_KEY, TEST_PHONE, {
       kind: "button",
       id: `offer:add:${REAL_ID}`,
     });
-    expect(turns).toHaveLength(0);
+    expect(turns).toEqual([
+      expect.objectContaining({ text: expect.stringContaining("upload your salon photo again") }),
+    ]);
   });
 
   it("renders staged_room with no photo at all", async () => {
@@ -828,7 +830,7 @@ describe("proactiveOfferTurn", () => {
     expect(turn?.kind).toBe("buttons");
     if (turn?.kind === "buttons") {
       expect(turn.action.buttons).toHaveLength(3);
-      expect(turn.action.buttons[0]?.id).toBe(`offer:staged_room:${REAL_ID},another-id`);
+      expect(turn.action.buttons[0]?.id).toBe(`offer:auto:${REAL_ID},another-id`);
       // WhatsApp's own 20-char button-title cap — a title over this silently
       // gets truncated by WhatsApp itself, a real bug a customer flagged
       // ("See this in your space" was 22 chars).

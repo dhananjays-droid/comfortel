@@ -327,7 +327,8 @@ export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promis
 
       const channelInstructions =
         channel === "whatsapp"
-          ? (await import("@/lib/wa-knowledge")).whatsappKnowledgeInstructions()
+          ? (await import("@/lib/wa-knowledge")).whatsappKnowledgeInstructions() +
+            "\nWHATSAPP RENDER CONFIRMATION: Every new image or edit requires a separate customer Start generation button tap. Emit the appropriate RENDER marker to PROPOSE the image, but never say rendering has started, is processing, or will finish in a minute. Your earlier conversational promises are not job-status evidence. Never infer an active job from chat history. The application checks the job queue. A stored salon photo is distinct from an example staged room: requests to use the customer's photo must not use staged_room. If the photo flag is false, ask for a new upload rather than silently substituting another room."
           : null;
       let specContext = "";
       if (channel === "whatsapp") {

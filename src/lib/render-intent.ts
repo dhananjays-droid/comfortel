@@ -66,6 +66,11 @@ const ASKS = [
  */
 const SHOW = /\b(?:show|showing|see|seeing)\b/;
 const POINTS_AT = /\b(?:it|them|this|that|these|those)\b/;
+/** A customer can point at the saved room without a pronoun: "show me on
+ * the photo I shared". Requiring the preposition keeps ordinary catalogue
+ * requests such as "show me the product photos" in the browsing path. */
+const POINTS_AT_ROOM_PHOTO =
+  /\b(?:on|in|into|using)\s+(?:(?:the|my|our|this|that)\s+)?(?:photo|picture|image)\b/;
 
 /**
  * Phrases that cancel a request, checked first.
@@ -155,7 +160,7 @@ export function wantsRender(text: string, hasRecentRender = false): boolean {
   if (REFUSALS.some((r) => r.test(t))) return false;
   if (ASKS.some((r) => r.test(t))) return true;
   if (hasRecentRender && !EDIT_REFUSALS.test(t) && EDIT_ASKS.some((r) => r.test(t))) return true;
-  return SHOW.test(t) && POINTS_AT.test(t);
+  return SHOW.test(t) && (POINTS_AT.test(t) || POINTS_AT_ROOM_PHOTO.test(t));
 }
 
 /**

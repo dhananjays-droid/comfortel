@@ -30,6 +30,7 @@ type SessionRow = {
   role_picker: unknown;
   pending_zone_render: boolean;
   pending_quote: unknown;
+  pending_render: unknown;
   handoff: boolean;
   customer_name: string | null;
   phone_last4: string | null;
@@ -114,13 +115,15 @@ function sessionFromRow(row: SessionRow): SessionState {
     rolePicker: row.role_picker,
     pendingZoneRender: row.pending_zone_render,
     pendingQuote: row.pending_quote,
+    pendingRender: row.pending_render,
     handoff: row.handoff,
     customerName: row.customer_name,
     phoneLast4: row.phone_last4,
   });
 }
 
-/** Never throws, for the same reason `loadSession` never throws. */
+/** Existing best-effort session saves remain unchanged, except that a pending
+ * confirmation must be persisted before the customer receives its start button. */
 export async function saveSession(sessionKey: string, session: SessionState): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -140,6 +143,7 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
         role_picker: clean.rolePicker,
         pending_zone_render: clean.pendingZoneRender,
         pending_quote: clean.pendingQuote,
+        pending_render: clean.pendingRender ?? null,
         handoff: clean.handoff,
         customer_name: clean.customerName,
         phone_last4: clean.phoneLast4,
@@ -147,8 +151,13 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
       },
       { onConflict: "session_key" },
     );
-    if (error) console.error("saveSession failed", error);
+    if (error) {
+      console.error("saveSession failed", error);
+      // Never deliver a Start button whose proposal was not persisted.
+      if (clean.pendingRender) throw new Error("Render confirmation could not be saved");
+    }
   } catch (err) {
     console.error("saveSession failed", err);
+    if (session.pendingRender) throw err;
   }
 }
