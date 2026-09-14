@@ -18,9 +18,12 @@ async function graph(path: string, body: Record<string, unknown>) {
     signal: AbortSignal.timeout(20000),
   });
   const data = await response.json();
+  const detail = typeof data.error?.message === "string"
+    ? data.error.message.replaceAll(token, "[redacted]").replace(/EAA[A-Za-z0-9_-]{20,}/g, "[redacted]").slice(0, 500)
+    : "Check catalog permissions and product requirements.";
   if (!response.ok || data.error)
     throw new Error(
-      `Meta rejected product sync (code ${data.error?.code ?? response.status}). Check catalog permissions and product requirements.`,
+      `Meta rejected product sync (code ${data.error?.code ?? response.status}): ${detail}`,
     );
   return data as { id?: string; success?: boolean };
 }
