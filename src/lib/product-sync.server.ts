@@ -14,7 +14,7 @@ async function graph(path: string, body?: Record<string, unknown>) {
   const response = await fetch(`https://graph.facebook.com/v25.0/${path}`, {
     method: body ? "POST" : "GET",
     headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
+    ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(20000),
   });
   const data = await response.json();
