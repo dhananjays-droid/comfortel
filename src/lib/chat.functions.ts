@@ -240,7 +240,6 @@ const MODEL = "claude-haiku-4-5-20251001";
  * part of the prompt, so it is built once at module load and cached at the API
  * with cache_control rather than re-serialised per message.
  */
-const CATALOG_BLOCK = JSON.stringify(CATALOG_SLIM);
 
 /**
  * The validator and the handler, as plain functions.
@@ -332,6 +331,7 @@ export async function runChatTurn(
       const channelInstructions =
         channel === "whatsapp"
           ? (await import("@/lib/wa-knowledge")).whatsappKnowledgeInstructions() +
+            "\nPRODUCT DATA: The catalog supplied with this request is authoritative for current product names, prices and availability; chat history may contain older values. available=false means out of stock: do not call it available to buy; explain and suggest available alternatives. A blank price is unknown, never zero. Existing PDF quotes and submitted carts are historical snapshots, not evidence of current prices. Never confirm inventory reservations or orders." +
             "\nWHATSAPP RENDER CONFIRMATION: Every new image or edit requires a separate customer Start generation button tap. Emit the appropriate RENDER marker to PROPOSE the image, but never say rendering has started, is processing, or will finish in a minute. Your earlier conversational promises are not job-status evidence. Never infer an active job from chat history. The application checks the job queue. A stored salon photo is distinct from an example staged room: requests to use the customer's photo must not use staged_room. If the photo flag is false, ask for a new upload rather than silently substituting another room."
           : null;
       let specContext = "";
@@ -360,7 +360,7 @@ export async function runChatTurn(
             ...(channelInstructions ? [{ type: "text", text: channelInstructions }] : []),
             {
               type: "text",
-              text: CATALOG_BLOCK,
+              text: JSON.stringify(CATALOG_SLIM),
               cache_control: { type: "ephemeral" },
             },
             {

@@ -38,6 +38,7 @@ export const Route = createFileRoute("/admin/logs")({
 });
 
 import { RequestsInbox } from "@/components/wa-requests-inbox";
+import { ProductManager } from "@/components/product-manager";
 
 const TOKEN_KEY = "comfortel-admin-token";
 const POLL_MS = 4000;
@@ -519,6 +520,8 @@ function AdminLogs() {
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [showRequests, setShowRequests] = useState(false);
+  const [showProducts, setShowProducts] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(false);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
@@ -588,12 +591,26 @@ function AdminLogs() {
         <div className="flex items-center gap-3">
           <button
             className="rounded-lg border border-border px-3 py-1 text-sm"
-            onClick={() => setShowRequests((value) => !value)}
+            onClick={() => {
+              if (editingProduct && !window.confirm("Discard your unsaved product draft?")) return;
+              setShowProducts(false);
+              setShowRequests((value) => !value);
+            }}
           >
             {showRequests ? "Conversation logs" : "Requests inbox"}
           </button>
+          <button
+            className="rounded-lg border border-border px-3 py-1 text-sm"
+            onClick={() => {
+              if (editingProduct && !window.confirm("Discard your unsaved product draft?")) return;
+              setShowProducts((v) => !v);
+              setShowRequests(false);
+            }}
+          >
+            {showProducts ? "Conversation logs" : "Products"}
+          </button>
           <label
-            className={`${showRequests ? "hidden" : "flex"} items-center gap-1.5 text-xs text-muted-foreground`}
+            className={`${showRequests || showProducts ? "hidden" : "flex"} items-center gap-1.5 text-xs text-muted-foreground`}
           >
             <input
               type="checkbox"
@@ -622,7 +639,7 @@ function AdminLogs() {
 
       <div className="flex min-h-0 flex-1">
         <aside
-          className={`${showRequests ? "hidden" : "flex"} w-96 shrink-0 flex-col border-r border-border bg-card`}
+          className={`${showRequests || showProducts ? "hidden" : "flex"} w-96 shrink-0 flex-col border-r border-border bg-card`}
         >
           <div className="shrink-0 px-4 py-3 text-xs text-muted-foreground">
             {sessions.length} session{sessions.length === 1 ? "" : "s"}
@@ -648,7 +665,9 @@ function AdminLogs() {
         </aside>
 
         <main className="min-h-0 min-w-0 flex-1 bg-background">
-          {showRequests ? (
+          {showProducts ? (
+            <ProductManager token={token} onEditingChange={setEditingProduct} />
+          ) : showRequests ? (
             <RequestsInbox
               token={token}
               onSession={(key) => {

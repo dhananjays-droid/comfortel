@@ -24,7 +24,7 @@ export type QueuedInboundJob = {
 };
 
 export type InboundAudit = {
-  kind: "text" | "interactive" | "image" | "unsupported";
+  kind: "text" | "interactive" | "image" | "order" | "unsupported";
   payload: Record<string, Json | undefined>;
 };
 

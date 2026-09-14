@@ -51,6 +51,14 @@ function isH3SwallowedErrorBody(body: string): boolean {
 // WhatsApp webhook is intercepted here, ahead of the TanStack handler, the
 // same way this function already wraps that handler's response.
 const RAW_ROUTES: Record<string, (request: Request) => Promise<Response>> = {
+  "/api/admin/products": async(request)=>{
+    const {handleProductAdmin}=await import("./lib/product-admin.server");
+    return handleProductAdmin(request);
+  },
+  "/api/cron/product-sync": async(request)=>{
+    const {handleProductSync}=await import("./lib/product-sync.server");
+    return handleProductSync(request);
+  },
   "/api/admin/wa-requests": async (request) => {
     const { handleAdminRequests } = await import("./lib/wa-requests-admin.server");
     return handleAdminRequests(request);

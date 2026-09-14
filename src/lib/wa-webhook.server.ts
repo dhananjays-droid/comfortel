@@ -32,6 +32,7 @@ import {
   sendList,
   sendText,
   sendDocument,
+  sendCatalog,
 } from "@/lib/wa-client.server";
 import { toWhatsAppMarkdown } from "@/lib/wa-markdown";
 import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-runtime";
@@ -41,11 +42,13 @@ import { handleDocumentInbound } from "@/lib/wa-documents.server";
 import { waSessionKey } from "@/lib/wa-session.server";
 import { staffHandling, touchStaffRequest } from "@/lib/wa-staff.server";
 import { customerTimestamp } from "@/lib/wa-staff";
+import { cartSchema, type CatalogCart } from "@/lib/product-management";
 
 type InboundMessage = {
   waMessageId: string;
   from: string;
-  kind: "text" | "interactive" | "image" | "unsupported";
+  kind: "text" | "interactive" | "image" | "order" | "unsupported";
+  cart?: CatalogCart;
   text?: string;
   buttonReplyId?: string;
   /** The button/list row's own display text — what the customer actually
@@ -108,6 +111,7 @@ type WebhookEnvelope = {
           id?: string;
           from?: string;
           type?: string;
+          order?: unknown;
           text?: { body?: string };
           interactive?: {
             button_reply?: { id?: string; title?: string };
@@ -179,6 +183,13 @@ function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
               ...(reply.title ? { buttonReplyTitle: reply.title } : {}),
             });
           } else out.push({ ...base, kind: "unsupported" });
+        } else if (m.type === "order") {
+          const parsed = cartSchema.safeParse(m.order);
+          out.push(
+            parsed.success
+              ? { ...base, kind: "order", cart: parsed.data }
+              : { ...base, kind: "unsupported" },
+          );
         } else if (m.type === "image" && m.image?.id) {
           out.push({
             ...base,
@@ -233,7 +244,11 @@ async function recordInboundIfNew(
       session_key: sessionKey,
       kind: message.kind,
       payload: {
-        text: message.text ?? null,
+        text:
+          message.kind === "order"
+            ? `Catalog cart: ${message.cart?.product_items.length ?? 0} product lines`
+            : (message.text ?? null),
+        cart: message.cart ? JSON.parse(JSON.stringify(message.cart)) : null,
         buttonReplyId: message.buttonReplyId ?? null,
         buttonReplyTitle: message.buttonReplyTitle ?? null,
         imageId: message.imageId ?? null,
@@ -279,6 +294,7 @@ async function recordDeliveryStatuses(envelope: WebhookEnvelope): Promise<void> 
 }
 
 async function toInboundEvent(message: InboundMessage): Promise<InboundEvent> {
+  if (message.kind === "order" && message.cart) return { kind: "order", cart: message.cart };
   if (message.kind === "text" && message.text) return { kind: "text", text: message.text };
   if (message.kind === "interactive" && message.buttonReplyId) {
     return { kind: "button", id: message.buttonReplyId };
@@ -375,20 +391,33 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
         continue;
       }
       const waMessageId =
-        turn.kind === "document"
-          ? await sendDocument(to, turn.bytes, turn.filename, turn.caption)
-          : turn.kind === "buttons"
-            ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action, turn.imageUrl)
-            : turn.kind === "list"
-              ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
-              : turn.kind === "product"
-                ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
-                : await sendText(to, toWhatsAppMarkdown(turn.text));
+        turn.kind === "catalog"
+          ? await sendCatalog(to, turn.text)
+          : turn.kind === "document"
+            ? await sendDocument(to, turn.bytes, turn.filename, turn.caption)
+            : turn.kind === "buttons"
+              ? await sendButtons(to, toWhatsAppMarkdown(turn.text), turn.action, turn.imageUrl)
+              : turn.kind === "list"
+                ? await sendList(to, toWhatsAppMarkdown(turn.text), turn.action)
+                : turn.kind === "product"
+                  ? await sendImage(to, turn.imageUrl, toWhatsAppMarkdown(turn.caption))
+                  : await sendText(to, toWhatsAppMarkdown(turn.text));
       await logOutbound(waMessageId, sessionKey, turn);
     } catch (err) {
       // One turn failing to send (e.g. a rejected token) shouldn't stop the
       // rest of the reply, and must never bubble up into a non-200 ack.
       console.error("WhatsApp outbound send failed", err);
+      if (turn.kind === "catalog") {
+        try {
+          await sendText(
+            to,
+            "I couldn’t open the catalog just now. Tell me what you’re looking for and I’ll show you the products here.",
+          );
+        } catch {
+          /* Provider outage is recorded above. */
+        }
+        break;
+      }
       if (turn.kind === "document") {
         try {
           await sendText(
@@ -457,7 +486,11 @@ async function handleReceive(request: Request): Promise<Response> {
         audit: {
           kind: message.kind,
           payload: {
-            text: message.text ?? null,
+            text:
+              message.kind === "order"
+                ? `Catalog cart: ${message.cart?.product_items.length ?? 0} product lines`
+                : (message.text ?? null),
+            cart: message.cart ? JSON.parse(JSON.stringify(message.cart)) : null,
             buttonReplyId: message.buttonReplyId ?? null,
             buttonReplyTitle: message.buttonReplyTitle ?? null,
             imageId: message.imageId ?? null,
@@ -529,14 +562,52 @@ export async function processQueuedInbound(input: {
   }
   // Inbound messages are already durably logged. Staff mode leaves the salon
   // plan untouched and keeps all follow-ups visible in the shared timeline.
+  if (input.event.kind === "order") {
+    const { receiveCatalogCart } = await import("@/lib/wa-catalog.server");
+    const session = await loadSession(input.sessionKey);
+    await saveSession(input.sessionKey, {
+      ...session,
+      customerName: input.customerName ?? session.customerName,
+      phoneLast4: input.phone.replace(/\D/g, "").slice(-4),
+    });
+    await deliver(
+      input.phone,
+      input.sessionKey,
+      await receiveCatalogCart({ ...input, cart: input.event.cart }),
+    );
+    return;
+  }
   if (await staffHandling(input.sessionKey)) {
     await touchStaffRequest(input.sessionKey);
     return;
   }
+  const { withManagedCatalog } = await import("@/lib/managed-catalog.server");
+  return withManagedCatalog(() => processCatalogInbound(input));
+}
+
+async function processCatalogInbound(input: {
+  sessionKey: string;
+  phone: string;
+  waMessageId: string;
+  event: InboundEvent;
+  customerName?: string;
+}): Promise<void> {
   if (input.event.kind === "photo_error") {
     await deliver(input.phone, input.sessionKey, [
       { kind: "text", text: "I couldn't quite read that photo. Could you try sending it again?" },
     ]);
+    return;
+  }
+
+  if (
+    (input.event.kind === "button" && input.event.id === "nav:catalog") ||
+    (input.event.kind === "text" &&
+      /^(?:catalog|catalogue|browse catalog|browse catalogue|shop products)$/i.test(
+        input.event.text.trim(),
+      ))
+  ) {
+    const { catalogTurn } = await import("@/lib/wa-catalog.server");
+    await deliver(input.phone, input.sessionKey, [await catalogTurn()]);
     return;
   }
 
@@ -557,6 +628,18 @@ export async function processQueuedInbound(input: {
     const result = requestTurns
       ? { session: activeSession, turns: requestTurns }
       : await handleInboundMessage(activeSession, input.sessionKey, input.phone, input.event);
+    if (
+      result.turns.some((t) => t.kind === "buttons" && t.action.buttons.some((b) => b.id === "ask"))
+    ) {
+      const { catalogTurn } = await import("@/lib/wa-catalog.server");
+      if ((await catalogTurn()).kind === "catalog") {
+        for (const turn of result.turns)
+          if (turn.kind === "buttons")
+            turn.action.buttons = turn.action.buttons.map((b) =>
+              b.id === "ask" ? { id: "nav:catalog", title: "Browse catalog" } : b,
+            );
+      }
+    }
     if (requestTurns) {
       const userText =
         input.event.kind === "text"

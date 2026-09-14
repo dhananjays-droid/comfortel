@@ -30,6 +30,7 @@ export type SlimProduct = {
   col: string;
   d: string;
   v: number;
+  available?: boolean;
 };
 
 const RAW_FULL = catalogFull as unknown as Record<string, FullProduct>;
@@ -42,15 +43,45 @@ const RAW_SLIM = catalogSlim as unknown as SlimProduct[];
  */
 const NOT_A_PRODUCT = new Set(["347812"]);
 
-export const CATALOG_SLIM: SlimProduct[] = RAW_SLIM.filter((p) => !NOT_A_PRODUCT.has(p.id));
+const STATIC_SLIM: SlimProduct[] = RAW_SLIM.filter((p) => !NOT_A_PRODUCT.has(p.id));
 
-export const CATALOG_FULL: Record<string, FullProduct> = Object.fromEntries(
+const STATIC_FULL: Record<string, FullProduct> = Object.fromEntries(
   Object.entries(RAW_FULL).filter(([id]) => !NOT_A_PRODUCT.has(id)),
 );
 
-export const SLIM_BY_ID: Record<string, SlimProduct> = Object.fromEntries(
-  CATALOG_SLIM.map((p) => [p.id, p]),
+const STATIC_BY_ID: Record<string, SlimProduct> = Object.fromEntries(
+  STATIC_SLIM.map((p) => [p.id, p]),
 );
+
+type Snapshot = {
+  full: Record<string, FullProduct>;
+  slim: SlimProduct[];
+  byId: Record<string, SlimProduct>;
+};
+let snapshotResolver: (() => Snapshot | undefined) | undefined;
+/** Server installs an async-context resolver; browser/static consumers remain unchanged. */
+export function setCatalogResolver(resolve: () => Snapshot | undefined) {
+  snapshotResolver = resolve;
+}
+const snapshot = () =>
+  snapshotResolver?.() ?? { full: STATIC_FULL, slim: STATIC_SLIM, byId: STATIC_BY_ID };
+function scopedRecord<T extends object>(read: () => T): T {
+  return new Proxy({} as T, {
+    get: (_, key) => Reflect.get(read(), key),
+    has: (_, key) => Reflect.has(read(), key),
+    ownKeys: () => Reflect.ownKeys(read()),
+    getOwnPropertyDescriptor: (_, key) => Object.getOwnPropertyDescriptor(read(), key),
+  });
+}
+export const CATALOG_FULL = scopedRecord(() => snapshot().full);
+export const SLIM_BY_ID = scopedRecord(() => snapshot().byId);
+export const CATALOG_SLIM = new Proxy([] as SlimProduct[], {
+  get: (_, key) => {
+    const rows = snapshot().slim;
+    const value = Reflect.get(rows, key);
+    return typeof value === "function" ? value.bind(rows) : value;
+  },
+});
 
 /** Human labels for the functional category slugs used in `c` / `category`. */
 const CATEGORY_LABEL: Record<string, string> = {
@@ -91,7 +122,7 @@ export function isVisualizable(id: string): boolean {
  */
 export function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  return `$${Math.round(value).toLocaleString("en-US")}`;
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
 /** e.g. "62 W x 48 H cm" — omits axes the source never printed. */

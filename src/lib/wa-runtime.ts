@@ -111,6 +111,7 @@ function wantsHandoff(text: string): boolean {
 }
 
 export type WaTurn =
+  | {kind:"catalog";text:string}
   | { kind: "document"; bytes: Uint8Array; filename: string; caption: string; reference: string }
   | { kind: "text"; text: string }
   | {
@@ -184,6 +185,7 @@ const RENDER_FAILED_TURN: WaTurn = {
 };
 
 export type InboundEvent =
+  | {kind:"order";cart:import("@/lib/product-management").CatalogCart}
   | { kind: "text"; text: string }
   | { kind: "button"; id: string }
   | { kind: "photo"; url: string; caption?: string | undefined }
