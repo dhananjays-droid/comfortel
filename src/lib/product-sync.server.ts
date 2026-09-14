@@ -8,13 +8,13 @@ type Job = {
   desired_revision: number;
   meta_id: string | null;
 };
-async function graph(path: string, body: Record<string, unknown>) {
+async function graph(path: string, body?: Record<string, unknown>) {
   const token = process.env["META_CATALOG_ACCESS_TOKEN"];
   if (!token) throw new Error("Meta catalog access is not configured");
   const response = await fetch(`https://graph.facebook.com/v25.0/${path}`, {
-    method: "POST",
+    method: body ? "POST" : "GET",
     headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20000),
   });
   const data = await response.json();
@@ -25,7 +25,7 @@ async function graph(path: string, body: Record<string, unknown>) {
     throw new Error(
       `Meta rejected product sync (code ${data.error?.code ?? response.status}): ${detail}`,
     );
-  return data as { id?: string; success?: boolean };
+  return data as { id?: string; success?: boolean; data?: Array<{permission: string; status: string}> };
 }
 export async function runProductSync() {
   const { data: settings, error } = await productDb
@@ -44,6 +44,22 @@ export async function runProductSync() {
       processed: 0,
       message: "Catalog connection is not enabled yet. Product changes remain safely queued.",
     };
+  // Verify asset access before claiming any rows. A token/configuration failure
+  // is a connection problem, not 201 independent merchandising failures.
+  try {
+    const catalog = await graph(`${settings.catalog_id}?fields=id,name`);
+    if (catalog.id !== settings.catalog_id) throw new Error("Meta catalog access was not confirmed");
+  } catch (error) {
+    let permissions = "";
+    try {
+      const result = await graph("me/permissions");
+      const granted = (result.data ?? []).filter(p => p.status === "granted").map(p => p.permission);
+      permissions = granted.includes("catalog_management")
+        ? " The token has catalog_management; check its system user's access to this catalog."
+        : " The token does not report catalog_management permission.";
+    } catch { /* The original asset-access error remains actionable. */ }
+    return { configured: false, processed: 0, message: `${error instanceof Error ? error.message : "Catalog connection unavailable"}${permissions}` };
+  }
   const { data: jobs, error: claimError } = await productDb.rpc("claim_product_sync", {
     p_limit: 10,
   });
