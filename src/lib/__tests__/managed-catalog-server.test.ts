@@ -114,13 +114,13 @@ describe("retryable Meta sync", () => {
       vi
         .fn()
         .mockResolvedValue(
-          Response.json({ error: { code: 190, message: "secret" } }, { status: 400 }),
+          Response.json({ error: { code: 190, message: "Invalid token test-token" } }, { status: 400 }),
         ),
     );
     expect(await runProductSync()).toMatchObject({ failed: 1, synced: 0 });
     const args = mocks.rpc.mock.calls.at(-1)![1];
     expect(args.p_error).toContain("190");
-    expect(args.p_error).not.toContain("secret");
+    expect(args.p_error).not.toContain("test-token");
   });
   it("does not create archived products", async () => {
     setup({ ...product, archived: true, price: null });
