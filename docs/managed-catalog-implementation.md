@@ -1,6 +1,54 @@
-# Managed WhatsApp catalog — implementation checkpoint
+# Managed WhatsApp catalog — release status
 
-## Not live yet
+## Current status: 2026-09-15
+
+Product editor and catalog backend are deployed to production from main.
+Native Meta catalog/cart activation is **not complete**. The historical checkpoint
+below records earlier work and is superseded by this section.
+
+- Single product master: `managed_products` (201 imported records).
+  `product_changes` stores revisions, `product_meta_sync` stores leased jobs and
+  errors, `catalog_settings` controls activation, `wa_requests` receives cart leads.
+- Live UI at `/admin/logs` → Products supports search, add, edit, archive, stock,
+  USD prices, descriptions, specifications, original/CDN links and Sync now.
+  Live unchanged save verified: Chloe Tan 330334 revision 6, price $499, CDN retained.
+- `MANAGED_CATALOG_ENABLED=true` uses fresh Supabase snapshots for WhatsApp and
+  its documents. Browser web chat is unchanged. Customer native-catalog gate is off.
+- A separate `sync_enabled` gate allows ingestion before customer activation.
+  Migrations through 20260915030000 were applied. pg_cron and pg_net are enabled;
+  `comfortel-product-sync` runs every five minutes. Its isolated credential is in
+  Vercel PRODUCT_SYNC_SECRET and Vault comfortel_product_sync, never in git.
+  The endpoint reached production with HTTP 200. Ten products per tick means
+  large backlogs require multiple ticks; five minutes is not a bulk-update SLA.
+- Full verification: 48 test files, 818 passed, 1 skipped; strict TypeScript and
+  build passed. Unauthenticated product endpoint returned HTTP 401.
+- Live WhatsApp: catalog request returned a safe unavailable message; Chloe Tan
+  price question returned $499, product image/link and next-step buttons.
+
+### Exact account blockers
+
+The saved META_CATALOG_ACCESS_TOKEN does not report catalog_management and cannot
+read/write catalog 1112287671755007. System user whatsapp_bot 61593880988837 has
+Full access to that catalog and comfortel-wb app 1076247208191219, verified in Meta.
+The token wizard confirms catalog_management has not been added to the app.
+Adding it requires Meta Platform Terms, Developer Policies, Product Catalog Terms
+and installation for the system user. Automatic approval review blocked Continue;
+explicit user approval is required. Existing WhatsApp credentials were not changed
+or revoked. An access probe now stops batch claims when the catalog is inaccessible.
+
+The current Test WhatsApp Business Account 1042353951805021 contains test number
++1 555-655-6296; its Catalog link is disabled in WhatsApp Manager. No number was
+registered or switched. Native cart-to-lead behavior has unit coverage but has not
+been tested with a real Meta cart. Do not claim the integration is end-to-end live.
+
+After approval: grant catalog scope, store the properly scoped credential only in
+META_CATALOG_ACCESS_TOKEN, ingest/inspect products, verify successful scheduled
+sync, confirm the intended real business number, link its catalog, enable carts
+and customer visibility, then submit a real test cart and verify one inbox lead
+and staff reply. No Excel round-trip or staff-specific login was added. Existing
+admin authentication remains; do not distribute the scheduler secret to staff.
+
+## Historical implementation checkpoint (superseded above)
 
 The changes in this checkout are uncommitted. On 2026-09-15 the managed-product
 migration was applied in Supabase; all four tables were verified with RLS enabled.
