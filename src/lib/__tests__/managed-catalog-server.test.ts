@@ -92,12 +92,16 @@ describe("retryable Meta sync", () => {
       error: null,
     }));
   }
+  function provider(result: Response) {
+    return vi.fn().mockImplementation(async (_url: string, options: RequestInit) =>
+      options.method === "GET" ? Response.json({ id: "123" }) : result.clone());
+  }
   it("publishes a stable retailer ID and acknowledges only a confirmed provider result", async () => {
     setup({ ...product, price: 123.45, description: "Description" });
-    const fetch = vi.fn().mockResolvedValue(Response.json({ id: "meta-product" }));
+    const fetch = provider(Response.json({ id: "meta-product" }));
     vi.stubGlobal("fetch", fetch);
     expect(await runProductSync()).toMatchObject({ synced: 1, failed: 0 });
-    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({
+    expect(JSON.parse(fetch.mock.calls[1]![1].body as string)).toMatchObject({
       price: 12345,
       retailer_id: product.id,
       allow_upsert: true,
@@ -111,9 +115,7 @@ describe("retryable Meta sync", () => {
     setup({ ...product, price: 12, description: "Description" });
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
+      provider(
           Response.json({ error: { code: 190, message: "Invalid token test-token" } }, { status: 400 }),
         ),
     );
@@ -124,10 +126,10 @@ describe("retryable Meta sync", () => {
   });
   it("does not create archived products", async () => {
     setup({ ...product, archived: true, price: null });
-    const fetch = vi.fn();
+    const fetch = provider(Response.json({ id: "meta-product" }));
     vi.stubGlobal("fetch", fetch);
     expect(await runProductSync()).toMatchObject({ synced: 1 });
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1); // Connection probe only; no product creation.
   });
   it("leaves work unclaimed while the connection is disabled", async () => {
     setup();
@@ -144,11 +146,20 @@ describe("retryable Meta sync", () => {
   it("accepts the isolated scheduler credential without enabling the customer catalog", async () => {
     setup();
     vi.stubEnv("PRODUCT_SYNC_SECRET", "scheduler");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ id: "meta-product" })));
+    vi.stubGlobal("fetch", provider(Response.json({ id: "meta-product" })));
     const response = await handleProductSync(new Request("https://example.com", {
       method: "POST", headers: { authorization: "Bearer scheduler" },
     }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ synced: 1 });
+  });
+  it("does not claim products when the token lacks catalog access", async () => {
+    setup();
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) =>
+      url.endsWith("me/permissions") ? Response.json({ data: [] })
+        : Response.json({ error: {code: 100, message: "Missing asset access"} }, { status: 400 })));
+    expect(await runProductSync()).toMatchObject({ configured: false, processed: 0,
+      message: expect.stringContaining("does not report catalog_management") });
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });
