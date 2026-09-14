@@ -2,7 +2,16 @@
 
 ## Deployment status
 
-Implemented and tested locally. **Not pushed, deployed, or applied to the production database.** No messages were sent to customers, and no real support requests were created during testing. The existing staged production Excel and user-authored go-live document were left untouched.
+Implemented and tested locally, then released to production on 14 September 2026. The contact-preferences migration was applied before production commit `5785b53`; Vercel marked that deployment Ready and the public URL returned HTTP 200. Live tests used the owner's existing WhatsApp test conversation only. The existing staged production Excel and user-authored go-live document were left untouched.
+
+### Production verification
+
+- 783 automated tests passed (one skipped), and TypeScript passed again before release.
+- Real WhatsApp greeting and Ask a question button worked; product images and canonical links arrived.
+- PDF estimate and Compare products buttons delivered their respective PDFs. Database inspection confirmed shown product IDs and last-document context persisted.
+- A request for one Chloe Tan chair in an example salon displayed Start generation / Not now without generating automatically. One explicit confirmation created one production render job; its image arrived with one progress update and the review disclaimer. Visually, the result contains the requested tan styling chair.
+- Live testing found queued acknowledgements referenced a missing Check status button. The follow-up fix sends Check status, Cancel render, and Main menu buttons for both fresh renders and edits; regression coverage asserts the actual button payload.
+- Image inspection remains probabilistic, as documented below; successful delivery does not guarantee every future visual edit is exact.
 
 **Remaining release limitation:** repeated image-verification runs are not fully consistent. The missing-trolley example was caught in some runs and missed in another, even with two inspections. The three new images passed direct visual review, but this does not prove automatic verification is reliable for every future image. Outputs carry a customer review reminder and edits offer an Adjust image button. Exact product fidelity remains a mitigation, not a closed guarantee; staff approval would be needed for a stricter release gate.
 
