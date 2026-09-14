@@ -674,6 +674,24 @@ export async function handleRenderWorkerTick(request: Request): Promise<Response
       console.error("WhatsApp inbound recovery failed", error);
     }
   }
+  const { withManagedCatalog } = await import("@/lib/managed-catalog.server");
+  // Reuse the installed minutely scheduler. Catalog work runs alongside rendering,
+  // only on the root tick, and its failure must never interrupt customer jobs.
+  const sync =
+    depth === 0 && process.env["MANAGED_CATALOG_ENABLED"] === "true"
+      ? import("@/lib/product-sync.server")
+          .then((m) => m.runProductSync())
+          .catch(() => console.error("Catalog sync tick failed; changes remain queued"))
+      : Promise.resolve();
+  const [response] = await Promise.all([
+    withManagedCatalog(() => handleCatalogRenderTick(request)),
+    sync,
+  ]);
+  return response;
+}
+
+async function handleCatalogRenderTick(request: Request): Promise<Response> {
+  const depth = readDepth(request);
   const startedAt = Date.now();
 
   const pending = await claimPendingJobs(BATCH_SIZE);

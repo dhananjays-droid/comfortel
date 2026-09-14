@@ -99,6 +99,10 @@ export async function sendText(to: string, body: string, signal?: AbortSignal): 
   return send({ to, type: "text", text: { body: truncate(body, WA.body) } }, signal);
 }
 
+export async function sendCatalog(to:string,body:string):Promise<string> {
+  return send({to,type:"interactive",interactive:{type:"catalog_message",body:{text:body},action:{name:"catalog_message"}}});
+}
+
 /** Staff replies must never be silently truncated by the bot's shorter limit. */
 export async function sendStaffText(to: string, body: string): Promise<string> {
   if (!body.trim() || body.length > 4000) throw new Error("Invalid staff reply length");
