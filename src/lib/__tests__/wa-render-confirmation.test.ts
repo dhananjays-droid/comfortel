@@ -119,6 +119,19 @@ describe("WhatsApp explicit render confirmation", () => {
       expect.objectContaining({ roomUrl: room.url, mode: "refit_room", quantities: { [id]: 2 } }),
     );
     expect(words(sent)).toContain("queued");
+    expect(sent.turns).toContainEqual(
+      expect.objectContaining({
+        kind: "buttons",
+        action: {
+          kind: "buttons",
+          buttons: [
+            { id: "render:status", title: "Check status" },
+            { id: "render:cancel", title: "Cancel render" },
+            { id: "nav:menu", title: "Main menu" },
+          ],
+        },
+      }),
+    );
     expect(sent.session.pendingRender).toBeNull();
   });
   it("even an immediate model render marker must wait for a tap", async () => {

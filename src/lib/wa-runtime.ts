@@ -310,6 +310,21 @@ function planProductsOf(session: SessionState): FullProduct[] {
   return session.plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
 }
 
+function queuedRenderTurn(text: string): Extract<WaTurn, { kind: "buttons" }> {
+  return {
+    kind: "buttons",
+    text,
+    action: {
+      kind: "buttons",
+      buttons: [
+        { id: "render:status", title: "Check status" },
+        { id: "render:cancel", title: "Cancel render" },
+        { id: "nav:menu", title: "Main menu" },
+      ],
+    },
+  };
+}
+
 function pieceCount(
   products: FullProduct[],
   quantities: Record<string, number> | undefined,
@@ -406,7 +421,7 @@ async function startRenderTurn(
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
 
-  return { session: next, turns: [{ kind: "text", text: contentText }] };
+  return { session: next, turns: [queuedRenderTurn(contentText)] };
 }
 
 /**
@@ -452,12 +467,12 @@ async function startEditTurn(
 
   const askedText = note ? `Change the render: ${note}` : "Update my last render.";
   const contentText =
-    "Your image update is queued. I’ll send the edited image here when it’s ready. Ask me to check the status any time for a verified update.";
+    "Your image update is queued. I’ll send the edited image here when it’s ready. Tap Check status below for a verified update.";
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
 
-  return { session: next, turns: [{ kind: "text", text: contentText }] };
+  return { session: next, turns: [queuedRenderTurn(contentText)] };
 }
 
 /**
