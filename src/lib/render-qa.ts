@@ -43,6 +43,7 @@ export type Expected = { name: string; qty: number };
 export type Seen = { item: string; seen: number };
 
 export type Verdict = {
+  inspection?: "verified" | "unavailable";
   /** True when nothing worth a re-render was found. */
   ok: boolean;
   faults: FaultKind[];
@@ -79,13 +80,17 @@ export function readVerdict(input: unknown): Verdict {
     | { ok?: unknown; faults?: unknown; note?: unknown; counts?: unknown; elsewhere?: unknown }
     | null
     | undefined;
-  if (!raw || typeof raw !== "object") return { ok: true, faults: [] };
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.faults))
+    return { ok: false, faults: [], inspection: "unavailable" };
 
   const faults = Array.isArray(raw.faults)
     ? raw.faults.filter((f): f is string => typeof f === "string").filter(isFaultKind)
     : [];
 
-  const note = typeof raw.note === "string" && raw.note.trim() ? raw.note.trim() : undefined;
+  const note =
+    typeof raw.note === "string" && raw.note.trim() && !/<\/?(?:antml|parameter)/i.test(raw.note)
+      ? raw.note.trim()
+      : undefined;
 
   const counts = Array.isArray(raw.counts)
     ? raw.counts
@@ -98,7 +103,11 @@ export function readVerdict(input: unknown): Verdict {
     : [];
 
   const elsewhere =
-    typeof raw.elsewhere === "string" && raw.elsewhere.trim() ? raw.elsewhere.trim() : undefined;
+    typeof raw.elsewhere === "string" &&
+    raw.elsewhere.trim() &&
+    !/<\/?(?:antml|parameter)/i.test(raw.elsewhere)
+      ? raw.elsewhere.trim()
+      : undefined;
 
   // The fault list decides, not the flag: a reply that says ok:true while naming
   // a fault is contradicting itself, and the specific claim is the more
@@ -127,7 +136,6 @@ export function shortfallFrom(expected: Expected[], verdict: Verdict): Shortfall
 
   const out: Shortfall[] = [];
   for (const want of expected) {
-    if (want.qty <= 1) continue;
     const found = counts.find((c) => c.item.toLowerCase() === want.name.toLowerCase());
     if (!found) continue;
     if (found.seen < want.qty) out.push({ name: want.name, asked: want.qty, seen: found.seen });
@@ -217,5 +225,5 @@ export function shouldRetry(
   shortfall: Shortfall[] = [],
 ): boolean {
   if (attempt >= MAX_RETRIES) return false;
-  return !verdict.ok || shortfall.length > 0;
+  return verdict.inspection !== "unavailable" && (!verdict.ok || shortfall.length > 0);
 }

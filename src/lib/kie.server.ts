@@ -173,7 +173,7 @@ export type KieTaskResult = { done: false; progress: number } | { done: true; im
 export async function getTaskResult(taskId: string): Promise<KieTaskResult> {
   const res = await fetch(
     `${KIE_API}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
-    { headers: { Authorization: `Bearer ${key()}` } },
+    { headers: { Authorization: `Bearer ${key()}` }, signal: AbortSignal.timeout(15000) },
   );
 
   const json = (await res.json()) as KieRecordResponse;

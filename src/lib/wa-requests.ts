@@ -17,6 +17,14 @@ export type RequestRecord = {
  * always available. No model is allowed to mark an order changed or ticket saved.
  */
 export function requestIntent(text: string): RequestCategory | null {
+  if (/\b(hurt|collapsed|dispute the charge|manager|escalate)\b/i.test(text)) return "complaint";
+  if (
+    /\b(delete|erase|remove)\b.*\b(my data|chat history|personal data)\b|\b(keeps? sinking|won.t stay up)\b/i.test(
+      text,
+    )
+  )
+    return "support";
+  if (/\b(change|update|amend)\b.*\b(delivery|shipping) address\b/i.test(text)) return "order";
   if (
     /\b(complain(?:t|ts)?|unacceptable|unhappy|disappointed|angry|chargeback|injur(?:y|ed)|unsafe|electric shock|smoke|sparks)\b/i.test(
       text,

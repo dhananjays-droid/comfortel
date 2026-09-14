@@ -15,7 +15,7 @@ import { FAULTS, FAULT_KINDS, readVerdict, type Expected, type Verdict } from "@
  * them nothing.
  */
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-5-20250929";
 
 /**
  * Written to suppress false positives, which cost more than false negatives.
@@ -89,7 +89,7 @@ const TOOL = {
   },
 };
 
-const PASS: Verdict = { ok: true, faults: [] };
+const PASS: Verdict = { ok: false, faults: [], inspection: "unavailable" };
 
 function askFor(expected: Expected[]): string {
   if (!expected.length) return "Check this render. There is nothing to count.";
@@ -123,13 +123,39 @@ export function parseInspectRender(input: { imageUrl: string; expected?: Expecte
 
 export type InspectRenderData = ReturnType<typeof parseInspectRender>;
 
-export async function runInspectRender(data: InspectRenderData): Promise<Verdict> {
+export async function runInspectRender(
+  data: InspectRenderData,
+  inspectionAttempt = 0,
+): Promise<Verdict> {
   const apiKey = process.env["ANTHROPIC_API_KEY"];
   if (!apiKey) return PASS;
+  const tool = data.expected.length
+    ? {
+        ...TOOL,
+        input_schema: {
+          ...TOOL.input_schema,
+          properties: {
+            ...TOOL.input_schema.properties,
+            counts: {
+              ...TOOL.input_schema.properties.counts,
+              minItems: 1,
+              items: {
+                ...TOOL.input_schema.properties.counts.items,
+                properties: {
+                  ...TOOL.input_schema.properties.counts.items.properties,
+                  item: { type: "string", enum: data.expected.map((item) => item.name) },
+                },
+              },
+            },
+          },
+        },
+      }
+    : TOOL;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(30_000),
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -137,10 +163,10 @@ export async function runInspectRender(data: InspectRenderData): Promise<Verdict
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 512,
+        max_tokens: 1800,
         system: SYSTEM,
         tool_choice: { type: "tool", name: TOOL.name },
-        tools: [TOOL],
+        tools: [tool],
         messages: [
           {
             role: "user",
@@ -165,6 +191,16 @@ export async function runInspectRender(data: InspectRenderData): Promise<Verdict
     };
     const call = json.content?.find((b) => b.type === "tool_use" && b.name === TOOL.name);
     const verdict = readVerdict(call?.input);
+    if (
+      (data.expected.length > 0 && verdict.counts?.length !== data.expected.length) ||
+      data.expected.some(
+        (expected) =>
+          !verdict.counts?.some(
+            (count) => count.item.toLowerCase() === expected.name.toLowerCase(),
+          ),
+      )
+    )
+      return inspectionAttempt === 0 ? runInspectRender(data, 1) : PASS;
     if (!verdict.ok) {
       console.warn(`inspect: ${verdict.faults.join(", ")} — ${verdict.note ?? "no detail"}`);
     }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/wa-contact-preferences.server", () => ({ assertContactAllowed: async () => {} }));
 import { customerTimestamp, replyWindow, type StaffMessage, type StaffReply } from "@/lib/wa-staff";
 import { replyToRequest, type ReplyDependencies } from "@/lib/wa-staff.server";
 import { sendStaffText, WaClientError } from "@/lib/wa-client.server";

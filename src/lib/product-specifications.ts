@@ -70,7 +70,7 @@ export function productSpecificationContext(text: string, planIds: string[] = []
     .sort((a, b) => b.score - a.score);
   // Multiple equally matching finishes are supplied as alternatives, not
   // silently collapsed to one variant. A broad question uses the current plan.
-  const matched = scored.filter((row) => row.score === scored[0]?.score).map((row) => row.p.id);
+  const matched = scored.map((row) => row.p.id);
   const ids = (matched.length ? matched : planIds).slice(0, 8);
   if (!ids.length) return "";
   const products = ids
@@ -82,6 +82,7 @@ export function productSpecificationContext(text: string, planIds: string[] = []
       return {
         id: p.id,
         name: p.name,
+        description: p.description,
         sku: p.sku,
         sourceUrl: p.url,
         specifications: Object.fromEntries(

@@ -133,6 +133,32 @@ export async function handleRequestInbound(
         : "I couldn't find a request from this chat yet. Type 'help' and I'll help you get started.",
     );
   }
+  if (
+    record &&
+    ["open", "in_progress"].includes(record.status) &&
+    (/^(?:add to (?:my |this )?request|(?:I )?also|another (?:issue|problem)|one more thing)\b/i.test(
+      text,
+    ) ||
+      (record.category === "order" &&
+        category === "order" &&
+        /\b(delivery|shipping) address\b/i.test(text)))
+  ) {
+    const detail = detailFrom(event, waMessageId);
+    if (detail && record.details.length < 12)
+      return saveReply({ details: [...record.details, detail] as unknown as Json }, [
+        {
+          kind: "buttons",
+          text: `I’ve added that to your request ${record.reference}. It’s available for our team to review.`,
+          action: {
+            kind: "buttons",
+            buttons: [
+              { id: "request:status", title: "Request status" },
+              { id: "nav:menu", title: "Main menu" },
+            ],
+          },
+        },
+      ]);
+  }
   if (record?.status === "draft") {
     if (/^request:(submit|edit|cancel):/.test(button) && !button.endsWith(`:${record.reference}`))
       return textTurn(
@@ -212,7 +238,26 @@ export async function handleRequestInbound(
         ? "I've included the products, quantities and estimate reference in your draft request. What is your delivery postcode and country, and are there any options you'd like checked? You can review everything before sending it to our team. Type 'cancel request' to stop."
         : requestDetailsPrompt(category),
     );
+    const urgent = /\b(hurt|injur(?:y|ed)|collapsed|electric shock|smoke|sparks)\b/i.test(text);
+    const privacy = /\b(delete|erase|remove)\b.*\b(my data|chat history|personal data)\b/i.test(
+      text,
+    );
+    if (urgent || privacy)
+      turns.splice(0, turns.length, {
+        kind: "buttons",
+        text: privacy
+          ? `Your data-deletion request has been recorded for our team. Reference: ${reference}. Your data has not been deleted yet; the team needs to review and process the request.`
+          : `I’m sorry this happened. Stop using the equipment if it may be unsafe. I’ve recorded your report for our team. Reference: ${reference}. If someone needs urgent medical help, contact local emergency services.`,
+        action: {
+          kind: "buttons",
+          buttons: [
+            { id: "request:status", title: "Request status" },
+            { id: "nav:menu", title: "Main menu" },
+          ],
+        },
+      });
     await db.create({
+      ...(urgent || privacy ? { status: "open" as const } : {}),
       reference,
       session_key: sessionKey,
       source_message_id: waMessageId,

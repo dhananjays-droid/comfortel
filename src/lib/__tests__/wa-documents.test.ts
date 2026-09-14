@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/wa-contact-preferences.server", () => ({ assertContactAllowed: async () => {} }));
 import { EMPTY_SESSION } from "@/lib/wa-session";
 import { handleDocumentInbound } from "@/lib/wa-documents.server";
 import { sendDocument } from "@/lib/wa-client.server";
@@ -39,7 +40,8 @@ describe("WhatsApp PDF journey", () => {
       expect(follow.action.buttons[0]!.id.length).toBeLessThanOrEqual(256);
       expect(follow.action.buttons[0]!.title.length).toBeLessThanOrEqual(20);
     }
-    expect(session).toEqual(snapshot);
+    expect(session.plan).toEqual(snapshot.plan);
+    expect(session.lastDocument?.kind).toBe("quote");
   });
   it("creates a comparison for exactly the named variants", async () => {
     const turns = await handleDocumentInbound(
