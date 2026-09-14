@@ -28,13 +28,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { expectedFrom, linesFrom } from "@/lib/plan";
-import {
-  correctionFor,
-  shortfallFrom,
-  shortfallNote,
-  shouldRetry,
-  type Verdict,
-} from "@/lib/render-qa";
+import { correctionFor, shortfallFrom, shouldRetry, type Verdict } from "@/lib/render-qa";
 import { parseInspectRender, runInspectRender } from "@/lib/render-qa.functions";
 import {
   parseVisualizeStart,
@@ -73,7 +67,7 @@ const IMAGE_DELIVERY_HEAD_START_MS = 2500;
 const BATCH_SIZE = 5;
 /** Roughly matches index.tsx's own ~5-minute ceiling (100 polls x 3s),
  * rounded up for cron-tick granularity rather than a tight poll loop. */
-const STALE_MS = 6 * 60 * 1000;
+const STALE_MS = 15 * 60 * 1000;
 
 type RenderJobRow = {
   id: string;
@@ -365,6 +359,11 @@ export function renderCtaButtons(
   productIds: string[],
   quantities: Record<string, number> | null,
 ): Array<{ id: string; title: string }> {
+  if (mode === "edit")
+    return [
+      { id: "render:adjust", title: "Adjust image" },
+      { id: "nav:menu", title: "Main menu" },
+    ];
   if (mode === "lineup" || !productIds.length) return [];
   const idQty = productIds.map((id) => `${id}:${quantities?.[id] ?? 1}`).join(",");
   return [
@@ -386,16 +385,23 @@ async function deliverImage(
   // Falls back to the tempfile URL rather than losing the render entirely if
   // the re-host fails — kie's own CDN survives long enough for one delivery.
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
+  const shortfall = shortfallFrom(expectedForJob(job), verdict);
   const note =
-    job.mode === "edit"
-      ? editDeliveryNote(verdict)
-      : shortfallNote(shortfallFrom(expectedForJob(job), verdict), verdict.elsewhere);
+    verdict.inspection === "unavailable"
+      ? "I couldn’t verify this image automatically. Please check the products and quantities carefully."
+      : "editCheck" in verdict
+        ? editDeliveryNote(verdict as EditVerdict)
+        : shortfall.length
+          ? `This image doesn’t show your full selection: ${shortfall.map((item) => `${item.seen} of ${item.asked} × ${item.name}`).join("; ")}. Your saved plan quantities haven’t changed. You can ask me to adjust the image.`
+          : "";
   const cta = renderCta(job.mode);
   const buttons = renderCtaButtons(job.mode, job.product_ids, job.quantities);
   // The CTA moves into the follow-up buttons message when there is a real
   // action to offer; lineup has none, so it stays in the caption exactly
   // as before.
-  const caption = buttons.length ? note : note ? `${note}\n\n${cta}` : cta;
+  const reviewNote =
+    note || "AI visualisation—please check the products, colours and quantities before ordering.";
+  const caption = buttons.length ? reviewNote : `${reviewNote}\n\n${cta}`;
 
   // Claim before sending, not after. Whichever tick wins this update owns the
   // delivery; the loser returns having sent nothing, which is the only thing
@@ -429,15 +435,36 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
   const expected = expectedForJob(job);
   let verdict: Verdict | EditVerdict;
   try {
-    verdict =
-      job.mode === "edit" && job.room_url
-        ? await inspectWhatsAppEdit(job.room_url, imageUrl, job.note ?? "")
-        : await runInspectRender(parseInspectRender({ imageUrl, expected }));
+    const generalPromise =
+      job.mode === "edit"
+        ? Promise.resolve(null)
+        : runInspectRender(parseInspectRender({ imageUrl, expected }));
+    verdict = job.room_url
+      ? await inspectWhatsAppEdit(
+          job.room_url,
+          imageUrl,
+          `${job.mode}: ${job.scene ?? ""}. ${job.note ?? ""}. Requested products: ${JSON.stringify(expected)}. Preserve all unrelated furniture and hardware.`,
+          job.product_ids
+            .map(getProduct)
+            .filter((p): p is FullProduct => Boolean(p?.images[0]))
+            .map((p) => ({ name: p.name, url: p.images[0]! })),
+        )
+      : (await generalPromise)!;
+    const general = await generalPromise;
+    if (general && job.room_url) {
+      verdict = {
+        ...general,
+        ...verdict,
+        ok: general.ok && verdict.ok,
+        faults: [...new Set([...general.faults, ...verdict.faults])],
+        note: [general.note, verdict.note].filter(Boolean).join("; "),
+      };
+    }
   } catch {
     verdict =
       job.mode === "edit"
         ? { ok: true, faults: [], editCheck: "unavailable" }
-        : { ok: true, faults: [] };
+        : { ok: false, faults: [], inspection: "unavailable" };
   }
 
   // A shortfall only earns a retry in staged_room: that room is invented,
@@ -467,6 +494,7 @@ async function finishJob(job: RenderJobRow, imageUrl: string): Promise<void> {
             : {}),
           ...(roomFor(job) ? { room: roomFor(job) } : {}),
         }),
+        "whatsapp",
       );
       if (retried.imageUrl) {
         await finishJob({ ...job, attempt: job.attempt + 1 }, retried.imageUrl);
@@ -505,6 +533,7 @@ async function startJob(job: RenderJobRow): Promise<void> {
           : {}),
         ...(roomFor(job) ? { room: roomFor(job) } : {}),
       }),
+      "whatsapp",
     );
 
     if (started.imageUrl) {
@@ -553,14 +582,18 @@ async function nudgeStillWorking(job: RenderJobRow, text: string, stage: string)
 }
 
 async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"> {
-  if (Date.now() - new Date(job.updated_at).getTime() > STALE_MS) {
-    await deliverFailure(job, "That render is taking longer than expected. Want me to try again?");
-    return "failed";
-  }
+  const expired = Date.now() - new Date(job.updated_at).getTime() > STALE_MS;
+  const expire = async () => {
+    await deliverFailure(
+      job,
+      "I haven’t received this image after an extended wait, so I’ve stopped checking this request. The image service may still be processing it. I haven’t started a replacement. Tell me if you’d like to review and confirm a new request.",
+    );
+    return "failed" as const;
+  };
   // A job read as "generating" before startJob's own kie_task_id write has
   // landed yet — a harmless artifact of running claim and fetch as two
   // separate reads rather than one locked transaction. Nothing to poll yet.
-  if (!job.kie_task_id) return "pending";
+  if (!job.kie_task_id) return expired ? expire() : "pending";
 
   try {
     const res = await runVisualizeStatus(parseVisualizeStatus({ taskId: job.kie_task_id }));
@@ -568,23 +601,27 @@ async function pollJob(job: RenderJobRow): Promise<"done" | "failed" | "pending"
       await finishJob(job, res.imageUrl);
       return "done";
     }
+    // One final provider check above can recover a result that finished just
+    // before the deadline instead of discarding a paid, completed image.
+    if (expired) return expire();
     const elapsed = Date.now() - new Date(job.created_at).getTime();
     if (elapsed >= NUDGE_WINDOW_START_MS && elapsed < NUDGE_WINDOW_END_MS) {
       await nudgeStillWorking(
         job,
-        "Your render is still active — I’m working on the details.",
+        "The image service is still processing your request. I’ll send the result here when it’s ready. You can type ‘image status’ to check it.",
         "initial",
       );
     } else if (elapsed >= NUDGE2_WINDOW_START_MS && elapsed < NUDGE2_WINDOW_END_MS) {
       await nudgeStillWorking(
         job,
-        "Still going — a fit-out with several pieces takes a bit longer to get right. Thanks for hanging in there.",
+        "This image is taking longer than usual at the image service. I haven’t started a duplicate. Type ‘image status’ to check progress or cancel the request.",
         "late",
       );
     }
     return "pending";
   } catch (err) {
     console.error("pollJob failed", err);
+    if (expired) return expire();
     return "pending"; // transient — retried on the next tick, not failed outright
   }
 }

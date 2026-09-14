@@ -97,6 +97,11 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
 }
 
 function sessionFromRow(row: SessionRow): SessionState {
+  const context = row.flow as {
+    shownProductIds?: unknown;
+    lastDocument?: unknown;
+    locale?: unknown;
+  } | null;
   const room = row.room_url
     ? { url: row.room_url, at: row.room_at ? new Date(row.room_at).getTime() : Date.now() }
     : null;
@@ -105,6 +110,9 @@ function sessionFromRow(row: SessionRow): SessionState {
     : null;
 
   return sanitizeSession({
+    shownProductIds: context?.shownProductIds,
+    locale: context?.locale,
+    lastDocument: context?.lastDocument,
     transcript: row.transcript,
     plan: row.plan,
     flow: row.flow,
@@ -133,7 +141,12 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
         session_key: sessionKey,
         transcript: clean.transcript,
         plan: clean.plan,
-        flow: clean.flow,
+        flow: {
+          ...clean.flow,
+          locale: clean.locale ?? "en",
+          shownProductIds: clean.shownProductIds ?? [],
+          lastDocument: clean.lastDocument ?? null,
+        },
         room_url: clean.room?.url ?? null,
         room_at: clean.room ? new Date(clean.room.at).toISOString() : null,
         room_spec_wall_cm: clean.roomSpec?.wallCm ?? null,

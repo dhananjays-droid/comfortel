@@ -157,6 +157,13 @@ export function sanitizePendingRender(input: unknown): PendingRender | null {
 }
 
 export type SessionState = {
+  locale?: "en" | "es";
+  shownProductIds?: string[];
+  lastDocument?: {
+    kind: "quote" | "comparison";
+    ids: string[];
+    qty: Record<string, number>;
+  } | null;
   transcript: ChatMessageInput[];
   plan: SessionPlan;
   flow: FlowState;
@@ -182,6 +189,9 @@ export type SessionState = {
 };
 
 export const EMPTY_SESSION: SessionState = {
+  locale: "en",
+  shownProductIds: [],
+  lastDocument: null,
   transcript: [],
   plan: { ids: [], qty: {} },
   flow: {},
@@ -475,7 +485,15 @@ function sanitizeShortString(input: unknown, max: number): string | null {
 
 export function sanitizeSession(input: unknown): SessionState {
   const raw = input as Partial<Record<keyof SessionState, unknown>> | null | undefined;
+  const doc = raw?.lastDocument as SessionState["lastDocument"];
+  const docPlan = sanitizePlan({ ids: doc?.ids, qty: doc?.qty });
   return {
+    shownProductIds: sanitizePlan({ ids: raw?.shownProductIds, qty: {} }).ids,
+    locale: raw?.locale === "es" ? "es" : "en",
+    lastDocument:
+      doc && (doc.kind === "quote" || doc.kind === "comparison") && docPlan.ids.length
+        ? { kind: doc.kind, ids: docPlan.ids, qty: docPlan.qty }
+        : null,
     transcript: sanitizeTranscript(raw?.transcript),
     plan: sanitizePlan(raw?.plan),
     flow: sanitizeFlow(raw?.flow),

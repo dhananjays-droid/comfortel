@@ -440,6 +440,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      wa_contact_opted_out: {
+        Args: { p_session_key: string };
+        Returns: boolean;
+      };
+      wa_set_contact_opt_out: {
+        Args: { p_session_key: string; p_opted_out: boolean };
+        Returns: undefined;
+      };
       set_wa_staff_mode: {
         Args: { p_session_key: string; p_manual_mode: boolean };
         Returns: boolean;

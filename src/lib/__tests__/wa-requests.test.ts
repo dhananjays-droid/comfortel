@@ -224,9 +224,8 @@ describe("sourced WhatsApp knowledge", () => {
   const now = Date.parse("2026-09-11T00:00:00Z");
   it("answers multiple policy topics with their sources", () => {
     const answer = knowledgeAnswer("Shipping time and warranty?", now);
-    expect(answer).toContain("10–15");
-    expect(answer).toContain("standard one-year");
-    expect(answer).toContain("/service-support/warranty/");
+    expect(answer).toBeNull();
+    expect(whatsappKnowledgeInstructions(now)).toContain("/service-support/warranty/");
   });
   it("holds contradictory returns for human review", () => {
     expect(knowledgeAnswer("refund policy", now)).toContain("confirm the return window, any fees");
@@ -240,7 +239,7 @@ describe("sourced WhatsApp knowledge", () => {
   });
   it("does not inject the old duties-inclusive claim", () => {
     expect(whatsappKnowledgeInstructions(now)).toContain("not the earlier Common questions");
-    expect(knowledgeAnswer("Canadian tariff", now)).not.toContain("final total");
+    expect(knowledgeAnswer("Canadian tariff", now)).toBeNull();
   });
 });
 

@@ -7,6 +7,11 @@ const mock = vi.hoisted(() => ({
   request: vi.fn(),
   documents: vi.fn(),
   send: vi.fn(),
+  preference: vi.fn(),
+}));
+vi.mock("@/lib/wa-contact-preferences.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/wa-contact-preferences.server")>()),
+  setContactPreference: mock.preference,
 }));
 vi.mock("@/lib/wa-staff.server", () => ({
   staffHandling: mock.manual,
@@ -38,6 +43,13 @@ const input = {
   event: { kind: "text" as const, text: "Hello" },
 };
 describe("staff takeover preserves the customer flow", () => {
+  it("records STOP even while a staff member is handling the chat", async () => {
+    mock.manual.mockResolvedValue(true);
+    await processQueuedInbound({ ...input, event: { kind: "text", text: "Stop messaging me" } });
+    expect(mock.preference).toHaveBeenCalledWith(input.sessionKey, true);
+    expect(mock.runtime).not.toHaveBeenCalled();
+    expect(mock.send).not.toHaveBeenCalled();
+  });
   it("does not run the bot or mutate plans while staff is handling", async () => {
     mock.manual.mockResolvedValue(true);
     await processQueuedInbound(input);

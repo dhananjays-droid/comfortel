@@ -25,6 +25,8 @@
  */
 
 import { CATALOG_FULL, getProduct, formatPrice, type FullProduct } from "@/lib/catalog";
+import { conversationLocale, localizeActions } from "@/lib/wa-language";
+import { whatsappNeeds, enforceWhatsAppNeeds } from "@/lib/wa-package-needs";
 import {
   parseChatInput,
   runChatTurn as runChatCore,
@@ -37,7 +39,6 @@ import {
   candidatesNear,
   distinctPackages,
   idsOf,
-  needsFor,
   packageLine,
   ROLE_LABEL,
   ROLE_ORDER,
@@ -194,7 +195,7 @@ export type RuntimeResult = { session: SessionState; turns: WaTurn[] };
 const STATUS_UNAVAILABLE =
   "I can’t check your image status right now, so I won’t guess. I haven’t started another image. Please ask me to check again shortly.";
 const CONFIRM_TTL = 30 * 60 * 1000;
-function confirmationText(p: PendingRender): string {
+function confirmationText(p: PendingRender, locale: "en" | "es" = "en"): string {
   const items = p.productIds
     .map((id) => `${p.quantities[id] ?? 1} × ${getProduct(id)?.name ?? id}`)
     .join("\n");
@@ -210,10 +211,25 @@ function confirmationText(p: PendingRender): string {
       : !isMultiReferenceMode(p.mode) && p.productIds.length > 1
         ? `${p.productIds.length} separate images`
         : "one image";
+  if (locale === "es") {
+    const source =
+      p.mode === "edit"
+        ? "editaré la última imagen que te envié"
+        : p.room
+          ? "usaré la foto guardada de tu salón"
+          : "crearé un salón de ejemplo, no tu foto";
+    const number =
+      p.mode === "zones"
+        ? "una imagen por zona"
+        : !isMultiReferenceMode(p.mode) && p.productIds.length > 1
+          ? `${p.productIds.length} imágenes separadas`
+          : "una imagen";
+    return `Antes de empezar, confirma los detalles: ${source}. Generaré ${number}.\n\n${items}${p.note ? `\nTu solicitud: ${p.note}` : ""}\n\nTodavía no he iniciado ninguna imagen. Toca Generar imagen para continuar, o dime qué quieres cambiar.`;
+  }
   return `Please confirm before I start. I’ll ${target}${p.mode === "edit" ? "." : ` and generate ${count}.`}\n\n${items}${p.note ? `\nYour request: ${p.note}` : ""}\n\nNothing is generating yet. Tap Start generation to continue, or tell me what to change.`;
 }
 function confirmationResponse(session: SessionState, p: PendingRender): RuntimeResult {
-  const text = confirmationText(p);
+  const text = confirmationText(p, session.locale);
   const details: WaTurn[] = [];
   if (text.length > 1000) {
     for (let i = 0; i < text.length; i += 900)
@@ -507,6 +523,8 @@ async function renderPlanByZoneTurn(
  * in its id or add another session column.
  */
 function confirmBuildDetails(session: SessionState, text: string): RuntimeResult {
+  // Normalize customer descriptors only in WhatsApp; the web intake is unchanged.
+  text = text.replace(/\b(salon|barber|cutting)\s+(stations?|chairs?)\b/gi, "$2");
   const intake = readIntake(text);
   const fromWall = intake.wallCm ? genericCapacity({ wallCm: intake.wallCm, unit: "ft" }).fits : 0;
   const budget = intake.budget || DEFAULT_BUDGET;
@@ -533,6 +551,11 @@ function confirmBuildDetails(session: SessionState, text: string): RuntimeResult
     "",
     `• ${stations} styling station${stations === 1 ? "" : "s"} (${stationSource})`,
     `• Furniture budget: ${budgetText}${wallText}`,
+    ...(text.includes("Latest customer correction (takes priority):")
+      ? [
+          `• Your change: ${text.split("Latest customer correction (takes priority):").at(-1)?.trim()}`,
+        ]
+      : []),
     "",
     "This is the catalog-furniture budget; freight and lead time are confirmed with the final quote. Are these details right?",
   ].join("\n");
@@ -642,7 +665,8 @@ async function offerPackages(
 
   if (recordUser) next = appendTranscript(next, "user", note ? `${text}\n\n(${note})` : text);
 
-  let packages = buildPackages(budget, needsFor(stations));
+  const needs = whatsappNeeds(stations, text);
+  let packages = buildPackages(budget, needs);
   const minimum = Math.min(...packages.map((pkg) => pkg.total));
   if (Number.isFinite(minimum) && minimum > budget) {
     const gap = minimum - budget;
@@ -671,7 +695,15 @@ async function offerPackages(
       runCuratePackages(parseCurateInput({ brief: text, stations, budget })),
       nudgeCurating(phone, sessionKey),
     ]);
-    if (curated.packages.length) packages = curated.packages;
+    if (curated.packages.length && packages[0])
+      packages = curated.packages.map((pkg) =>
+        enforceWhatsAppNeeds(
+          pkg,
+          needs,
+          packages.find((candidate) => candidate.tier === pkg.tier) ?? packages[0]!,
+          budget,
+        ),
+      );
   } catch {
     /* the local packer is the fallback, not an error worth showing */
   }
@@ -1219,6 +1251,7 @@ async function runChatTurn(
         plan,
       }),
       "whatsapp",
+      session.shownProductIds ?? [],
     );
   } catch (err) {
     console.error("wa-runtime: chat failed", err);
@@ -1237,6 +1270,7 @@ async function runChatTurn(
       userText,
     );
   const claimedWork =
+    !/\b(pdf|quote|estimate|catalog|catalogue|comparison)\b/i.test(userText) &&
     /(?:render|generat|process|ready|minute)/i.test(res.text) &&
     /(?:I.?m|I am|I.?ll|started|starting|processing|shortly|minute|on its way)/i.test(res.text);
   if (request) {
@@ -1299,6 +1333,7 @@ async function runChatTurn(
     );
   }
   const next = appendTranscript(session, "assistant", res.text);
+  if (res.productIds.length) next.shownProductIds = res.productIds;
   const turns: WaTurn[] = [{ kind: "text", text: res.text }, ...productTurns(res.productIds)];
   if (res.productIds.length) {
     const offerTurn = proactiveOfferTurn(res.productIds);
@@ -1319,6 +1354,28 @@ async function route(
   tappedId: string | undefined,
 ): Promise<RuntimeResult> {
   const command = (tappedId ?? text.replace(/^wa:/i, "")).trim().toLowerCase();
+  if (command === "render:adjust")
+    return messageResult(
+      session,
+      liveLastRender(session.lastRender)
+        ? "What would you like changed in the most recent image? Tell me which items to change and which to keep. I’ll show you the request to confirm before generating anything."
+        : "Please send the image you’d like to change and describe the changes. I’ll ask you to confirm before generating anything.",
+    );
+  if (
+    !tappedId &&
+    /\b(link|url)\b/i.test(text) &&
+    /\b(only|pls|please|no photos|no images)\b/i.test(text)
+  ) {
+    const products = (session.shownProductIds ?? session.plan.ids)
+      .map(getProduct)
+      .filter((p): p is FullProduct => Boolean(p));
+    return messageResult(
+      session,
+      products.length
+        ? products.map((p) => `${p.name}\n${p.url}`).join("\n\n")
+        : "Which product would you like a link to? Tell me its name and finish.",
+    );
+  }
 
   if (tappedId?.startsWith("render:confirm:")) {
     const p = session.pendingRender;
@@ -1660,9 +1717,12 @@ async function route(
   if (
     !tappedId &&
     !session.flow.awaiting &&
-    /\b(salon|station|chair|budget|fit[ -]?out)\b/i.test(text)
+    /\b(budget|fit[ -]?out|plan (?:my|our|a) salon|salon stations?)\b/i.test(text) &&
+    !/\b(show|render|photo|picture|image|replace|recolour|recolor)\b/i.test(text)
   ) {
-    const intake = readIntake(text);
+    const intake = readIntake(
+      text.replace(/\b(salon|barber|cutting)\s+(stations?|chairs?)\b/gi, "$2"),
+    );
     if (intake.stations || intake.budget) return confirmBuildDetails(session, text);
   }
 
@@ -1678,12 +1738,34 @@ async function route(
     }
 
     if (session.flow.awaiting === "confirm_build") {
+      if (
+        !tappedId &&
+        /\b(no|without|instead|change|actually|only|budget|stations?|chairs?|\d+)\b/i.test(text)
+      ) {
+        const previous = latestUserText(session) ?? "";
+        const before = readIntake(previous);
+        const correction = readIntake(
+          text.replace(/\b(salon|barber|cutting)\s+(stations?|chairs?)\b/gi, "$2"),
+        );
+        // A count of wash units following the word "chairs" is not a station correction.
+        if (
+          !/\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:(?:salon|barber|styling|cutting)\s+)?(?:chairs?|stations?|seats?)\b|\b(?:station|chair) count\s*(?:is|to|of|:)\s*(?:\d+|one|two|three|four|five|six)\b/i.test(
+            text,
+          )
+        )
+          delete correction.stations;
+        const merged = `${correction.stations ?? before.stations ?? DEFAULT_STATIONS} styling stations with a $${correction.budget ?? before.budget ?? DEFAULT_BUDGET} budget. ${previous}. Latest customer correction (takes priority): ${text}`;
+        return confirmBuildDetails(session, merged);
+      }
+      if (!tappedId && /\?|^(what|how|can|do|does|is|are)\b/i.test(text)) {
+        return runChatTurn(appendTranscript(session, "user", text), sessionKey, phone);
+      }
       return {
         session,
         turns: [
           {
             kind: "buttons",
-            text: "Please choose whether to use those details or change them.",
+            text: "Please check the details above. Tap Use these details to continue, or tell me what you’d like to change.",
             action: {
               kind: "buttons",
               buttons: [
@@ -1811,7 +1893,10 @@ export async function handleInboundMessage(
     return { session: { ...session, handoff: true }, turns: [{ kind: "text", text: HANDOFF_ACK }] };
   }
 
-  const working = session;
+  const working = {
+    ...session,
+    locale: conversationLocale(event.kind === "text" ? event.text : "", session.locale),
+  };
   const turns: WaTurn[] = [];
 
   let result: RuntimeResult;
@@ -1839,7 +1924,10 @@ export async function handleInboundMessage(
     };
   }
 
-  return { session: result.session, turns: [...turns, ...result.turns] };
+  return {
+    session: result.session,
+    turns: localizeActions([...turns, ...result.turns], working.locale),
+  };
 }
 
 // Re-exported so wa-webhook.server.ts / a future admin tool can build an

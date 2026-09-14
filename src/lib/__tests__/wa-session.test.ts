@@ -304,6 +304,11 @@ describe("sanitizeSession", () => {
       customerName: "Jamie Lee",
       phoneLast4: "4567",
     };
-    expect(sanitizeSession(session)).toEqual(session);
+    expect(sanitizeSession(session)).toEqual({
+      ...session,
+      locale: "en",
+      shownProductIds: [],
+      lastDocument: null,
+    });
   });
 });

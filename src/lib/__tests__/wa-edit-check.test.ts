@@ -28,7 +28,13 @@ describe("WhatsApp edit verification", () => {
     }
     expect(
       editDeliveryNote(
-        readEditVerdict({ complete: true, issue: "", targets: [{ satisfied: true }] }),
+        readEditVerdict({
+          complete: true,
+          preserved: true,
+          protectedObjects: [{ before: "black trolley", after: "black trolley", unchanged: true }],
+          issue: "",
+          targets: [{ satisfied: true }],
+        }),
       ),
     ).toBe("");
     expect(readEditVerdict({ complete: true, issue: "" }).editCheck).toBe("unavailable");
@@ -67,7 +73,7 @@ describe("WhatsApp edit verification", () => {
     ).toEqual([
       "https://example.com/before.png",
       "https://example.com/after.png",
-      "Requested edit: Change both black chairs to white",
+      expect.stringContaining("Requested edit: Change both black chairs to white"),
     ]);
   });
   it("degrades honestly on an inspector outage without throwing or retrying blindly", async () => {

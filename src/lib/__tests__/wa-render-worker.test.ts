@@ -37,6 +37,12 @@ describe("renderCta", () => {
 });
 
 describe("renderCtaButtons", () => {
+  it("offers an adjustment action after an edit without inventing a new render", () => {
+    expect(renderCtaButtons("edit", [], null)).toContainEqual({
+      id: "render:adjust",
+      title: "Adjust image",
+    });
+  });
   it("offers add-to-plan and get-a-quote for a whole-room render", () => {
     const buttons = renderCtaButtons("staged_room", ["a", "b"], { a: 3 });
     expect(buttons).toEqual([

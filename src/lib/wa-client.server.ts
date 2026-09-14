@@ -37,6 +37,10 @@ function credentials(): { token: string; phoneNumberId: string } {
 type SendResult = { messages?: Array<{ id?: string }> };
 
 async function send(payload: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+  if (typeof payload["to"] === "string") {
+    const { assertContactAllowed } = await import("@/lib/wa-contact-preferences.server");
+    await assertContactAllowed(payload["to"]);
+  }
   const { token, phoneNumberId } = credentials();
   const res = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,

@@ -313,7 +313,11 @@ export function parseChatInput(input: {
 
 export type ChatInput = ReturnType<typeof parseChatInput>;
 
-export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promise<ChatReply> {
+export async function runChatTurn(
+  data: ChatInput,
+  channel?: "whatsapp",
+  shownProductIds: string[] = [],
+): Promise<ChatReply> {
   {
     try {
       const apiKey = process.env["ANTHROPIC_API_KEY"];
@@ -333,13 +337,12 @@ export async function runChatTurn(data: ChatInput, channel?: "whatsapp"): Promis
       let specContext = "";
       if (channel === "whatsapp") {
         const { productSpecificationContext } = await import("@/lib/product-specifications");
-        const recent = messages.filter((m) => m.role === "user").slice(-2);
+        const recent = messages.slice(-8);
         specContext =
-          productSpecificationContext(recent.at(-1)?.content ?? "") ||
           productSpecificationContext(
-            recent.length > 1 ? recent[0]!.content : "",
+            recent.map((m) => m.content).join("\n"),
             data.plan.map((p) => p.id),
-          );
+          ) + productSpecificationContext("", shownProductIds);
       }
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {

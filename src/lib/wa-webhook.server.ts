@@ -510,6 +510,23 @@ export async function processQueuedInbound(input: {
   event: InboundEvent;
   customerName?: string;
 }): Promise<void> {
+  // Consent commands take precedence even during staff takeover.
+  if (input.event.kind === "text") {
+    const { contactPreference, setContactPreference } =
+      await import("@/lib/wa-contact-preferences.server");
+    const preference = contactPreference(input.event.text);
+    if (preference !== null) {
+      await setContactPreference(input.sessionKey, preference);
+      if (!preference)
+        await deliver(input.phone, input.sessionKey, [
+          {
+            kind: "text",
+            text: "WhatsApp messages are enabled again. Type menu to continue. You can type STOP at any time.",
+          },
+        ]);
+      return;
+    }
+  }
   // Inbound messages are already durably logged. Staff mode leaves the salon
   // plan untouched and keeps all follow-ups visible in the shared timeline.
   if (await staffHandling(input.sessionKey)) {
@@ -540,6 +557,26 @@ export async function processQueuedInbound(input: {
     const result = requestTurns
       ? { session: activeSession, turns: requestTurns }
       : await handleInboundMessage(activeSession, input.sessionKey, input.phone, input.event);
+    if (requestTurns) {
+      const userText =
+        input.event.kind === "text"
+          ? input.event.text
+          : input.event.kind === "button"
+            ? input.event.id
+            : "Customer supplied a photo";
+      const replyText = requestTurns
+        .map((turn) => ("text" in turn ? turn.text : "caption" in turn ? turn.caption : ""))
+        .filter(Boolean)
+        .join("\n");
+      result.session = {
+        ...result.session,
+        transcript: [
+          ...result.session.transcript,
+          { role: "user" as const, content: userText },
+          { role: "assistant" as const, content: replyText },
+        ].slice(-24),
+      };
+    }
     const digits = input.phone.replace(/\D/g, "");
     await saveSession(input.sessionKey, {
       ...result.session,

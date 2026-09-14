@@ -13,6 +13,17 @@ import {
 } from "@/lib/render-qa";
 
 describe("readVerdict", () => {
+  it("does not expose malformed tool fragments as customer copy", () => {
+    const verdict = readVerdict({
+      faults: [],
+      note: '<parameter name="counts">[]',
+      elsewhere: "</antml:parameter>",
+      counts: [{ item: "Chair", seen: 2 }],
+    });
+    expect(verdict.note).toBeUndefined();
+    expect(verdict.elsewhere).toBeUndefined();
+    expect(verdict.counts).toEqual([{ item: "Chair", seen: 2 }]);
+  });
   it("passes a clean check", () => {
     expect(readVerdict({ faults: [], note: "" })).toEqual({ ok: true, faults: [] });
   });
@@ -40,10 +51,11 @@ describe("readVerdict", () => {
     expect(readVerdict({ ok: false, faults: [] }).ok).toBe(true);
   });
 
-  it("treats a missing, null or malformed reply as a pass", () => {
+  it("marks a missing or malformed check unavailable without a paid retry", () => {
     // Never block delivery on a check that did not happen.
     for (const input of [null, undefined, "nope", 42, {}]) {
-      expect(readVerdict(input).ok, String(input)).toBe(true);
+      expect(readVerdict(input).inspection, String(input)).toBe("unavailable");
+      expect(shouldRetry(readVerdict(input), 0)).toBe(false);
     }
   });
 
@@ -229,9 +241,11 @@ describe("counting what the render actually delivered", () => {
     expect(shortfallFrom(asked, verdict)).toEqual([]);
   });
 
-  it("never claims a shortfall on a plan with nothing repeated", () => {
+  it("detects a missing single required item", () => {
     const verdict = readVerdict({ faults: [], counts: [{ item: "Walker Desk", seen: 0 }] });
-    expect(shortfallFrom([{ name: "Walker Desk", qty: 1 }], verdict)).toEqual([]);
+    expect(shortfallFrom([{ name: "Walker Desk", qty: 1 }], verdict)).toEqual([
+      { name: "Walker Desk", asked: 1, seen: 0 },
+    ]);
   });
 
   it("says nothing at all when no counting was asked for", () => {
