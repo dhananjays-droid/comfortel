@@ -128,6 +128,39 @@ export async function handleConversation(
       (await services.document(session, event, input.waMessageId)) ??
         say("That document option is no longer available. Which products should I include?"),
     );
+  // Exact commands only: do not steal mixed-intent messages or draft details.
+  if (/^(?:thanks|thank you|thank you very much)[!.\s]*$/i.test(text))
+    return respond(say("You’re welcome. Let me know what else you’d like help with."));
+  if (
+    /^(?:pdf (?:quote|estimate)|(?:send|download)(?: me)? (?:my|the) (?:pdf|quote|estimate))[!.\s]*$/i.test(
+      text,
+    ) &&
+    session.plan.ids.length > 0
+  ) {
+    const turns = await handleShoppingInbound(
+      session,
+      { kind: "button", id: "shop:quote" },
+      input.waMessageId,
+      services.model,
+    );
+    return respond(
+      turns ?? say("Please choose the products you’d like included in your estimate."),
+    );
+  }
+  const explicitRequest = text
+    .toLowerCase()
+    .match(/^(sales|support|order|complaint) (?:request|help)$/);
+  if (explicitRequest) {
+    const category = explicitRequest[1] as "sales" | "support" | "order" | "complaint";
+    session.conversation.suspendedTask = session.conversation.activeTask;
+    session.conversation.activeTask = "request";
+    return respond(
+      (await services.request({
+        ...input,
+        event: { kind: "button", id: `request:${category}` },
+      })) ?? say(requestDetailsPrompt(category)),
+    );
+  }
   if (
     button.startsWith("request:") ||
     button === "ask" ||

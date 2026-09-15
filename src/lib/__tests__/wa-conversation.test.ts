@@ -46,6 +46,23 @@ function setup(model: ShoppingModel = finish({ action: "answer", text: "Which pr
   return { services, session, send };
 }
 describe("unified conversation owner", () => {
+  it("routes explicit support directly without an advisor call", async () => {
+    const model = finish({ action: "answer", text: "unused" });
+    const { services, send } = setup(model);
+    await send("support request");
+    expect(model).not.toHaveBeenCalled();
+    expect(services.requestContext).not.toHaveBeenCalled();
+    expect(services.request).toHaveBeenCalledWith(
+      expect.objectContaining({ event: { kind: "button", id: "request:support" } }),
+    );
+  });
+  it("handles thanks without an advisor call or modifying a staff request", async () => {
+    const model = finish({ action: "answer", text: "unused" });
+    const { services, send } = setup(model);
+    await send("Thank you!");
+    expect(model).not.toHaveBeenCalled();
+    expect(services.request).not.toHaveBeenCalled();
+  });
   it("a request draft does not consume product or policy interruptions", async () => {
     const { services, send } = setup();
     const out = await send("Before that, which mirror works for three stations?");

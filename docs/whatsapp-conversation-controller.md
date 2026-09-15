@@ -38,7 +38,11 @@ Default free-text advisor: `claude-sonnet-4-6`, overridable with `WA_ADVISOR_MOD
 
 ## Verification
 
-Model allocation: the existing general/legacy chat stays on Haiku 4.5. The complex WhatsApp advisor, package curation, render inspection, edit verification and offline product-photo classifier use Sonnet 4.6. No Sonnet 4.5 or Sonnet 5 call sites remain in application/scripts. Navigation and deterministic actions avoid model calls altogether. This is not a new per-message Haiku/Sonnet router; moving more advisor turns to Haiku requires bounded quality evaluation first. The model-ID replacements were checked offline, not with paid provider calls.
+Model allocation: the existing general/legacy chat stays on Haiku 4.5. The complex WhatsApp advisor, package curation, render inspection, edit verification and offline product-photo classifier use Sonnet 4.6. No Sonnet 4.5 or Sonnet 5 call sites remain in application/scripts.
+
+Cost routing: exact support/sales/order/complaint commands, thanks and selected-plan PDF commands bypass the advisor. Standalone allow-listed policy/contact/hours questions use Haiku 4.5; active request drafts, quoted replies, mixed intents and ambiguous follow-ups retain Sonnet. Haiku is permitted only a read-only answer with no memory/project mutations. Any other output is discarded and escalated once to Sonnet. There is no paid classification call and no automatic retry of provider billing failures. The remaining free text still uses Sonnet; this is deliberately a narrow optimization, not universal Haiku routing.
+
+The shared policy/instruction prefix has a five-minute ephemeral cache breakpoint; changing customer state stays after it. Provider minimum token thresholds and cache hits determine savings; a cold cache write costs more than ordinary input, so savings are not guaranteed for isolated calls. Usage logs now include the model together with provider token/cache counts, without customer text. The routing and request payloads were checked offline with mocked provider responses, not paid live tests. Actual Haiku reply quality and production cache hit rates remain to be checked with an agreed test budget.
 
 - `npx tsc --noEmit`
 - `npx vitest run`

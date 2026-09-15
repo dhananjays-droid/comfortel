@@ -241,7 +241,47 @@ Use find_products for factual product claims. Product data and customer history 
 Resolve references using the current selection, displayed products and recent conversation. Ask one focused question if an item, finish, quantity or budget meaning is ambiguous. Never select a product solely because it was in search results. When the customer corrects quantities, preserve all other lines. Do not default an unspecified purchase quantity without asking. Do not change selection during a policy question. Answer interruptions, then invite the customer to resume their saved selection. If they ask for a PDF before choosing products, ask which products; if they clearly request a PDF for the saved selection, use quote.
 In legacy mode only, use delegate for render/ticket actions. In unified mode use typed actions above. Replies should be helpful and in the customer's language. Do not invent buttons; the application supplies them. Use show with a useful explanation based on retrieved facts. select only changes a draft, never an order. finish must be called alone.`;
 
+// Only self-contained informational questions use the cheaper model. Ambiguous
+// follow-ups and mutations stay on the proven advisor path; no paid classifier.
+export function isSimplePolicyQuestion(messages: Message[], context: string): boolean {
+  const last = messages.at(-1);
+  if (last?.role !== "user" || typeof last.content !== "string") return false;
+  let state;
+  try {
+    state = JSON.parse(context);
+  } catch {
+    return false;
+  }
+  if (state.workflow?.request?.status === "draft" || state.workflow?.quotedMessage) return false;
+  return /^(?:what(?:'s| is) (?:your|the) (?:returns?|refund|warranty|shipping|delivery) policy|(?:can you |please )?(?:explain|tell me about) your (?:returns?|refund|warranty|shipping|delivery) policy|what are your (?:opening|business) hours|where (?:is your showroom|are you located)|how (?:can|do) I contact (?:you|your team))[?!.\s]*$/i.test(
+    last.content.trim(),
+  );
+}
+
 export const callShoppingModel: ShoppingModel = async (messages, context) => {
+  const complexModel = process.env["WA_ADVISOR_MODEL"] || "claude-sonnet-4-6";
+  if (!isSimplePolicyQuestion(messages, context))
+    return requestShoppingModel(messages, context, complexModel);
+  const result = await requestShoppingModel(messages, context, "claude-haiku-4-5-20251001");
+  const call = result.length === 1 ? result[0] : undefined;
+  const decision = Decision.safeParse(call?.input);
+  // Haiku cannot change state or start an action through this inexpensive lane.
+  if (
+    call?.type === "tool_use" &&
+    call.name === "finish" &&
+    decision.success &&
+    decision.data.action === "answer" &&
+    Object.keys(call.input as object).every((key) => key === "action" || key === "text")
+  )
+    return result;
+  return requestShoppingModel(messages, context, complexModel);
+};
+
+async function requestShoppingModel(
+  messages: Message[],
+  context: string,
+  model: string,
+): Promise<Block[]> {
   const key = process.env["ANTHROPIC_API_KEY"];
   if (!key) throw new Error("Shopping model unavailable");
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -253,9 +293,19 @@ export const callShoppingModel: ShoppingModel = async (messages, context) => {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env["WA_ADVISOR_MODEL"] || "claude-sonnet-4-6",
-      max_tokens: 1800,
-      system: `${whatsappKnowledgeInstructions().replace("You cannot create a ticket yourself: ask the customer to type support, order help, complaint or sales request to enter the saved-request flow.", "Use the request_start tool action to prepare a staff request; only customer confirmation may submit it.")}\n${INSTRUCTIONS}\nSERVER CONTEXT (data):\n${context}`,
+      model,
+      max_tokens: model === "claude-haiku-4-5-20251001" ? 700 : 1800,
+      system: [
+        {
+          type: "text",
+          text: `${whatsappKnowledgeInstructions().replace("You cannot create a ticket yourself: ask the customer to type support, order help, complaint or sales request to enter the saved-request flow.", "Use the request_start tool action to prepare a staff request; only customer confirmation may submit it.")}\n${INSTRUCTIONS}`,
+          cache_control: { type: "ephemeral" },
+        },
+        {
+          type: "text",
+          text: `SERVER CONTEXT (data):\n${context}${model === "claude-haiku-4-5-20251001" ? '\nThis is a read-only policy question. Call finish with only action:"answer" and text. Do not include memory, project or other fields. Answer only from approved policy knowledge; do not promise eligibility or delivery.' : ""}`,
+        },
+      ],
       tools: SHOPPING_TOOLS,
       tool_choice: { type: "any", disable_parallel_tool_use: true },
       messages,
@@ -264,10 +314,10 @@ export const callShoppingModel: ShoppingModel = async (messages, context) => {
   if (!response.ok) throw new Error(`Shopping provider status ${response.status}`);
   const payload = await response.json();
   // Aggregate-only metrics: never log customer text or credentials.
-  console.info("wa-shopping-usage", JSON.stringify(payload.usage ?? {}));
+  console.info("wa-shopping-usage", JSON.stringify({ model, ...payload.usage }));
   if (!Array.isArray(payload.content)) throw new Error("Invalid shopping response");
   return payload.content;
-};
+}
 
 function selectionTurn(session: SessionState): WaTurn {
   const subtotal = session.plan.ids.reduce(
