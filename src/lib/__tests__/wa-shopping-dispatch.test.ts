@@ -15,10 +15,14 @@ vi.mock("@/lib/wa-session-store.server", () => ({
   saveSession: mocks.save,
 }));
 vi.mock("@/lib/wa-shopping.server", () => ({ handleShoppingInbound: mocks.shopping }));
-vi.mock("@/lib/wa-runtime", () => ({ handleInboundMessage: mocks.runtime }));
+vi.mock("@/lib/wa-runtime", () => ({
+  handleInboundMessage: mocks.runtime,
+  prepareAdvisorRender: mocks.runtime,
+}));
 vi.mock("@/lib/wa-requests.server", () => ({
   handleRequestInbound: mocks.request,
   hasActiveRequestDraft: mocks.draft,
+  requestContext: mocks.draft,
 }));
 vi.mock("@/lib/wa-documents.server", () => ({ handleDocumentInbound: mocks.document }));
 vi.mock("@/lib/managed-catalog.server", () => ({
@@ -90,16 +94,17 @@ it("saves a handled conversation before sending and skips competing handlers", a
   );
   expect(mocks.save.mock.calls[0]?.[1].transcript).toHaveLength(2);
 });
-it("lets the original handler continue when the agent delegates", async () => {
+it("does not fall through to a competing text handler when no decision is returned", async () => {
   mocks.shopping.mockResolvedValue(null);
   await processQueuedInbound(input);
-  expect(mocks.runtime).toHaveBeenCalledOnce();
+  expect(mocks.runtime).not.toHaveBeenCalled();
+  expect(mocks.send).toHaveBeenCalledOnce();
 });
-it("does not intercept an active staff request draft", async () => {
-  mocks.draft.mockResolvedValue(true);
+it("keeps conversation ownership while a request draft exists", async () => {
+  mocks.draft.mockResolvedValue({ status: "draft", details: [] });
   await processQueuedInbound(input);
-  expect(mocks.shopping).not.toHaveBeenCalled();
-  expect(mocks.request).toHaveBeenCalledOnce();
+  expect(mocks.shopping).toHaveBeenCalledOnce();
+  expect(mocks.request).not.toHaveBeenCalled();
 });
 it("does not reply over staff takeover", async () => {
   mocks.staff.mockResolvedValue(true);

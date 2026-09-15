@@ -198,12 +198,16 @@ const PRIORITY: Role[] = ["styling", "wash", "mirror", "reception", "waiting", "
  * Every tier is genuinely the most you can get at its number. None of them is a
  * decoy built to flatter another, which is the failure mode of tiered pricing.
  */
-function packFor(target: number, needs: Need[]): { lines: Line[]; total: number } {
+function packFor(
+  target: number,
+  needs: Need[],
+  getCandidates = candidates,
+): { lines: Line[]; total: number } {
   const pools = new Map<Role, FullProduct[]>();
   const index = new Map<Role, number>();
 
   for (const need of needs) {
-    const pool = candidates(need.role);
+    const pool = getCandidates(need.role);
     if (!pool.length) continue;
     pools.set(need.role, pool);
 
@@ -440,9 +444,13 @@ export function distinctPackages(packages: Package[]): Package[] {
   });
 }
 
-export function buildPackages(budget: number, needs: Need[]): Package[] {
+export function buildPackages(
+  budget: number,
+  needs: Need[],
+  getCandidates = candidates,
+): Package[] {
   const raw = (["lean", "balanced", "premium"] as const).map((tier) => {
-    const { lines, total } = packFor(budget * TIER_TARGET[tier], needs);
+    const { lines, total } = packFor(budget * TIER_TARGET[tier], needs, getCandidates);
     return { tier, lines, total, reasons: [] as string[] };
   });
 

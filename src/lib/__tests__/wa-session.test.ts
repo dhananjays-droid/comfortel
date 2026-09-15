@@ -306,6 +306,7 @@ describe("sanitizeSession", () => {
     };
     expect(sanitizeSession(session)).toEqual({
       ...session,
+      conversation: EMPTY_SESSION.conversation,
       shoppingMemory: {},
       locale: "en",
       shownProductIds: [],

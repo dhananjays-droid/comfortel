@@ -124,6 +124,8 @@ export function requestStatusText(request: RequestRecord): string {
 }
 
 export function confirmationTurn(request: RequestRecord): WaTurn {
+  if (!requestHasDetails(request))
+    return { kind: "text", text: requestDetailsPrompt(request.category) };
   const summary = request.details
     .map((d) => `${d.text}${d.imageUrl ? " [photo attached]" : ""}`)
     .join("\n")
@@ -140,6 +142,17 @@ export function confirmationTurn(request: RequestRecord): WaTurn {
       ],
     },
   };
+}
+
+/** A number, navigation command or empty draft is not a usable staff enquiry. */
+export function requestHasDetails(request: Pick<RequestRecord, "details">): boolean {
+  return request.details.some(
+    (d) =>
+      d.text.trim().length >= 8 &&
+      !/^(?:menu|hi|hello|help|support|sales|I (?:want|need)(?: to buy)? (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten))[.!? ]*$/i.test(
+        d.text.trim(),
+      ),
+  );
 }
 
 export function detailFrom(event: InboundEvent, messageId: string): RequestDetail | null {

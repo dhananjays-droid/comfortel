@@ -66,6 +66,7 @@ describe("WhatsApp edit verification", () => {
     );
     expect(result.editCheck).toBe("failed");
     const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+    expect(body.model).toBe("claude-sonnet-4-6");
     expect(
       body.messages[0].content.map(
         (x: { source?: { url: string }; text?: string }) => x.source?.url ?? x.text,

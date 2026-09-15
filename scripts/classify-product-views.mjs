@@ -15,7 +15,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "src/data/product-views.json");
-const MODEL = "claude-sonnet-5";
+const MODEL = "claude-sonnet-4-6";
 /**
  * How many of a listing's photos to examine.
  *

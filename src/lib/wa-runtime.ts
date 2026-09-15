@@ -111,7 +111,7 @@ function wantsHandoff(text: string): boolean {
 }
 
 export type WaTurn =
-  | {kind:"catalog";text:string}
+  | { kind: "catalog"; text: string }
   | { kind: "document"; bytes: Uint8Array; filename: string; caption: string; reference: string }
   | { kind: "text"; text: string }
   | {
@@ -185,8 +185,8 @@ const RENDER_FAILED_TURN: WaTurn = {
 };
 
 export type InboundEvent =
-  | {kind:"order";cart:import("@/lib/product-management").CatalogCart}
-  | { kind: "text"; text: string }
+  | { kind: "order"; cart: import("@/lib/product-management").CatalogCart }
+  | { kind: "text"; text: string; replyTo?: string; referredProductId?: string }
   | { kind: "button"; id: string }
   | { kind: "photo"; url: string; caption?: string | undefined }
   | { kind: "photo_error" }
@@ -282,6 +282,60 @@ function proposeRender(
 }
 function messageResult(session: SessionState, text: string): RuntimeResult {
   return { session: appendTranscript(session, "assistant", text), turns: [{ kind: "text", text }] };
+}
+
+/** Typed advisor capability: proposals only. Existing confirmation handler
+ * still owns job creation, authorization, expiry and duplicate protection. */
+export async function prepareAdvisorRender(
+  session: SessionState,
+  sessionKey: string,
+  note: string,
+  mode: "edit" | "refit_room" | "staged_room" = "refit_room",
+): Promise<RuntimeResult> {
+  const active = await getActiveRenderState(sessionKey);
+  if (active.unavailable) return messageResult(session, STATUS_UNAVAILABLE);
+  if (active.count) return { session, turns: [renderBusyTurn(active)] };
+  if (mode === "edit" && liveLastRender(session.lastRender)) {
+    return proposeRender(session, {
+      mode: "edit",
+      productIds: [],
+      quantities: {},
+      room: { url: session.lastRender!.resultUrl, at: session.lastRender!.at },
+      roomSpec: session.roomSpec,
+      note,
+    });
+  }
+  if (mode === "edit")
+    return messageResult(
+      session,
+      "I don’t have a recent generated image to edit. Please share the image or tell me which products to visualise.",
+    );
+  if (!session.plan.ids.length)
+    return messageResult(
+      session,
+      "Which products should I include? Choose the products and quantities first, then I’ll prepare an image for you to confirm.",
+    );
+  if (
+    mode !== "staged_room" &&
+    (!session.room || Date.now() - session.room.at > 24 * 60 * 60 * 1000)
+  )
+    return messageResult(
+      session,
+      "Please upload a photo of your salon. I’ll show you the products and image request to confirm before generating anything.",
+    );
+  if (session.plan.ids.some((id) => (session.plan.qty[id] ?? 1) > 20))
+    return messageResult(
+      session,
+      "Your selection includes more than 20 of one product. Which smaller area should we visualise? Your quote quantities haven’t changed.",
+    );
+  return proposeRender(session, {
+    mode,
+    productIds: [...session.plan.ids],
+    quantities: { ...session.plan.qty },
+    room: mode === "staged_room" ? null : session.room,
+    roomSpec: session.roomSpec,
+    note,
+  });
 }
 
 function renderBusyTurn(

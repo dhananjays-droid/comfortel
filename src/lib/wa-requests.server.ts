@@ -14,6 +14,7 @@ import {
   requestReceipt,
   requestStatusText,
   REQUEST_CATEGORIES,
+  requestHasDetails,
   type RequestCategory,
   type RequestRecord,
 } from "@/lib/wa-requests";
@@ -66,6 +67,24 @@ const store: RequestStore = {
 };
 const textTurn = (text: string): WaTurn[] => [{ kind: "text", text }];
 
+export async function requestContext(
+  sessionKey: string,
+  reference?: string,
+): Promise<RequestRecord | null> {
+  if (reference) {
+    if (!/^CF-[A-F0-9]{8,32}$/i.test(reference)) return null;
+    const { data, error } = await supabaseAdmin
+      .from("wa_requests")
+      .select("*")
+      .eq("session_key", sessionKey)
+      .eq("reference", reference.toUpperCase())
+      .maybeSingle();
+    if (error) throw error;
+    return data as unknown as RequestRecord | null;
+  }
+  return (await store.latest(sessionKey)) as unknown as RequestRecord | null;
+}
+
 /** Do not let the staged shopping rollout steal input from an existing draft.
  * Query errors propagate: uncertainty must not silently bypass request intake. */
 export async function hasActiveRequestDraft(sessionKey: string): Promise<boolean> {
@@ -82,6 +101,9 @@ export async function handleRequestInbound(
     waMessageId: string;
     event: InboundEvent;
     salesIntakeActive?: boolean;
+    categoryOverride?: RequestCategory;
+    readyToReview?: boolean;
+    followUpQuestion?: string;
   },
   db: RequestStore = store,
 ): Promise<WaTurn[] | null> {
@@ -94,9 +116,11 @@ export async function handleRequestInbound(
         : "";
   const button = event.kind === "button" ? event.id : "";
   const explicitCategory = button.startsWith("request:") ? button.split(":")[1] : null;
-  const category = REQUEST_CATEGORIES.includes(explicitCategory as RequestCategory)
-    ? (explicitCategory as RequestCategory)
-    : requestIntent(text);
+  const category =
+    input.categoryOverride ??
+    (REQUEST_CATEGORIES.includes(explicitCategory as RequestCategory)
+      ? (explicitCategory as RequestCategory)
+      : requestIntent(text));
   if (button === "ask" || /^(?:help|support menu|requests|customer service menu)$/i.test(text))
     return [requestMenu()];
   if (button === "request:faq" || /^(?:faq|faqs|policies)$/i.test(text))
@@ -166,6 +190,10 @@ export async function handleRequestInbound(
       ]);
   }
   if (record?.status === "draft") {
+    // Navigation pauses a draft; it never turns navigation text into details,
+    // submits it or forces an empty confirmation. The unified controller can
+    // resume this durable draft explicitly later.
+    if (/^(?:menu|hi|hello|help)$/i.test(text) || button === "nav:menu") return null;
     if (/^request:(submit|edit|cancel):/.test(button) && !button.endsWith(`:${record.reference}`))
       return textTurn(
         "That button belongs to an older request. Type 'request status' to check your current request.",
@@ -193,7 +221,7 @@ export async function handleRequestInbound(
       /^(?:submit request|confirm request)$/i.test(text) ||
       (record.stage === "confirm" && /^(?:yes|yes please|confirm|submit)[.!]*$/i.test(text))
     ) {
-      if (record.stage !== "confirm")
+      if (record.stage !== "confirm" || !requestHasDetails(record))
         return textTurn(
           "Please add a few details first so our team knows what you need help with. I'll then show you the request to review.",
         );
@@ -222,7 +250,20 @@ export async function handleRequestInbound(
           "That's all I can attach to one request. You can submit it now, or type 'cancel request' to start again.",
         ),
       ];
-    const next = { ...record, stage: "confirm" as const, details: [...record.details, detail] };
+    const next = {
+      ...record,
+      stage: input.readyToReview === false ? ("details" as const) : ("confirm" as const),
+      details: [...record.details, detail],
+    };
+    if (!requestHasDetails(next))
+      return textTurn(
+        "Which product or issue is this about? I need that detail before preparing your request for our team.",
+      );
+    if (next.stage === "details")
+      return saveReply(
+        { stage: "details", details: next.details as unknown as Json },
+        textTurn(input.followUpQuestion || requestDetailsPrompt(record.category)),
+      );
     return saveReply({ stage: "confirm", details: next.details as unknown as Json }, [
       confirmationTurn(next),
     ]);

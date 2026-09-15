@@ -60,7 +60,10 @@ function delay(ms: number): Promise<void> {
  * everything — gets silently wiped, so an actual query error is retried
  * before this gives up and treats the customer as brand new.
  */
-export async function loadSession(sessionKey: string): Promise<SessionState> {
+export async function loadSession(
+  sessionKey: string,
+  requireExistingRead = false,
+): Promise<SessionState> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_LOAD_ATTEMPTS; attempt++) {
     try {
@@ -84,7 +87,7 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
         .eq("session_key", sessionKey)
         .maybeSingle();
       if (error) throw error;
-      if (!data) return { ...EMPTY_SESSION }; // genuinely a new customer — no retry needed
+      if (!data) return structuredClone(EMPTY_SESSION); // genuinely a new customer
       return sessionFromRow(data as SessionRow);
     } catch (err) {
       lastError = err;
@@ -92,8 +95,9 @@ export async function loadSession(sessionKey: string): Promise<SessionState> {
       if (attempt < MAX_LOAD_ATTEMPTS) await delay(RETRY_DELAY_MS * attempt);
     }
   }
+  if (requireExistingRead) throw new Error("Saved conversation is temporarily unavailable");
   console.error("loadSession: all attempts failed, falling back to a fresh session", lastError);
-  return { ...EMPTY_SESSION };
+  return structuredClone(EMPTY_SESSION);
 }
 
 function sessionFromRow(row: SessionRow): SessionState {
@@ -101,6 +105,7 @@ function sessionFromRow(row: SessionRow): SessionState {
     shownProductIds?: unknown;
     lastDocument?: unknown;
     shoppingMemory?: unknown;
+    conversation?: unknown;
     locale?: unknown;
   } | null;
   const room = row.room_url
@@ -115,6 +120,7 @@ function sessionFromRow(row: SessionRow): SessionState {
     locale: context?.locale,
     lastDocument: context?.lastDocument,
     shoppingMemory: context?.shoppingMemory,
+    conversation: context?.conversation,
     transcript: row.transcript,
     plan: row.plan,
     flow: row.flow,
@@ -153,6 +159,7 @@ export async function saveSession(
           shownProductIds: clean.shownProductIds ?? [],
           lastDocument: clean.lastDocument ?? null,
           shoppingMemory: clean.shoppingMemory ?? {},
+          conversation: clean.conversation,
         },
         room_url: clean.room?.url ?? null,
         room_at: clean.room ? new Date(clean.room.at).toISOString() : null,

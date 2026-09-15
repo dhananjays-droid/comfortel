@@ -39,7 +39,6 @@ import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-r
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
 import { handleRequestInbound } from "@/lib/wa-requests.server";
 import { handleDocumentInbound } from "@/lib/wa-documents.server";
-import { shoppingEligible } from "@/lib/wa-shopping-routing";
 import { waSessionKey } from "@/lib/wa-session.server";
 import { staffHandling, touchStaffRequest } from "@/lib/wa-staff.server";
 import { customerTimestamp } from "@/lib/wa-staff";
@@ -51,6 +50,8 @@ type InboundMessage = {
   kind: "text" | "interactive" | "image" | "order" | "unsupported";
   cart?: CatalogCart;
   text?: string;
+  replyTo?: string;
+  referredProductId?: string;
   buttonReplyId?: string;
   /** The button/list row's own display text — what the customer actually
    * saw and tapped. Logged alongside buttonReplyId so a developer reading
@@ -114,6 +115,7 @@ type WebhookEnvelope = {
           type?: string;
           order?: unknown;
           text?: { body?: string };
+          context?: { id?: string; referred_product?: { product_retailer_id?: string } };
           interactive?: {
             button_reply?: { id?: string; title?: string };
             list_reply?: { id?: string; title?: string };
@@ -173,7 +175,15 @@ function extractMessages(envelope: WebhookEnvelope): InboundMessage[] {
           customerSentAt: customerTimestamp(m.timestamp),
         };
         if (m.type === "text" && m.text?.body) {
-          out.push({ ...base, kind: "text", text: m.text.body });
+          out.push({
+            ...base,
+            kind: "text",
+            text: m.text.body,
+            ...(m.context?.id ? { replyTo: m.context.id } : {}),
+            ...(m.context?.referred_product?.product_retailer_id
+              ? { referredProductId: m.context.referred_product.product_retailer_id }
+              : {}),
+          });
         } else if (m.type === "interactive") {
           const reply = m.interactive?.button_reply ?? m.interactive?.list_reply;
           if (reply?.id) {
@@ -296,7 +306,13 @@ async function recordDeliveryStatuses(envelope: WebhookEnvelope): Promise<void> 
 
 async function toInboundEvent(message: InboundMessage): Promise<InboundEvent> {
   if (message.kind === "order" && message.cart) return { kind: "order", cart: message.cart };
-  if (message.kind === "text" && message.text) return { kind: "text", text: message.text };
+  if (message.kind === "text" && message.text)
+    return {
+      kind: "text",
+      text: message.text,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+      ...(message.referredProductId ? { referredProductId: message.referredProductId } : {}),
+    };
   if (message.kind === "interactive" && message.buttonReplyId) {
     return { kind: "button", id: message.buttonReplyId };
   }
@@ -612,19 +628,29 @@ async function processCatalogInbound(input: {
     return;
   }
 
-  const session = await loadSession(input.sessionKey);
+  const session = await loadSession(
+    input.sessionKey,
+    process.env["WA_SHOPPING_AGENT_ENABLED"] === "true",
+  );
   try {
-    // Gradual WhatsApp-only rollout. Keep established button, request, design
-    // intake and render-confirmation handlers authoritative during phase one.
-    let shoppingTurns: WaTurn[] | null = null;
-    if (process.env["WA_SHOPPING_AGENT_ENABLED"] === "true" && shoppingEligible(session, input.event)) {
-      const { hasActiveRequestDraft } = await import("@/lib/wa-requests.server");
-      if (!(await hasActiveRequestDraft(input.sessionKey))) {
-        const { handleShoppingInbound } = await import("@/lib/wa-shopping.server");
-        shoppingTurns = await handleShoppingInbound(session, input.event, input.waMessageId);
-      }
+    if (process.env["WA_SHOPPING_AGENT_ENABLED"] === "true") {
+      const { handleConversation } = await import("@/lib/wa-conversation.server");
+      const result = await handleConversation(input, session);
+      await saveSession(
+        input.sessionKey,
+        {
+          ...result.session,
+          customerName: input.customerName ?? result.session.customerName,
+          phoneLast4: input.phone.replace(/\D/g, "").slice(-4),
+        },
+        true,
+      );
+      if (!(await staffHandling(input.sessionKey)))
+        await deliver(input.phone, input.sessionKey, result.turns);
+      return;
     }
-    const documentTurns = shoppingTurns ?? await handleDocumentInbound(session, input.event, input.waMessageId);
+    // Rollback path only. Enabled conversations have one controller above.
+    const documentTurns = await handleDocumentInbound(session, input.event, input.waMessageId);
     const requestTurns =
       documentTurns ??
       (await handleRequestInbound({
@@ -676,7 +702,7 @@ async function processCatalogInbound(input: {
       ...result.session,
       customerName: input.customerName ?? result.session.customerName,
       phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
-    }, shoppingTurns !== null);
+    });
     if (!(await staffHandling(input.sessionKey)))
       await deliver(input.phone, input.sessionKey, result.turns);
   } catch (error) {

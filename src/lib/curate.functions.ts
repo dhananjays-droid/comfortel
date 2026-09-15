@@ -16,14 +16,14 @@ import { adopt, fitToBand, reasonsFor, sampleCandidates, type ProposedPackage } 
  * Sonnet rather than Haiku: this reads ~80 candidates across seven roles, holds a
  * budget, keeps a look coherent and honours stated priorities, which is a
  * different order of task from picking four chairs for a chat reply. It runs once
- * or twice a session, not per message, so the tier costs pennies.
+ * or twice a session, not per message; cost depends on actual token usage.
  *
  * If anything goes wrong — no key, rate limit, malformed proposal, invented
  * product ids — the caller still gets the deterministic package rather than an
  * error. A worse package beats a broken screen.
  */
 
-const MODEL = "claude-sonnet-5";
+const MODEL = "claude-sonnet-4-6";
 
 /** The band each tier is tuned to, as a multiple of the customer's budget. */
 const TIER_TARGET: Record<string, number> = { lean: 0.87, balanced: 1.0, premium: 1.18 };
