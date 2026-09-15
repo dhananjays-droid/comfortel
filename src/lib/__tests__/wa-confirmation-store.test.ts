@@ -31,11 +31,19 @@ beforeEach(() => {
 });
 it("persists and restores the same confirmation across webhook invocations", async () => {
   const s = state();
+  s.shoppingMemory = { quantity: 5, finish: "white", goal: "quote" };
   await saveSession("wa:test", s);
   const row = db.upsert.mock.calls[0]![0];
   expect(row.pending_render).toEqual(s.pendingRender);
   db.maybeSingle.mockResolvedValue({ data: row, error: null });
   expect((await loadSession("wa:test")).pendingRender).toEqual(s.pendingRender);
+  expect((await loadSession("wa:test")).shoppingMemory).toEqual(s.shoppingMemory);
+});
+it("does not claim a shopping change was saved after a database error", async () => {
+  db.upsert.mockResolvedValue({ error: { code: "unavailable" } });
+  await expect(saveSession("wa:test", { ...EMPTY_SESSION }, true)).rejects.toThrow(
+    "Conversation changes could not be saved",
+  );
 });
 it("refuses to deliver a usable-looking confirmation when persistence fails", async () => {
   const spy = vi.spyOn(console, "error").mockImplementation(() => {});

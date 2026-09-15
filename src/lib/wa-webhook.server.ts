@@ -39,6 +39,7 @@ import { handleInboundMessage, type InboundEvent, type WaTurn } from "@/lib/wa-r
 import { loadSession, saveSession } from "@/lib/wa-session-store.server";
 import { handleRequestInbound } from "@/lib/wa-requests.server";
 import { handleDocumentInbound } from "@/lib/wa-documents.server";
+import { shoppingEligible } from "@/lib/wa-shopping-routing";
 import { waSessionKey } from "@/lib/wa-session.server";
 import { staffHandling, touchStaffRequest } from "@/lib/wa-staff.server";
 import { customerTimestamp } from "@/lib/wa-staff";
@@ -613,7 +614,17 @@ async function processCatalogInbound(input: {
 
   const session = await loadSession(input.sessionKey);
   try {
-    const documentTurns = await handleDocumentInbound(session, input.event, input.waMessageId);
+    // Gradual WhatsApp-only rollout. Keep established button, request, design
+    // intake and render-confirmation handlers authoritative during phase one.
+    let shoppingTurns: WaTurn[] | null = null;
+    if (process.env["WA_SHOPPING_AGENT_ENABLED"] === "true" && shoppingEligible(session, input.event)) {
+      const { hasActiveRequestDraft } = await import("@/lib/wa-requests.server");
+      if (!(await hasActiveRequestDraft(input.sessionKey))) {
+        const { handleShoppingInbound } = await import("@/lib/wa-shopping.server");
+        shoppingTurns = await handleShoppingInbound(session, input.event, input.waMessageId);
+      }
+    }
+    const documentTurns = shoppingTurns ?? await handleDocumentInbound(session, input.event, input.waMessageId);
     const requestTurns =
       documentTurns ??
       (await handleRequestInbound({
@@ -665,7 +676,7 @@ async function processCatalogInbound(input: {
       ...result.session,
       customerName: input.customerName ?? result.session.customerName,
       phoneLast4: digits ? digits.slice(-4) : result.session.phoneLast4,
-    });
+    }, shoppingTurns !== null);
     if (!(await staffHandling(input.sessionKey)))
       await deliver(input.phone, input.sessionKey, result.turns);
   } catch (error) {

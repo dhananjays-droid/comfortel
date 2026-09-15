@@ -66,6 +66,12 @@ const store: RequestStore = {
 };
 const textTurn = (text: string): WaTurn[] => [{ kind: "text", text }];
 
+/** Do not let the staged shopping rollout steal input from an existing draft.
+ * Query errors propagate: uncertainty must not silently bypass request intake. */
+export async function hasActiveRequestDraft(sessionKey: string): Promise<boolean> {
+  return (await store.latest(sessionKey))?.status === "draft";
+}
+
 /** Returns null only when the established sales/design flow should handle it.
  * Request intake has separate durable state: render workers cannot overwrite it.
  */

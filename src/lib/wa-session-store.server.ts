@@ -100,6 +100,7 @@ function sessionFromRow(row: SessionRow): SessionState {
   const context = row.flow as {
     shownProductIds?: unknown;
     lastDocument?: unknown;
+    shoppingMemory?: unknown;
     locale?: unknown;
   } | null;
   const room = row.room_url
@@ -113,6 +114,7 @@ function sessionFromRow(row: SessionRow): SessionState {
     shownProductIds: context?.shownProductIds,
     locale: context?.locale,
     lastDocument: context?.lastDocument,
+    shoppingMemory: context?.shoppingMemory,
     transcript: row.transcript,
     plan: row.plan,
     flow: row.flow,
@@ -132,7 +134,11 @@ function sessionFromRow(row: SessionRow): SessionState {
 
 /** Existing best-effort session saves remain unchanged, except that a pending
  * confirmation must be persisted before the customer receives its start button. */
-export async function saveSession(sessionKey: string, session: SessionState): Promise<void> {
+export async function saveSession(
+  sessionKey: string,
+  session: SessionState,
+  requirePersist = false,
+): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const clean = sanitizeSession(session);
@@ -146,6 +152,7 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
           locale: clean.locale ?? "en",
           shownProductIds: clean.shownProductIds ?? [],
           lastDocument: clean.lastDocument ?? null,
+          shoppingMemory: clean.shoppingMemory ?? {},
         },
         room_url: clean.room?.url ?? null,
         room_at: clean.room ? new Date(clean.room.at).toISOString() : null,
@@ -168,9 +175,10 @@ export async function saveSession(sessionKey: string, session: SessionState): Pr
       console.error("saveSession failed", error);
       // Never deliver a Start button whose proposal was not persisted.
       if (clean.pendingRender) throw new Error("Render confirmation could not be saved");
+      if (requirePersist) throw new Error("Conversation changes could not be saved");
     }
   } catch (err) {
     console.error("saveSession failed", err);
-    if (session.pendingRender) throw err;
+    if (session.pendingRender || requirePersist) throw err;
   }
 }

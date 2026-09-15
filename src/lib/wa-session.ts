@@ -16,6 +16,7 @@ import { CATALOG_FULL } from "@/lib/catalog";
 import type { Package, Role } from "@/lib/packages";
 import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 import type { Await, FlowState } from "@/lib/wa-flow";
+import { sanitizeShoppingMemory, type ShoppingMemory } from "@/lib/wa-shopping-state";
 
 /** WhatsApp photos are durably re-hosted, not Kie's temporary upload URLs. */
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -157,6 +158,7 @@ export function sanitizePendingRender(input: unknown): PendingRender | null {
 }
 
 export type SessionState = {
+  shoppingMemory?: ShoppingMemory;
   locale?: "en" | "es";
   shownProductIds?: string[];
   lastDocument?: {
@@ -189,6 +191,7 @@ export type SessionState = {
 };
 
 export const EMPTY_SESSION: SessionState = {
+  shoppingMemory: {},
   locale: "en",
   shownProductIds: [],
   lastDocument: null,
@@ -489,6 +492,7 @@ export function sanitizeSession(input: unknown): SessionState {
   const docPlan = sanitizePlan({ ids: doc?.ids, qty: doc?.qty });
   return {
     shownProductIds: sanitizePlan({ ids: raw?.shownProductIds, qty: {} }).ids,
+    shoppingMemory: sanitizeShoppingMemory(raw?.shoppingMemory),
     locale: raw?.locale === "es" ? "es" : "en",
     lastDocument:
       doc && (doc.kind === "quote" || doc.kind === "comparison") && docPlan.ids.length
