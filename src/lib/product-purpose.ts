@@ -20,6 +20,7 @@ export function productPurpose(p: FullProduct): string {
 }
 
 export function requestedPurposes(query: string): string[] {
+  query = query.replace(/\bbesins?\b/gi, "basin").replace(/\bseperate\b/gi, "separate");
   // Explicit spare-part requests remain searchable; never hide accessories
   // globally or prevent an exact-ID lookup for support/comparison.
   if (/\b(accessor(?:y|ies)|parts?|replacement|joiner|shelf|shelves|bench|holders?|hoses?|footrests?|hydraulic|bases?|wheels?|frames? only)\b/i.test(query)) return [];
@@ -29,7 +30,7 @@ export function requestedPurposes(query: string): string[] {
   if (/\b(stools?)\b/i.test(query)) types.push("stool");
   if (/\b(trolleys?|trollies)\b/i.test(query)) types.push("trolley");
   if (/\b(wash|backwash|shampoo)\b/i.test(query)) types.push("wash");
-  else if (/\bbasins?\b/i.test(query)) types.push("basin");
+  if (/\bbasins?\b/i.test(query) && (!types.includes("wash") || /\bseparate\b/i.test(query))) types.push("basin");
   if (/\b(reception|desks?)\b/i.test(query)) types.push("reception");
   if (/\b(sofas?|ottomans?)\b/i.test(query)) types.push("waiting");
   if (/\btreatment\b/i.test(query)) types.push("treatment");

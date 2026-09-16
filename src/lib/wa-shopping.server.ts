@@ -231,7 +231,7 @@ const Decision = z
   .strict();
 type Block = { type: string; id?: string; name?: string; input?: unknown; text?: string };
 type Message = { role: "user" | "assistant"; content: string | unknown[] };
-export type ShoppingModel = (messages: Message[], context: string) => Promise<Block[]>;
+export type ShoppingModel = (messages: Message[], context: string, finishOnly?: boolean) => Promise<Block[]>;
 export type AdvisorDecision = z.infer<typeof Decision>;
 export type AdvisorOptions = {
   unified?: boolean;
@@ -286,10 +286,10 @@ export function isSimplePolicyQuestion(messages: Message[], context: string): bo
   );
 }
 
-export const callShoppingModel: ShoppingModel = async (messages, context) => {
+export const callShoppingModel: ShoppingModel = async (messages, context, finishOnly) => {
   const complexModel = process.env["WA_ADVISOR_MODEL"] || "claude-sonnet-5";
   if (!isSimplePolicyQuestion(messages, context))
-    return requestShoppingModel(messages, context, complexModel);
+    return requestShoppingModel(messages, context, complexModel, finishOnly);
   const result = await requestShoppingModel(messages, context, "claude-haiku-4-5-20251001");
   const call = result.length === 1 ? result[0] : undefined;
   const decision = Decision.safeParse(call?.input);
@@ -309,6 +309,7 @@ async function requestShoppingModel(
   messages: Message[],
   context: string,
   model: string,
+  finishOnly = false,
 ): Promise<Block[]> {
   const key = process.env["ANTHROPIC_API_KEY"];
   if (!key) throw new Error("Shopping model unavailable");
@@ -344,7 +345,9 @@ async function requestShoppingModel(
         },
       ],
       tools: SHOPPING_TOOLS,
-      tool_choice: { type: "any", disable_parallel_tool_use: true },
+      tool_choice: finishOnly
+        ? { type: "tool", name: "finish", disable_parallel_tool_use: true }
+        : { type: "any", disable_parallel_tool_use: true },
       messages,
     }),
   });
@@ -460,6 +463,10 @@ export async function handleShoppingInbound(
     );
   }
   if (event.kind !== "text") return null;
+  if (/\b(?:don['’]?t|do not) like\b.*\b(?:any|them|these|above)\b|\bnone of (?:these|them)\b/i.test(event.text)) {
+    session.rejectedProductIds = [...new Set([...(session.rejectedProductIds ?? []), ...(session.shownProductIds ?? [])])].slice(-40);
+    return [{ kind: "text", text: "Understood—those options aren't right for you. What would you like different: the style, colour, or price?" }];
+  }
   const context = JSON.stringify({
     mode: options.unified ? "unified" : "legacy",
     project: conversationMemory(session.conversation),
@@ -471,6 +478,8 @@ export async function handleShoppingInbound(
     selection: productSummaries(session.plan.ids),
     quantities: session.plan.qty,
     displayed: productSummaries(session.shownProductIds ?? []),
+    rejectedProducts: productSummaries(session.rejectedProductIds ?? []),
+    searchGuidance: "Do not recommend rejected products again unless the customer explicitly asks to reconsider one. For a chair with a separate basin, search each product type separately; do not claim plumbing or chair/basin compatibility without evidence. After two searches, answer from retrieved facts or ask one focused clarification. Do not repeatedly rephrase searches.",
     specifications:
       "Not included here. Call find_products with ids before stating or comparing specifications.",
     lastDocument: session.lastDocument,
@@ -486,14 +495,16 @@ export async function handleShoppingInbound(
   try {
     let planned = false;
     const seen = new Set<string>();
+    let searches = 0;
     const maxSteps = options.unified ? 6 : 3;
     for (let step = 0; step < maxSteps; step++) {
       const blocks = await model(
         messages,
         context +
-          (step === maxSteps - 1
+          (step === maxSteps - 1 || searches >= 2
             ? "\nFINAL TURN: finish now using available evidence; if information is missing, ask a focused question. No more searches."
             : ""),
+        searches >= 2 || step === maxSteps - 1,
       );
       const calls = blocks.filter((b) => b.type === "tool_use");
       if (calls.length !== 1) throw new Error("Expected one tool call");
@@ -518,11 +529,12 @@ export async function handleShoppingInbound(
       if ((call.name === "find_products" || call.name === "plan_salon") && call.id) {
         try {
           const signature = JSON.stringify([call.name, call.input]);
-          if (seen.has(signature) || step === maxSteps - 1)
+          if (seen.has(signature) || step === maxSteps - 1 || searches >= 2)
             throw new Error(
               "Search budget reached or identical search repeated. Use finish with existing facts or ask a clarification.",
             );
           seen.add(signature);
+          searches++;
           if (call.name === "plan_salon") {
             if (options.unified && !confirmsUsd(session, event.text))
               throw new Error(
@@ -574,7 +586,8 @@ export async function handleShoppingInbound(
             plans.options.forEach((p) => p.lines.forEach((l) => known.add(l.id)));
             toolResult(plans);
           } else {
-            const products = findShoppingProducts(call.input);
+            const lookup = Lookup.parse(call.input);
+            const products = findShoppingProducts(lookup).filter(p => lookup.ids || !session.rejectedProductIds?.includes(p.id));
             products.forEach((p) => known.add(p.id));
             toolResult(products);
           }
@@ -630,9 +643,16 @@ export async function handleShoppingInbound(
         decision.project.currency = null;
       if (decision.action === "delegate" && !options.unified) return null;
       const lines = decision.lines ?? [];
+      if (decision.action === "show" && lines.some(l => session.rejectedProductIds?.includes(l.id)) &&
+          !/\b(reconsider|show.*again)\b/i.test(event.text)) {
+        console.warn("wa-advisor-shortlist-rejected", "previously_rejected_product");
+        toolResult({ error: "Customer rejected these products. Offer other retrieved options or ask what they want different; do not resend rejected products." }, true);
+        continue;
+      }
       if (decision.action === "show" && lines.some((l) =>
         CATALOG_FULL[l.id] && !matchesProductPurpose(CATALOG_FULL[l.id]!, event.text),
       )) {
+        console.warn("wa-advisor-shortlist-rejected", "product_purpose_mismatch");
         toolResult({ error: "Shortlist contains a different product type or an accessory instead of the requested equipment. Search for complete matching products and replace those lines and the accompanying text. Offer accessories only when requested." }, true);
         continue;
       }
@@ -812,7 +832,8 @@ export async function handleShoppingInbound(
       }
       return [{ kind: "text", text: decision.text }];
     }
-    throw new Error("Shopping tool limit reached");
+    console.warn("wa-shopping-search-exhausted", JSON.stringify({ searches, steps: maxSteps }));
+    return [{ kind: "text", text: "I haven’t found a suitable alternative yet. What matters most for the next options: a lower price, a different style, or a different colour? Your current selection is unchanged." }];
   } catch (error) {
     console.warn("wa-shopping-failed", error instanceof Error ? error.message : "unknown");
     return [

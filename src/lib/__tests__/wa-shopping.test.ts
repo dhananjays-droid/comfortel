@@ -19,6 +19,27 @@ const other = "330283";
 const text = (text: string) => ({ kind: "text" as const, text });
 
 describe("shopping conversation tool boundary", () => {
+  it("remembers rejection without another paid model call and survives reload", async () => {
+    const s = fresh();
+    s.shownProductIds = ["346191"];
+    const model = finish({});
+    const turns = await handleShoppingInbound(s, text("i dont like above any of them"), "reject", model);
+    expect(model).not.toHaveBeenCalled();
+    expect(JSON.stringify(turns)).toContain("What would you like different");
+    expect(sanitizeSession(s).rejectedProductIds).toEqual(["346191"]);
+  });
+  it("handles the separate basin typo follow-up and forces completion after two searches", async () => {
+    const s = fresh();
+    const model: ShoppingModel = vi.fn()
+      .mockResolvedValueOnce([{ type: "tool_use", id: "a", name: "find_products", input: { query: "styling chair", ids: [id] } }])
+      .mockResolvedValueOnce([{ type: "tool_use", id: "b", name: "find_products", input: { query: "basin", ids: ["345215"] } }])
+      .mockResolvedValueOnce([{ type: "tool_use", id: "c", name: "finish", input: { action: "show", text: "These are separate items; installation compatibility needs checking.", lines: [{ id, qty: 1 }, { id: "345215", qty: 1 }] } }]);
+    const turns = await handleShoppingInbound(s, text("show me the budget options in a diff chair style sith seperate besin"), "mixed", model, { unified: true });
+    expect(model).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(model).mock.calls[2]?.[2]).toBe(true);
+    expect(JSON.stringify(turns)).toContain("separate items");
+    expect(s.shownProductIds).toEqual([id, "345215"]);
+  });
   it("rejects an accessory card for a mirror request even when remembered from history", async () => {
     const s = fresh();
     s.shownProductIds = ["301087", "8221"];

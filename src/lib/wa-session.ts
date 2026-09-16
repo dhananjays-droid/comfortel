@@ -163,6 +163,7 @@ export type SessionState = {
   shoppingMemory?: ShoppingMemory;
   locale?: "en" | "es";
   shownProductIds?: string[];
+  rejectedProductIds?: string[];
   lastDocument?: {
     kind: "quote" | "comparison";
     ids: string[];
@@ -197,6 +198,7 @@ export const EMPTY_SESSION: SessionState = {
   shoppingMemory: {},
   locale: "en",
   shownProductIds: [],
+  rejectedProductIds: [],
   lastDocument: null,
   transcript: [],
   plan: { ids: [], qty: {} },
@@ -495,6 +497,7 @@ export function sanitizeSession(input: unknown): SessionState {
   const docPlan = sanitizePlan({ ids: doc?.ids, qty: doc?.qty });
   return {
     shownProductIds: sanitizePlan({ ids: raw?.shownProductIds, qty: {} }).ids,
+    rejectedProductIds: sanitizePlan({ ids: raw?.rejectedProductIds, qty: {} }).ids,
     shoppingMemory: sanitizeShoppingMemory(raw?.shoppingMemory),
     conversation: conversationMemory(raw?.conversation),
     locale: raw?.locale === "es" ? "es" : "en",
