@@ -34,11 +34,13 @@ No database schema migration is required. Missing conversation memory is initial
 
 ## Model and cost
 
-Default free-text advisor: `claude-sonnet-4-6`, overridable with `WA_ADVISOR_MODEL`. The earlier Haiku model failed the expanded live planning/shortlist contract checks; Sonnet passed the initial full live journeys. This is a higher-cost model per token, not a claim of cost neutrality. Deterministic buttons/navigation do not call the advisor model. Planning is one validated tool call, rather than separate searches for each equipment category.
+Default free-text advisor: `claude-sonnet-5`, overridable with `WA_ADVISOR_MODEL`. The earlier Haiku model failed the expanded live planning/shortlist contract checks; Sonnet 4.6 passed the initial full live journeys and was then replaced by Sonnet 5 on 16 September 2026 (list price $2/$10 per MTok against $3/$15). Note that Sonnet 5's tokenizer counts about 1.4× more tokens for the same text, so the model change alone is worth roughly 9%, not 33%. Deterministic buttons/navigation do not call the advisor model. Planning is one validated tool call, rather than separate searches for each equipment category.
+
+Measured per-turn cost (count_tokens on the real request bodies, list prices, cache hit): a browse turn (find_products + finish) was $0.056 on Sonnet 4.6 with full product facts in the server context; it is $0.021 on Sonnet 5 with product summaries in the context and eight keyword-search results. A single-call answer went from $0.023 to $0.006. The server context change is the larger of the two savings: full facts for the selection and displayed products measured 7,616 tokens per call, summaries 488. Specifications are fetched by `find_products` with ids when a claim needs them, which the instructions already required.
 
 ## Verification
 
-Model allocation: the existing general/legacy chat stays on Haiku 4.5. The complex WhatsApp advisor, package curation, render inspection, edit verification and offline product-photo classifier use Sonnet 4.6. No Sonnet 4.5 or Sonnet 5 call sites remain in application/scripts.
+Model allocation: the existing general/legacy chat stays on Haiku 4.5. The complex WhatsApp advisor, package curation, render inspection, edit verification and offline product-photo classifier use Sonnet 5. No Sonnet 4.5 or Sonnet 4.6 call sites remain in application/scripts.
 
 Cost routing: exact support/sales/order/complaint commands, thanks and selected-plan PDF commands bypass the advisor. Standalone allow-listed policy/contact/hours questions use Haiku 4.5; active request drafts, quoted replies, mixed intents and ambiguous follow-ups retain Sonnet. Haiku is permitted only a read-only answer with no memory/project mutations. Any other output is discarded and escalated once to Sonnet. There is no paid classification call and no automatic retry of provider billing failures. The remaining free text still uses Sonnet; this is deliberately a narrow optimization, not universal Haiku routing.
 
@@ -59,6 +61,14 @@ These tests use real Anthropic replies, isolated request/session stores and mock
 The first 10 expanded live journeys passed. The subsequent 100-journey run finished with 77 passed and 23 failed (IDs 71, 73, 78 and 80–99). These failures returned the generic fallback, so this is **not a passing release gate**. A minimal provider diagnostic immediately afterward returned HTTP 400 / `invalid_request_error`: "Your credit balance is too low to access the Anthropic API." The individual causes of the first three intermittent failures remain unconfirmed; do not attribute every failed case to billing without retesting.
 
 The recommended gate was to restore Anthropic API credits and retest failed scenarios before deployment. The user subsequently explicitly requested deployment to main without further testing and will perform WhatsApp testing themselves. Proceed under that direction, retaining the unresolved live-test failures above. The last offline checks passed (971 tests, type-check and production build). No production WhatsApp smoke test has been completed for this refactor. Local test artifacts are not evidence of deployed behavior.
+
+### Live re-verification after Sonnet 5 and the compact context (16 September 2026)
+
+`RUN_ADVISOR_LIVE=true npx vitest run src/lib/__tests__/wa-conversation-live.test.ts` passed twice on the changed code: 12 customer turns covering planning with a currency clarification, a warranty detour that left the plan untouched, a quantity correction that preserved the other lines, a PDF estimate, a render proposal, a mirror shortlist with reasons, and a staff request paused by a policy question and a menu visit, then resumed to confirmation.
+
+Billed usage from the second run, read from the `wa-shopping-usage` log lines: 14 Sonnet 5 calls for 12 turns (2 `plan_salon`, 2 `find_products`, 10 `finish`), 21,638 uncached input tokens, 84,560 cache-read tokens, 2,342 output tokens, **$0.0836 for the run, $0.0070 per customer turn**. Output averaged 167 tokens per call, well under the 350 assumed in the estimate above, which is why the billed figure sits below the estimated $0.021 browse / $0.006 simple turns. Median latency per turn was 2.4s, p90 5.9s, max 8.2s; the Sonnet 4.6 100-journey run logged a 3.6s median and 12.3s p90.
+
+Two caveats on reading that number. The prefix cache hit rate was 100% because the calls were seconds apart; on WhatsApp a customer who pauses more than five minutes triggers a fresh 6,128-token cache write (about $0.015 on Sonnet 5), so real conversations will land between the hit and cold figures. And this is the narrow live gate, not the 100-journey suite, which has not been re-run on Sonnet 5.
 
 ## Release and rollback
 

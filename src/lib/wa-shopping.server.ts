@@ -7,7 +7,7 @@ import type { SessionState } from "@/lib/wa-session";
 import { ShoppingMemory } from "@/lib/wa-shopping-state";
 import { shoppingEligible } from "@/lib/wa-shopping-routing";
 import { ConversationPatch, conversationMemory } from "@/lib/wa-conversation-state";
-import { recommendProducts, salonPlans } from "@/lib/wa-advisor-tools";
+import { productSummaries, recommendProducts, salonPlans } from "@/lib/wa-advisor-tools";
 
 const memorySchema = {
   type: "object",
@@ -259,7 +259,7 @@ export function isSimplePolicyQuestion(messages: Message[], context: string): bo
 }
 
 export const callShoppingModel: ShoppingModel = async (messages, context) => {
-  const complexModel = process.env["WA_ADVISOR_MODEL"] || "claude-sonnet-4-6";
+  const complexModel = process.env["WA_ADVISOR_MODEL"] || "claude-sonnet-5";
   if (!isSimplePolicyQuestion(messages, context))
     return requestShoppingModel(messages, context, complexModel);
   const result = await requestShoppingModel(messages, context, "claude-haiku-4-5-20251001");
@@ -428,9 +428,14 @@ export async function handleShoppingInbound(
     project: conversationMemory(session.conversation),
     workflow: options.context,
     preferences: session.shoppingMemory ?? {},
-    selection: findShoppingProducts({ query: "", ids: session.plan.ids }),
+    // Summaries, not full facts — see productSummaries() for the measurement.
+    // Specifications stay one find_products(ids) call away, which the
+    // instructions already require before any factual claim.
+    selection: productSummaries(session.plan.ids),
     quantities: session.plan.qty,
-    displayed: findShoppingProducts({ query: "", ids: session.shownProductIds ?? [] }),
+    displayed: productSummaries(session.shownProductIds ?? []),
+    specifications:
+      "Not included here. Call find_products with ids before stating or comparing specifications.",
     lastDocument: session.lastDocument,
   });
   const known = new Set([...session.plan.ids, ...(session.shownProductIds ?? [])]);

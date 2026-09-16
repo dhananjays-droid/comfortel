@@ -15,7 +15,7 @@ import { FAULTS, FAULT_KINDS, readVerdict, type Expected, type Verdict } from "@
  * them nothing.
  */
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 /**
  * Written to suppress false positives, which cost more than false negatives.

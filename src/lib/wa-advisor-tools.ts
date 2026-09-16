@@ -54,28 +54,53 @@ export function productFacts(id: string) {
   };
 }
 
+/**
+ * The short form of a product, for the advisor's SERVER CONTEXT.
+ *
+ * Every advisor call used to carry full productFacts for the whole selection
+ * and every displayed product — specs, 700-char descriptions, URLs — and it
+ * did so on every step of every turn. Measured with count_tokens against a
+ * 4-selected / 8-displayed session: 7,616 tokens in that shape, 488 in this
+ * one. The model only needs these to resolve "the second one" or "the tan
+ * chair"; when it needs specifications for a claim or a comparison it is
+ * already required to call find_products with the ids, so nothing is taken
+ * away — it is just no longer re-sent when nothing asked for it.
+ */
+export function productSummaries(ids: string[]) {
+  return ids.flatMap((id) => {
+    const p = CATALOG_FULL[id];
+    return p ? [{ id, name: p.name, price: p.price, available: p.in_stock }] : [];
+  });
+}
+
 export function recommendProducts(input: unknown) {
   const args = ProductQuery.parse(input);
   const terms = tokens(args.query);
-  return CATALOG_SLIM.map((p) => {
-    const words = new Set(tokens(`${p.n} ${p.c} ${p.col}`));
-    const matched = terms.filter((w) => words.has(w));
-    return { p, score: matched.length, exact: matched.length === terms.length };
-  })
-    .filter(
-      ({ p, score }) =>
-        (!args.ids || args.ids.includes(p.id)) &&
-        (args.ids || !terms.length || score > 0) &&
-        (args.max_price === undefined || (p.p !== null && p.p <= args.max_price)),
-    )
-    .sort(
-      (a, b) =>
-        Number(b.exact) - Number(a.exact) ||
-        b.score - a.score ||
-        Number(CATALOG_FULL[b.p.id]?.in_stock) - Number(CATALOG_FULL[a.p.id]?.in_stock),
-    )
-    .slice(0, 10)
-    .map(({ p, exact }) => ({ ...productFacts(p.id), matchesAllSearchTerms: exact }));
+  return (
+    CATALOG_SLIM.map((p) => {
+      const words = new Set(tokens(`${p.n} ${p.c} ${p.col}`));
+      const matched = terms.filter((w) => words.has(w));
+      return { p, score: matched.length, exact: matched.length === terms.length };
+    })
+      .filter(
+        ({ p, score }) =>
+          (!args.ids || args.ids.includes(p.id)) &&
+          (args.ids || !terms.length || score > 0) &&
+          (args.max_price === undefined || (p.p !== null && p.p <= args.max_price)),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.exact) - Number(a.exact) ||
+          b.score - a.score ||
+          Number(CATALOG_FULL[b.p.id]?.in_stock) - Number(CATALOG_FULL[a.p.id]?.in_stock),
+      )
+      // A keyword search hands the model a shortlist to choose 3-4 from; eight
+      // candidates cover that, and the two dropped are the weakest matches. An
+      // id lookup is different: the model asked for exactly those products, so
+      // every one of them comes back.
+      .slice(0, args.ids ? args.ids.length : 8)
+      .map(({ p, exact }) => ({ ...productFacts(p.id), matchesAllSearchTerms: exact }))
+  );
 }
 
 export const SalonPlanInput = z

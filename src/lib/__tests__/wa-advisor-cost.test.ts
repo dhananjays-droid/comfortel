@@ -59,7 +59,7 @@ describe("advisor cost routing", () => {
   });
   it("rejects Haiku mutations and escalates once without executing them", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "synthetic");
-    vi.stubEnv("WA_ADVISOR_MODEL", "claude-sonnet-4-6");
+    vi.stubEnv("WA_ADVISOR_MODEL", "claude-sonnet-5");
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response({ action: "render", text: "Generate" }))
@@ -69,18 +69,18 @@ describe("advisor cost routing", () => {
     expect(blocks[0]?.input).toEqual({ action: "answer", text: "Policy answer" });
     expect(fetch.mock.calls.map((c) => JSON.parse(c[1].body).model)).toEqual([
       "claude-haiku-4-5-20251001",
-      "claude-sonnet-4-6",
+      "claude-sonnet-5",
     ]);
   });
   it("sends complex turns straight to Sonnet without a paid classification call", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "synthetic");
-    vi.stubEnv("WA_ADVISOR_MODEL", "claude-sonnet-4-6");
+    vi.stubEnv("WA_ADVISOR_MODEL", "claude-sonnet-5");
     const fetch = vi
       .fn()
       .mockResolvedValue(response({ action: "answer", text: "Which currency?" }));
     vi.stubGlobal("fetch", fetch);
     await callShoppingModel([{ role: "user", content: "Plan 3 stations for 20k" }], "{}");
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetch.mock.calls[0]![1].body).model).toBe("claude-sonnet-4-6");
+    expect(JSON.parse(fetch.mock.calls[0]![1].body).model).toBe("claude-sonnet-5");
   });
 });

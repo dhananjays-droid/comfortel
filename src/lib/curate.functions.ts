@@ -23,7 +23,7 @@ import { adopt, fitToBand, reasonsFor, sampleCandidates, type ProposedPackage } 
  * error. A worse package beats a broken screen.
  */
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 /** The band each tier is tuned to, as a multiple of the customer's budget. */
 const TIER_TARGET: Record<string, number> = { lean: 0.87, balanced: 1.0, premium: 1.18 };
