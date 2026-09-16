@@ -5,6 +5,30 @@ import { CATALOG_FULL } from "@/lib/catalog";
 import { buildRenderRequest } from "@/lib/visualize-prompt";
 
 describe("fit-aware equipment planning", () => {
+  it("prices feature upgrades separately without silently adding them", () => {
+    const result = salonPlans({ stations: 5, budget: 50000, currency: "USD", scope: "equipment", service_focus: "hair_styling" });
+    const selected = result.options.find(p => p.tier === result.recommendedTier)!;
+    for (const upgrade of result.upgradeOptions) {
+      expect(upgrade.features.length).toBeGreaterThan(0);
+      expect(upgrade.revisedTotal).toBe(selected.total + upgrade.extraCost);
+      expect(upgrade.revisedTotal).toBeLessThanOrEqual(50000);
+      expect(upgrade.requiresConfirmation).toBe(true);
+      expect(selected.lines.some(l => l.id === upgrade.replacesId)).toBe(true);
+    }
+  });
+  it.each([10000, 25000, 50000])("creates a mixed-service proposal within $%i without extra stations", budget => {
+    const result = salonPlans({ stations: 5, budget, currency: "USD", scope: "equipment", service_focus: "mixed", mirror_layout: "island" });
+    const plan = result.options.find(p => p.tier === result.recommendedTier)!;
+    expect(plan.lines.filter(l => l.role === "styling").reduce((sum,l) => sum + l.qty,0)).toBe(5);
+    expect(plan.total).toBe(plan.lines.reduce((sum,l) => sum + l.subtotal,0));
+    if (budget >= 25000) {
+      expect(plan.total).toBeLessThanOrEqual(budget);
+      expect(plan.missingRoles).toEqual([]);
+      expect(plan.lines.some(l => /Barber/i.test(l.name))).toBe(true);
+      expect(plan.lines.some(l => /Reclining/i.test(l.name))).toBe(true);
+    } else expect(result.budgetNote).toMatch(/above your budget|Equipment subtotal/);
+    expect(result.assumptions).toContain("3 hair/colour stations, 1 barber station and 1 makeup/brow station");
+  });
   it("recognises double-sided pole mirrors even without Double in their name", () => {
     const p = Object.values(CATALOG_FULL).find((p) => /with Pole Frame/i.test(p.name))!;
     expect(productFit(p).mirrorLayout).toBe("island");

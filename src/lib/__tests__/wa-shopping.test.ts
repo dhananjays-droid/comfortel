@@ -19,6 +19,30 @@ const other = "330283";
 const text = (text: string) => ({ kind: "text" as const, text });
 
 describe("shopping conversation tool boundary", () => {
+  it.each(["yes, right", "yes its correct", "yes, that's right", "yes please"])("records natural USD confirmation: %s", async reply => {
+    const s = fresh();
+    s.conversation = { ...s.conversation!, currency: null, pendingQuestion: "confirm_usd", budget: 50000, stations: 5 };
+    const model: ShoppingModel = vi.fn(async () => [{ type: "tool_use", id: "plan", name: "plan_salon", input: {
+      stations: 5, budget: 50000, currency: "USD", scope: "equipment", mirror_layout: "island", service_focus: "mixed",
+    } }]);
+    const turns = await handleShoppingInbound(s, text(reply), "usd", model, { unified: true });
+    expect(s.conversation?.currency).toBe("USD");
+    expect(s.conversation?.pendingQuestion).toBeNull();
+    expect(s.plan.ids.length).toBeGreaterThan(0);
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(turns)).toContain("Draft service split");
+  });
+  it("turns a hollow planning promise into a real plan in the same turn", async () => {
+    const s = fresh();
+    s.conversation = { ...s.conversation!, currency: "USD", budget: 50000, stations: 5, budgetScope: "equipment" };
+    const model: ShoppingModel = vi.fn()
+      .mockResolvedValueOnce([{ type: "tool_use", id: "a", name: "finish", input: { action: "answer", text: "Let me pull the draft plan together now.", project: { currency: null } } }])
+      .mockResolvedValueOnce([{ type: "tool_use", id: "b", name: "plan_salon", input: { stations: 5, budget: 50000, currency: "USD", scope: "equipment", mirror_layout: "island", service_focus: "mixed" } }]);
+    const turns = await handleShoppingInbound(s, text("ok plz give me fast"), "promise", model, { unified: true });
+    expect(vi.mocked(model).mock.calls[1]?.[2]).toBe("plan_salon");
+    expect(s.plan.ids.length).toBeGreaterThan(0);
+    expect(JSON.stringify(turns)).not.toContain("Let me pull");
+  });
   it("remembers rejection without another paid model call and survives reload", async () => {
     const s = fresh();
     s.shownProductIds = ["346191"];

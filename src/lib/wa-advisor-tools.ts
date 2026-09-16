@@ -151,7 +151,7 @@ export const SalonPlanInput = z
     mirror_layout: z.enum(["wall", "island"]).default("wall"),
     mirror_feature: z.enum(["any", "led", "work_surface"]).default("any"),
     chair_feature: z.enum(["any", "reclining"]).default("any"),
-    service_focus: z.enum(["hair_styling", "colour", "makeup_brows", "barber"]).optional(),
+    service_focus: z.enum(["hair_styling", "colour", "makeup_brows", "barber", "mixed"]).optional(),
     chair_priority: z.enum(["any", "compact", "easy_clean"]).default("any"),
   })
   .strict();
@@ -165,6 +165,19 @@ export function salonPlans(input: unknown) {
   const needs = needsFor(args.stations).filter(
     (n) => service !== "makeup_brows" || n.role !== "wash",
   );
+  // Mixed service means distinct suitable chairs, not a styling chair claimed
+  // to perform every service. Allocation is an explicit editable draft.
+  if (service === "mixed" && args.stations < 3)
+    throw new Error("A mixed hair, barber and makeup plan needs a service allocation. With fewer than three stations, ask which services should have dedicated stations.");
+  const specialistChairs = service === "mixed"
+    ? ["barber", "beauty_services"].map(use => candidates("styling")
+        .filter(p => p.in_stock && selectionProfile(p).primaryUse === use &&
+          (!args.finish || p.name.toLowerCase().includes(args.finish.toLowerCase())))
+        .sort((a, b) => a.price! - b.price!)[0])
+    : [];
+  if (specialistChairs.some(p => !p))
+    throw new Error("No matching dedicated barber or makeup chair is available. Ask whether the finish or service allocation can change.");
+  if (service === "mixed") needs.find(n => n.role === "styling")!.qty -= 2;
   const matching = (role: Parameters<typeof candidates>[0]) => {
     const pool = candidates(role).filter(
       (p) =>
@@ -204,7 +217,7 @@ export function salonPlans(input: unknown) {
     );
     // Colour work can prefer documented daylight lighting, but not override
     // an explicit bench request or imply a certified colour-rendering score.
-    if (role === "mirror" && service === "colour" && args.mirror_feature === "any") {
+    if (role === "mirror" && (service === "colour" || service === "mixed") && args.mirror_feature === "any") {
       const daylight = pool.filter((p) => selectionProfile(p).features.daylightLighting);
       if (daylight.length) return daylight;
     }
@@ -215,7 +228,16 @@ export function salonPlans(input: unknown) {
     // double-sided units while counting each as one station.
     needs.find((n) => n.role === "mirror")!.qty = Math.ceil(args.stations / 2);
   }
-  const packages = buildPackages(args.budget, needs, matching);
+  const packagesFor = (budget: number, required: Need[]) => {
+    const extra = specialistChairs.filter((p): p is NonNullable<typeof p> => Boolean(p));
+    const reserve = extra.reduce((sum, p) => sum + p.price!, 0);
+    return buildPackages(Math.max(0, budget - reserve), required, matching).map(pkg => ({
+      ...pkg,
+      lines: [...pkg.lines, ...extra.map(product => ({ role: "styling" as const, product, qty: 1, subtotal: product.price! }))],
+      total: pkg.total + reserve,
+    }));
+  };
+  const packages = packagesFor(args.budget, needs);
   const base = packages.find((p) => p.tier === "balanced")!;
   // Improve useful capacity, not station count. This is an optional equipment
   // scenario, not permission to add plumbing or an assertion about room fit.
@@ -230,7 +252,7 @@ export function salonPlans(input: unknown) {
             ? Math.min(2, Math.ceil(args.stations / 3))
             : n.qty,
   }));
-  const enhanced = buildPackages(args.budget, enhancedNeeds, matching).find(
+  const enhanced = packagesFor(args.budget, enhancedNeeds).find(
     (p) => p.tier === "balanced",
   )!;
   const useEnhanced =
@@ -239,14 +261,16 @@ export function salonPlans(input: unknown) {
   // tier with a larger equipment mix while leaving "premium" smaller.
   const comparisonNeeds = useEnhanced ? enhancedNeeds : needs;
   const comparisons = useEnhanced
-    ? buildPackages(args.budget, comparisonNeeds, matching)
+    ? packagesFor(args.budget, comparisonNeeds)
     : packages;
-  const minimumFor = (required: Need[]) => buildPackages(0, required, matching)[0]!;
+  const minimumFor = (required: Need[]) => packagesFor(0, required)[0]!;
   const minimum = minimumFor(comparisonNeeds);
   if (!comparisons.some((p) => p.total <= args.budget)) {
     comparisons[0] = { ...minimum, tier: "lean" };
   }
   const recommended =
+    comparisons.find((p) => p.tier === "premium" && p.total <= args.budget &&
+      base.total < args.budget * 0.8 && p.total > (comparisons.find(o => o.tier === "balanced")?.total ?? 0)) ??
     comparisons.find((p) => p.tier === "balanced" && p.total <= args.budget) ??
     comparisons.find((p) => p.total <= args.budget) ??
     comparisons[0]!;
@@ -267,6 +291,24 @@ export function salonPlans(input: unknown) {
         }
       : null;
   const remaining = Math.max(0, args.budget - recommended.total);
+  const upgradeOptions = recommended.lines.flatMap(line => {
+    const current = selectionProfile(line.product);
+    const useful = line.role === "mirror" ? ["led", "daylightLighting", "workSurface"] as const
+      : line.role === "wash" ? ["electric", "massage"] as const
+      : line.role === "styling" ? ["compact", "easyClean", "adjustableHeight"] as const : [];
+    return matching(line.role).filter(p => p.id !== line.product.id &&
+      (line.role !== "styling" || selectionProfile(p).primaryUse === current.primaryUse))
+      .flatMap(p => {
+        const profile = selectionProfile(p);
+        const features = useful.filter(key => profile.features[key] === true && current.features[key] !== true);
+        const extraCost = (p.price! - line.product.price!) * line.qty;
+        return features.length && extraCost > 0 && extraCost <= remaining ? [{
+          replacesId: line.product.id, id: p.id, name: p.name, qty: line.qty,
+          extraCost, revisedTotal: recommended.total + extraCost,
+          features, requiresConfirmation: true as const,
+        }] : [];
+      }).sort((a,b) => a.extraCost - b.extraCost).slice(0,1);
+  }).slice(0,3);
   const expansionOptions =
     !shortfall && !missingRoles.length && remaining > args.budget * 0.2
       ? Object.values(CATALOG_FULL)
@@ -277,7 +319,7 @@ export function salonPlans(input: unknown) {
               p.price !== null &&
               p.price > 0 &&
               p.price <= remaining &&
-              /retail shelves/i.test(p.name),
+              /retail shelves|magazine rack/i.test(p.name),
           )
           .sort((a, b) => a.price! - b.price!)
           .slice(0, 2)
@@ -293,13 +335,14 @@ export function salonPlans(input: unknown) {
     ? `No matching products were found for ${missingRoles.join(", ")}. This is an incomplete estimate, not a full salon within budget.`
     : shortfall > 0
       ? `The lowest-cost complete mix matching these requirements is ${money(recommended.total)} USD, ${money(shortfall)} above your budget.${reducedScope ? ` Chairs and mirrors only could start at ${money(core.total)} USD; that excludes wash units, stools, trolleys, reception and waiting seating. Would you like to start with that smaller scope?` : " Would you like to change the equipment scope or station count?"} Your draft has not been reduced automatically.`
-      : `Equipment subtotal: ${money(recommended.total)} USD; ${money(remaining)} remains.${remaining > args.budget * 0.2 ? ` I have not added extra stations or unrelated products just to spend it.${expansionOptions.length ? ` If you sell retail products, optional display choices are ${expansionOptions.map((p) => `${p.name} (${money(p.price)} each)`).join(" or ")}. Would either be useful? These are alternatives, not included in your subtotal.` : " What else does the salon need—retail display, storage or another service area?"}` : ""} Delivery, tax, installation and building work are excluded.`;
+      : `Equipment subtotal: ${money(recommended.total)} USD; ${money(remaining)} remains.${upgradeOptions.length ? ` Optional feature upgrades (each priced separately, not yet included): ${upgradeOptions.map(p => `${p.qty} × ${p.name}, +${money(p.extraCost)}, revised total ${money(p.revisedTotal)}; documented ${p.features.join(", ")}`).join("; ")}. Tell me which you prefer before I change the selection.` : ""}${remaining > args.budget * 0.2 ? ` I have not added extra stations or unrelated products just to spend it.${expansionOptions.length ? ` If you sell retail products, optional display choices are ${expansionOptions.map((p) => `${p.name} (${money(p.price)} each)`).join(" or ")}. Would either be useful? These are alternatives, not included in your subtotal.` : " What else does the salon need—retail display, storage or another service area?"}` : ""} Delivery, tax, installation and building work are excluded.`;
   return {
     requirements: args,
     essentialsTotal: base.total,
     recommendedTier: recommended.tier,
     reducedScope,
     expansionOptions,
+    upgradeOptions,
     selectionReasons: recommended.lines
       .filter((l) => l.role === "mirror" || l.role === "styling")
       .map((l) => {
@@ -312,7 +355,7 @@ export function salonPlans(input: unknown) {
     enhancement: useEnhanced
       ? `Enhanced option: a trolley for each station${service === "makeup_brows" ? ". Wash units omitted for the dedicated makeup/brow brief; add only if you also offer hair washing." : " and up to one wash unit per two stations. Extra plumbing and floor space must be checked before purchase."}`
       : null,
-    assumptions: `${args.mirror_layout === "wall" ? "Assumes wall-based stations" : "Assumes island stations; mirror quantities account for documented faces where consistent"}, with one chair and stool per station. A mirror without a documented work surface may need a separate bench, not included here. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan.`,
+    assumptions: `${service === "mixed" ? `Draft service split: ${args.stations - 2} hair/colour stations, 1 barber station and 1 makeup/brow station (${args.stations} total). This allocation can be changed; dedicated chairs are included. ` : ""}${args.mirror_layout === "wall" ? "Assumes wall-based stations" : "Assumes island stations; mirror quantities account for documented faces where consistent"}, with one chair and stool per station. A mirror without a documented work surface may need a separate bench, not included here. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan.`,
     exclusions:
       "Equipment only, USD. Excludes delivery, tax, installation, building work and stock reservation.",
     options: comparisons.map((p) => {

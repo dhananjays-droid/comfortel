@@ -41,9 +41,9 @@ export const SHOPPING_TOOLS = [
         scope: { enum: ["equipment"] },
         business: { enum: ["salon", "barbershop"] },
         service_focus: {
-          enum: ["hair_styling", "colour", "makeup_brows", "barber"],
+          enum: ["hair_styling", "colour", "makeup_brows", "barber", "mixed"],
           description:
-            "Customer's primary service. makeup_brows is a dedicated beauty-service plan and omits wash units; do not use it for a mixed hair salon without confirming scope. Colour prioritizes documented daylight mirror lighting where no mirror feature is specified.",
+            "Use mixed when the customer requests hair/colour plus barber and makeup/brows; includes an explicit editable service allocation within the total station count. makeup_brows alone omits wash units. Colour prioritizes documented daylight lighting.",
         },
         chair_priority: {
           enum: ["any", "compact", "easy_clean"],
@@ -232,7 +232,7 @@ const Decision = z
   .strict();
 type Block = { type: string; id?: string; name?: string; input?: unknown; text?: string };
 type Message = { role: "user" | "assistant"; content: string | unknown[] };
-export type ShoppingModel = (messages: Message[], context: string, finishOnly?: boolean) => Promise<Block[]>;
+export type ShoppingModel = (messages: Message[], context: string, finishOnly?: boolean | "plan_salon") => Promise<Block[]>;
 export type AdvisorDecision = z.infer<typeof Decision>;
 export type AdvisorOptions = {
   unified?: boolean;
@@ -245,7 +245,7 @@ function confirmsUsd(session: SessionState, text: string): boolean {
     session.conversation?.currency === "USD" ||
     /\bUSD\b|\bUS dollars?\b|\bU\.S\. dollars?\b/i.test(text) ||
     (session.conversation?.pendingQuestion === "confirm_usd" &&
-      /^(?:yes|yes please|correct|that's right|that is right)[.! ]*$/i.test(text.trim()))
+      /^(?:yes(?:[, ]+(?:please|right|correct|it['’]?s correct|that['’]?s right))?|correct|right|that['’]?s right|that is right|it['’]?s correct)[.! ]*$/i.test(text.trim()))
   );
 }
 
@@ -310,7 +310,7 @@ async function requestShoppingModel(
   messages: Message[],
   context: string,
   model: string,
-  finishOnly = false,
+  finishOnly: boolean | "plan_salon" = false,
 ): Promise<Block[]> {
   const key = process.env["ANTHROPIC_API_KEY"];
   if (!key) throw new Error("Shopping model unavailable");
@@ -347,7 +347,7 @@ async function requestShoppingModel(
       ],
       tools: SHOPPING_TOOLS,
       tool_choice: finishOnly
-        ? { type: "tool", name: "finish", disable_parallel_tool_use: true }
+        ? { type: "tool", name: finishOnly === "plan_salon" ? "plan_salon" : "finish", disable_parallel_tool_use: true }
         : { type: "any", disable_parallel_tool_use: true },
       messages,
     }),
@@ -462,6 +462,14 @@ export async function handleShoppingInbound(
     );
   }
   if (event.kind !== "text") return null;
+  // Record an answer to our currency question before any model/tool step.
+  // The model must not thank the customer while the server silently discards it.
+  if (confirmsUsd(session, event.text)) {
+    session.conversation = conversationMemory({
+      ...conversationMemory(session.conversation), currency: "USD",
+      ...(session.conversation?.pendingQuestion === "confirm_usd" ? { pendingQuestion: null } : {}),
+    });
+  }
   if (/\b(?:don['’]?t|do not) like\b.*\b(?:any|them|these|above)\b|\bnone of (?:these|them)\b/i.test(event.text)) {
     session.rejectedProductIds = [...new Set([...(session.rejectedProductIds ?? []), ...(session.shownProductIds ?? [])])].slice(-40);
     return [{ kind: "text", text: "Understood—those options aren't right for you. What would you like different: the style, colour, or price?" }];
@@ -495,6 +503,7 @@ export async function handleShoppingInbound(
     let planned = false;
     const seen = new Set<string>();
     let searches = 0;
+    let forcePlan = false;
     const maxSteps = options.unified ? 6 : 3;
     for (let step = 0; step < maxSteps; step++) {
       const blocks = await model(
@@ -503,7 +512,7 @@ export async function handleShoppingInbound(
           (step === maxSteps - 1 || searches >= 2
             ? "\nFINAL TURN: finish now using available evidence; if information is missing, ask a focused question. No more searches."
             : ""),
-        searches >= 2 || step === maxSteps - 1,
+        forcePlan ? "plan_salon" : searches >= 2 || step === maxSteps - 1,
       );
       const calls = blocks.filter((b) => b.type === "tool_use");
       if (calls.length !== 1) throw new Error("Expected one tool call");
@@ -528,7 +537,7 @@ export async function handleShoppingInbound(
       if ((call.name === "find_products" || call.name === "plan_salon") && call.id) {
         try {
           const signature = JSON.stringify([call.name, call.input]);
-          if (seen.has(signature) || step === maxSteps - 1 || searches >= 2)
+          if (seen.has(signature) || ((step === maxSteps - 1 || searches >= 2) && !(forcePlan && call.name === "plan_salon")))
             throw new Error(
               "Search budget reached or identical search repeated. Use finish with existing facts or ask a clarification.",
             );
@@ -620,6 +629,26 @@ export async function handleShoppingInbound(
         continue;
       }
       const decision = parsed.data;
+      if (options.unified && decision.action === "answer" && session.conversation?.currency === "USD" &&
+          /(?:confirm|re-confirm|clarify).{0,80}(?:USD|US dollars)|(?:is|budget).{0,60}(?:USD|US dollars).{0,15}\?/i.test(decision.text)) {
+        toolResult({ error: "USD is already confirmed and stored. Do not request it again. Call plan_salon if the station count and budget are known; otherwise ask only for a genuinely missing requirement.", project: session.conversation }, true);
+        if (session.conversation.stations && session.conversation.budget) forcePlan = true;
+        continue;
+      }
+      if (session.conversation?.currency === "USD" && decision.project?.currency == null && decision.project)
+        delete decision.project.currency;
+      if (options.unified && decision.action === "answer" &&
+          /(?:let me|i['’]ll|i will|one moment).{0,70}(?:build|prepare|pull|put together|draft)|(?:build|prepare|pull|put together).{0,40}(?:plan|proposal).{0,25}(?:now|moment)/i.test(decision.text)) {
+        const project = conversationMemory({ ...conversationMemory(session.conversation), ...decision.project });
+        if (project.stations && project.budget && project.currency === "USD") {
+          session.conversation = project;
+          forcePlan = true;
+          toolResult({ error: "No background planning exists. Call plan_salon now using these saved requirements and the customer's service/layout preferences. Do not send another acknowledgement.", project }, true);
+          continue;
+        }
+        toolResult({ error: "Do not promise background work. Ask only the essential missing planning detail; do not ask again for saved confirmed facts.", project }, true);
+        continue;
+      }
       console.info(
         "wa-advisor-decision",
         JSON.stringify({ action: decision.action, lines: decision.lines?.length ?? 0 }),
