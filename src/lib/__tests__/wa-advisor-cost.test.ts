@@ -50,6 +50,7 @@ describe("advisor cost routing", () => {
     await callShoppingModel(question, '{"customer":"synthetic-B"}');
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(bodies[0].model).toBe("claude-haiku-4-5-20251001");
+    expect(bodies[0].thinking).toEqual({ type: "disabled" });
     expect(bodies[0].system[0]).toEqual(bodies[1].system[0]);
     expect(bodies[0].system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(bodies[0].system[0].text).not.toContain("synthetic-A");
@@ -71,6 +72,8 @@ describe("advisor cost routing", () => {
       "claude-haiku-4-5-20251001",
       "claude-sonnet-5",
     ]);
+    for (const call of fetch.mock.calls)
+      expect(JSON.parse(call[1].body).thinking).toEqual({ type: "disabled" });
   });
   it("sends complex turns straight to Sonnet without a paid classification call", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "synthetic");
@@ -82,5 +85,6 @@ describe("advisor cost routing", () => {
     await callShoppingModel([{ role: "user", content: "Plan 3 stations for 20k" }], "{}");
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetch.mock.calls[0]![1].body).model).toBe("claude-sonnet-5");
+    expect(JSON.parse(fetch.mock.calls[0]![1].body).thinking).toEqual({ type: "disabled" });
   });
 });

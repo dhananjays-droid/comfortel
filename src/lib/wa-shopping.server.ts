@@ -294,6 +294,8 @@ async function requestShoppingModel(
     },
     body: JSON.stringify({
       model,
+      // Keep advisor cost/output limits predictable across model defaults.
+      thinking: { type: "disabled" },
       max_tokens: model === "claude-haiku-4-5-20251001" ? 700 : 1800,
       system: [
         {
