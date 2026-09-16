@@ -3,6 +3,7 @@ import raw from "@/data/catalog-full.json";
 import { managedProductSchema, type ManagedProduct } from "@/lib/product-management";
 import {
   CSV_COLUMNS,
+  decodeCsvUpload,
   parseCsv,
   productsFromCsv,
   sampleCsv,
@@ -165,5 +166,52 @@ describe("specs with semicolons inside a value", () => {
       "Seat height": "45 cm",
       Base: "5-star",
     });
+  });
+});
+
+describe("files a spreadsheet has been through", () => {
+  it("refuses a file saved in Windows-1252 instead of UTF-8, and says why", () => {
+    // Excel for Mac's plain "CSV" save: the en dash becomes a single 0x96 byte.
+    const bytes = Buffer.from("id,name\n300024,Double Bench \x96 Natural Ash\n", "latin1");
+    const result = decodeCsvUpload(bytes);
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toMatch(/UTF-8/);
+      expect(result.error).toMatch(/Nothing has been changed/);
+    }
+  });
+
+  it("accepts a UTF-8 file with a byte-order mark and parses it cleanly", () => {
+    const p = seed[0]!;
+    const bytes = new TextEncoder().encode(`\uFEFFid,name\n${p.id},Double Bench – Natural Ash\n`);
+    const result = decodeCsvUpload(bytes);
+    expect("text" in result).toBe(true);
+    if ("text" in result) {
+      // A BOM must not turn the first header into "\uFEFFid" and break matching.
+      const { rows, headerError } = productsFromCsv(result.text, new Map([[p.id, p]]));
+      expect(headerError).toBeUndefined();
+      expect(rows[0]!.product?.name).toBe("Double Bench – Natural Ash");
+      expect(rows[0]!.changes.map((c) => c.field)).toEqual(["name"]);
+    }
+  });
+
+  it("treats a spreadsheet's 'Feb-27' as the unchanged 'February 2027'", () => {
+    const p = { ...seed[0]!, delivery_date: "February 2027" };
+    const existing = new Map([[p.id, p]]);
+    const same = productsFromCsv(`id,delivery_date\n${p.id},Feb-27`, existing);
+    expect(same.rows[0]!.changes).toEqual([]);
+    expect(same.rows[0]!.product?.delivery_date).toBe("February 2027");
+    // A genuinely different month is still a change.
+    const moved = productsFromCsv(`id,delivery_date\n${p.id},Mar-27`, existing);
+    expect(moved.rows[0]!.changes.map((c) => c.field)).toEqual(["delivery_date"]);
+  });
+
+  it("does not count TRUE/FALSE as a change to a boolean", () => {
+    const p = seed[0]!;
+    const csv = serializeProductsCsv([p])
+      .replace(/,true,/g, ",TRUE,")
+      .replace(/,false,/g, ",FALSE,");
+    const { rows } = productsFromCsv(csv, new Map([[p.id, p]]));
+    expect(rows[0]!.changes).toEqual([]);
   });
 });

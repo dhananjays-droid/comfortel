@@ -15,6 +15,12 @@
  *   accepts `Name: value; Other: value` on a single line — a `;` starts a new
  *   spec only when a `Name:` follows it, so a value may itself contain
  *   semicolons ("Listed with: Chair A; Chair B").
+ * - The export carries a UTF-8 byte-order mark and the import refuses any
+ *   file that is not UTF-8. Without the mark, Excel for Mac opened an export
+ *   as MacRoman and saved it as Windows-1252, turning every "–", "×" and "’"
+ *   in 200+ cells into mojibake — a two-price edit came back as 261 changes,
+ *   and importing it would have written `Double Bench ��� Natural Ash` into
+ *   product names. Refusing the file is the only safe answer.
  */
 import { managedProductSchema, type ManagedProduct } from "@/lib/product-management";
 
@@ -158,6 +164,43 @@ export function serializeProductsCsv(products: ManagedProduct[]): string {
 
 // -------------------------------------------------------------------- parse
 
+/**
+ * Decode an uploaded file, or say clearly why it must not be imported.
+ *
+ * A spreadsheet that saved the file as plain "CSV" rather than "CSV UTF-8"
+ * produces bytes that are not valid UTF-8 wherever the text had a dash, a
+ * curly quote or a × sign. `TextDecoder` in its default mode would quietly
+ * replace each with U+FFFD and the review screen would then offer to write
+ * "���" into product names as if that were an edit.
+ */
+export function decodeCsvUpload(
+  bytes: ArrayBuffer | Uint8Array,
+): { text: string } | { error: string } {
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (text.includes("\uFFFD")) throw new Error("replacement character present");
+    return { text };
+  } catch {
+    return {
+      error:
+        'This file isn\'t saved as UTF-8, so characters like – × and ’ have been corrupted and product names and descriptions would import damaged. It was most likely saved by Excel as plain "CSV". Save it as "CSV UTF-8 (Comma delimited)" instead — or export from Numbers or Google Sheets — and try again. Nothing has been changed.',
+    };
+  }
+}
+
+/**
+ * "Feb-27" is what a spreadsheet makes of "February 2027" once it decides the
+ * cell is a date, and it does so silently on save. When the file's value is
+ * exactly that reformatting of the current value, keep the current value:
+ * nothing changed, the tool rewrote it.
+ */
+function isSpreadsheetDateOf(cell: string, current: string | null | undefined): boolean {
+  if (!current) return false;
+  const short = /^([A-Z][a-z]{2})-(\d{2})$/.exec(cell.trim());
+  const long = /^([A-Z][a-z]+) (\d{4})$/.exec(current.trim());
+  return !!short && !!long && long[1]!.slice(0, 3) === short[1] && long[2]!.slice(2) === short[2];
+}
+
 /** RFC 4180: quoted fields may hold commas, quotes (doubled) and newlines.
  * Each row remembers the line it started on so errors can point at it. */
 export function parseCsv(text: string): {
@@ -283,6 +326,10 @@ function applyRow(base: ManagedProduct, header: string[], cells: string[]): Mana
     if (!(CSV_COLUMNS as readonly string[]).includes(column)) return;
     const cell = cells[i] ?? "";
     if (column === "id") return;
+    if (column === "delivery_date" && isSpreadsheetDateOf(cell, base.delivery_date)) {
+      next[column] = base.delivery_date;
+      return;
+    }
 
     if (NULLABLE_TEXT.has(column)) {
       // A present blank clears the field — except that an existing empty

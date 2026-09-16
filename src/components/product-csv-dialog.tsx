@@ -18,7 +18,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ManagedProduct, ProductRow } from "@/lib/product-management";
-import { IMPORT_CHUNK, productsFromCsv, type ImportPlan, type ImportRow } from "@/lib/product-csv";
+import {
+  IMPORT_CHUNK,
+  decodeCsvUpload,
+  productsFromCsv,
+  type ImportPlan,
+  type ImportRow,
+} from "@/lib/product-csv";
 import { downloadSampleCsv, exportProductsCsv } from "@/lib/product-csv-download";
 
 export type ImportOutcome = { id: string; status: "added" | "updated" | "failed"; error?: string };
@@ -103,8 +109,14 @@ export function ProductCsvDialog({
   async function readFile(file: File) {
     setReadError("");
     try {
-      const text = await file.text();
-      const next = productsFromCsv(text, byId);
+      // Strict decode first: a file a spreadsheet saved in the wrong encoding
+      // must be refused here, not reviewed as hundreds of "changes".
+      const decoded = decodeCsvUpload(await file.arrayBuffer());
+      if ("error" in decoded) {
+        setReadError(decoded.error);
+        return;
+      }
+      const next = productsFromCsv(decoded.text, byId);
       if (next.headerError) {
         setReadError(next.headerError);
         return;
