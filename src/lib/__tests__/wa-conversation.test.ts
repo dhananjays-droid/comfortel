@@ -22,6 +22,7 @@ const draft = {
 function setup(model: ShoppingModel = finish({ action: "answer", text: "Which product?" })) {
   const services: ConversationServices = {
     model,
+    history: vi.fn(async () => ({ messages: [{ role: "customer", text: "Previous equipment budget was 50000 USD" }] })),
     requestContext: vi.fn(async () => draft),
     request: vi.fn(async () => [{ kind: "text" as const, text: "Request details" }]),
     runtime: vi.fn(async (s) => ({ session: s, turns: [{ kind: "text" as const, text: "Menu" }] })),
@@ -46,6 +47,54 @@ function setup(model: ShoppingModel = finish({ action: "answer", text: "Which pr
   return { services, session, send };
 }
 describe("unified conversation owner", () => {
+  it("loads archive only when the customer explicitly asks for an earlier plan", async () => {
+    const { services, send } = setup();
+    await send("What was my previous plan?");
+    expect(services.history).toHaveBeenCalledWith("test");
+    expect(services.model).toHaveBeenCalledWith(expect.anything(), expect.stringContaining("Previous equipment budget"), expect.anything());
+  });
+  it("does not fetch or inject historical requests into normal shopping", async () => {
+    const { services, send } = setup();
+    await send("I need three mirrors");
+    expect(services.history).not.toHaveBeenCalled();
+    const context = (services.model as ReturnType<typeof vi.fn>).mock.calls[0]![1];
+    expect(JSON.parse(context).workflow.request).toBeNull();
+    expect(JSON.parse(context).workflow.previousChat).toBeNull();
+  });
+  it.each(["Hi", "hello", "hi there", "good morning"])("%s starts fresh without touching staff records", async text => {
+    const { session, send, services } = setup();
+    session.plan = { ids: ["330334"], qty: { "330334": 5 } };
+    session.conversation = conversationMemory({ stations: 5, budget: 50000, activeTask: "plan" });
+    session.transcript = [{ role: "user", content: "Old 50000 budget" }];
+    session.room = { url: "https://example.com/old.jpg", at: 1 };
+    const result = await send(text);
+    expect(result.session.plan.ids).toEqual([]);
+    expect(result.session.conversation?.budget).toBeNull();
+    expect(result.session.conversation?.stations).toBeNull();
+    expect(result.session.room).toBeNull();
+    expect(JSON.stringify(result.session.transcript)).not.toContain("50000");
+    expect(services.model).not.toHaveBeenCalled();
+    expect(services.request).not.toHaveBeenCalled();
+  });
+  it("Plan my salon clears old requirements even without a greeting", async () => {
+    const { session, services } = setup();
+    session.plan = { ids: ["330334"], qty: { "330334": 5 } };
+    session.conversation = conversationMemory({ stations: 5, budget: 50000 });
+    const result = await handleConversation({ sessionKey: "test", phone: "15550000000", waMessageId: "new", event: { kind: "button", id: "build" } }, session, services);
+    expect(result.session.plan.ids).toEqual([]);
+    expect(result.session.conversation).toMatchObject({ stations: null, budget: null, activeTask: "plan" });
+    expect(JSON.stringify(result.turns)).toContain("new salon plan");
+    expect(services.model).not.toHaveBeenCalled();
+    expect(services.request).not.toHaveBeenCalled();
+  });
+  it("menu navigation preserves the active plan", async () => {
+    const { session, send } = setup();
+    session.plan = { ids: ["330334"], qty: { "330334": 5 } };
+    session.conversation = conversationMemory({ stations: 5, budget: 50000 });
+    const result = await send("menu");
+    expect(result.session.plan).toEqual(session.plan);
+    expect(result.session.conversation?.budget).toBe(50000);
+  });
   it("resolves add to my plan against the last render without asking the model", async () => {
     const { session, send, services } = setup();
     session.lastRender = { resultUrl: "https://example.com/render.jpg", mode: "refit_room", productIds: ["330334"], quantities: { "330334": 5 }, at: 1 };

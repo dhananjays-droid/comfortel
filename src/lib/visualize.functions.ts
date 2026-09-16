@@ -339,7 +339,7 @@ export async function runVisualizeStart(
       `${KIE_IMAGE_MODEL}|${channel === "whatsapp" ? "wa-scope-v3|" : ""}` +
         // Product images and composition instructions can change without an
         // ID change. Never serve the previous product/angle from the cache.
-        JSON.stringify([request.prompt, request.imageUrls]) +
+        JSON.stringify([prompt, request.imageUrls]) +
         data.productIds.join(",") +
         data.mode +
         (data.scene ?? "") +

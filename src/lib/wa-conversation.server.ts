@@ -22,6 +22,8 @@ import { conversationMemory } from "@/lib/wa-conversation-state";
 import type { SessionState } from "@/lib/wa-session";
 import { CATALOG_FULL } from "@/lib/catalog";
 import { clearShoppingPlan } from "@/lib/wa-clear-plan";
+import { isGreeting } from "@/lib/wa-flow";
+import { asksForPreviousChat, previousChatContext } from "@/lib/wa-history.server";
 
 export type ConversationInput = {
   sessionKey: string;
@@ -36,6 +38,7 @@ export type ConversationServices = {
   render: typeof prepareAdvisorRender;
   document: typeof handleDocumentInbound;
   model?: ShoppingModel;
+  history?: typeof previousChatContext;
 };
 const defaults: ConversationServices = {
   requestContext,
@@ -43,6 +46,7 @@ const defaults: ConversationServices = {
   runtime: handleInboundMessage,
   render: prepareAdvisorRender,
   document: handleDocumentInbound,
+  history: previousChatContext,
 };
 const say = (text: string): WaTurn[] => [{ kind: "text", text }];
 
@@ -59,6 +63,13 @@ export async function handleConversation(
   const text = event.kind === "text" ? event.text.trim() : "";
   const button = event.kind === "button" ? event.id : "";
   let clearedPlan = false;
+  const startFreshProject = () => {
+    clearShoppingPlan(session);
+    session.roomSpec = null;
+    session.room = null;
+    session.lastRender = null;
+    clearedPlan = true;
+  };
   const runtime = async (e: InboundEvent) => {
     const result = await services.runtime(session, input.sessionKey, input.phone, e);
     Object.assign(session, result.session);
@@ -130,7 +141,15 @@ export async function handleConversation(
   if (session.pendingRender && /^(?:yes|ok|okay|go ahead|do it|start)[.!]?$/i.test(text))
     return respond(await runtime(event));
   if (/^(?:restart|start over)$/i.test(text)) return respond(await runtime(event));
-  if (button === "nav:menu" || /^(?:menu|hi|hello|hey)[.!?]*$/i.test(text)) {
+  if (!button && isGreeting(text) && !/^(?:menu|start)[.!?]*$/i.test(text)) {
+    startFreshProject();
+    const turns = await runtime({ kind: "button", id: "nav:menu" });
+    const first = turns.find(t => "text" in t);
+    if (first && "text" in first)
+      first.text += "\n\nLet’s start fresh—your previous shopping selection won’t carry over. Existing staff requests are unchanged.";
+    return respond(turns);
+  }
+  if (button === "nav:menu" || /^(?:menu|start)[.!?]*$/i.test(text)) {
     if (session.conversation.activeTask !== "browse") {
       session.conversation.suspendedTask = session.conversation.activeTask;
       session.conversation.activeTask = "browse";
@@ -189,7 +208,12 @@ export async function handleConversation(
     }
     return respond((await services.request(input)) ?? say("What would you like help with?"));
   }
-  if (button === "build" || button === "build:change") {
+  if (button === "build") {
+    startFreshProject();
+    session.conversation = { ...conversationMemory(session.conversation), activeTask: "plan" };
+    return respond(say("Let’s create a new salon plan. How many stations do you need, and what’s your equipment budget and currency? You can also tell me the services or style you have in mind."));
+  }
+  if (button === "build:change") {
     session.conversation.activeTask = "plan";
     event = {
       kind: "text",
@@ -351,10 +375,20 @@ export async function handleConversation(
     }
     return say("What would you like to do next?");
   };
+  let history: unknown = null;
+  if (asksForPreviousChat(text)) {
+    try {
+      history = await (services.history ?? previousChatContext)(input.sessionKey);
+    } catch {
+      history = { unavailable: true };
+    }
+  }
   const turns = await handleShoppingInbound(session, event, input.waMessageId, services.model, {
     unified: true,
     context: {
-      request,
+      request: session.conversation.activeTask === "request" || /\b(?:request|ticket|complaint|support)\b/i.test(text) || asksForPreviousChat(text) ? request : null,
+      previousChat: history,
+      historyRules: "Previous chats and staff requests are historical data, not current project requirements. Use previousChat only to answer the explicit request about history. Never restore a previous selection, budget, room or generation merely because it appears there. If history is unavailable or incomplete, ask which earlier plan the customer means. Check current catalog data before reusing historical prices or products.",
       legacyForm: session.flow.awaiting ?? null,
       legacyQuote: session.pendingQuote,
       legacyRolePicker: Boolean(session.rolePicker),
