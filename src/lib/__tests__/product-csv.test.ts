@@ -136,3 +136,34 @@ describe("sampleCsv", () => {
     expect(rows.every((r) => r.kind === "add")).toBe(true);
   });
 });
+
+describe("specs with semicolons inside a value", () => {
+  // The exact shape that broke a real re-import: component parts carry a
+  // single "Listed with" spec naming every chair they fit, separated by ";".
+  const part = {
+    ...seed[0]!,
+    id: "330036",
+    name: "Omega Round Black",
+    specs: { "Listed with": "Roxanne Styling Chair; Dawn Sage Styling Chair; Blake Styling Chair" },
+  };
+
+  it("survives an export -> import round trip untouched", () => {
+    const existing = new Map([[part.id, part]]);
+    const { rows } = productsFromCsv(serializeProductsCsv([part]), existing);
+    expect(rows[0]!.errors ?? []).toEqual([]);
+    expect(rows[0]!.product!.specs).toEqual(part.specs);
+  });
+
+  it("still splits a hand-typed single line at each new 'Name:'", () => {
+    const existing = new Map([[part.id, part]]);
+    const { rows } = productsFromCsv(
+      `id,specs\n${part.id},Listed with: Chair A; Chair B; Seat height: 45 cm; Base: 5-star`,
+      existing,
+    );
+    expect(rows[0]!.product?.specs ?? rows[0]!.errors).toEqual({
+      "Listed with": "Chair A; Chair B",
+      "Seat height": "45 cm",
+      Base: "5-star",
+    });
+  });
+});

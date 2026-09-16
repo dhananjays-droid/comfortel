@@ -12,7 +12,9 @@
  * - `specs` is written as one `Name: value` per line inside the cell rather
  *   than JSON, because the people editing this file will do so in Excel or
  *   Sheets, where a JSON blob breaks on the first stray quote. Import also
- *   accepts `Name: value; Other: value` on a single line.
+ *   accepts `Name: value; Other: value` on a single line — a `;` starts a new
+ *   spec only when a `Name:` follows it, so a value may itself contain
+ *   semicolons ("Listed with: Chair A; Chair B").
  */
 import { managedProductSchema, type ManagedProduct } from "@/lib/product-management";
 
@@ -252,7 +254,14 @@ function parseBoolean(cell: string): boolean | undefined {
 }
 
 function parseSpecs(cell: string): Record<string, string> {
-  const entries = /\r?\n/.test(cell) ? cell.split(/\r?\n/) : cell.split(";");
+  // One spec per line is the exported form. A single-line cell may instead be
+  // the hand-typed `Name: value; Other: value` form — but a product with ONE
+  // spec also exports as a single line, and if that spec's value contains
+  // semicolons ("Listed with: Chair A; Chair B; Chair C") a plain split on `;`
+  // shreds it and every fragment after the first fails as "not Name: value".
+  // That was 25 of 201 rows in a real export re-imported untouched. So on a
+  // single line, split only at a `;` that is followed by another `Name:` key.
+  const entries = /\r?\n/.test(cell) ? cell.split(/\r?\n/) : cell.split(/;\s*(?=[^;:\r\n]+:)/);
   const out: Record<string, string> = {};
   for (const entry of entries) {
     if (!entry.trim()) continue;
