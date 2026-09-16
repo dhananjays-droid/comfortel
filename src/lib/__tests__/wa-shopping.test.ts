@@ -19,6 +19,21 @@ const other = "330283";
 const text = (text: string) => ({ kind: "text" as const, text });
 
 describe("shopping conversation tool boundary", () => {
+  it("rejects an accessory card for a mirror request even when remembered from history", async () => {
+    const s = fresh();
+    s.shownProductIds = ["301087", "8221"];
+    const model: ShoppingModel = vi.fn()
+      .mockResolvedValueOnce([{ type: "tool_use", name: "finish", id: "bad", input: {
+        action: "show", text: "Here is a mirror shelf.", lines: [{ id: "301087", qty: 1 }],
+      } }])
+      .mockResolvedValueOnce([{ type: "tool_use", name: "finish", id: "good", input: {
+        action: "show", text: "Here is a complete mirror.", lines: [{ id: "8221", qty: 1 }],
+      } }]);
+    const turns = await handleShoppingInbound(s, text("I want to buy a mirror for my salon"), "purpose-test", model);
+    expect(model).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(turns)).not.toContain("Here is a mirror shelf");
+    expect(s.shownProductIds).toEqual(["8221"]);
+  });
   it("shortlist buttons use the remembered quantity and are safe to replay", async () => {
     const s = fresh();
     s.shownProductIds = [id];

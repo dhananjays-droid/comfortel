@@ -1,5 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Inbox,
+  Loader2,
+  MessagesSquare,
+  Package,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -24,10 +32,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * "doesn't close" state, since picking a different session just replaces
  * the pane's content, the same way any inbox works.
  *
- * Dark theme is a deliberate, fixed choice here, not a mode that follows
- * the visitor's system preference — a developer-only console reads better
- * dark, and unlike a customer-facing page there is no "meet people in
- * their own preference" reason to make it configurable.
+ * The workspace wears the same warm, light tokens as the customer app, so
+ * a product photo or a WhatsApp preview looks here the way it looks there.
+ * Three views — conversations, the requests inbox, products — share one
+ * shell and switch as tabs; switching away from an unsaved product draft
+ * asks first, through the same confirm dialog every destructive action in
+ * the workspace uses.
  */
 
 export const Route = createFileRoute("/admin/logs")({
@@ -39,6 +49,12 @@ export const Route = createFileRoute("/admin/logs")({
 
 import { RequestsInbox } from "@/components/wa-requests-inbox";
 import { ProductManager } from "@/components/product-manager";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type View = "conversations" | "inbox" | "products";
 
 const TOKEN_KEY = "comfortel-admin-token";
 const POLL_MS = 4000;
@@ -240,40 +256,39 @@ function TokenGate({
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <form
-        className="w-full max-w-sm rounded-2xl border border-border bg-[#12161f] p-8 shadow-2xl shadow-black/40"
+        className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           if (value.trim()) onSubmit(value.trim());
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="h-4 w-4 text-foreground" />
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
-          <h1 className="text-sm font-semibold text-foreground">Comfortel workspace</h1>
+          <h1 className="text-sm font-semibold">Comfortel workspace</h1>
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Enter the{" "}
-          <code className="rounded bg-secondary/60 px-1 py-0.5 text-xs text-foreground">
-            CRON_SECRET
-          </code>{" "}
-          value to connect.
+        <p className="mt-4 text-sm text-muted-foreground">
+          Paste your admin password to connect. It stays in this browser only.
         </p>
         <input
           type="password"
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Bearer token"
-          className="mt-4 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary-strong focus:ring-2 focus:ring-primary-strong/20"
+          placeholder="Admin password"
+          aria-label="Admin password"
+          className="mt-4 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary-strong focus:ring-2 focus:ring-primary-strong/20"
         />
-        {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
-        <button
-          type="submit"
-          className="mt-4 w-full rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-primary-muted"
-        >
+        {error && (
+          <p role="alert" className="mt-2 flex items-center gap-1.5 text-xs text-rose-700">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {error}
+          </p>
+        )}
+        <Button type="submit" className="mt-4 w-full" disabled={!value.trim()}>
           Connect
-        </button>
+        </Button>
       </form>
     </div>
   );
@@ -517,11 +532,12 @@ function AdminLogs() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [showRequests, setShowRequests] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
+  const [view, setView] = useState<View>("conversations");
   const [editingProduct, setEditingProduct] = useState(false);
+  const [pendingView, setPendingView] = useState<View | null>(null);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
@@ -538,11 +554,12 @@ function AdminLogs() {
         );
         setSessions(data.sessions ?? []);
         setLoadError(null);
+        setLoaded(true);
       } catch (err) {
         if (err instanceof Error && err.message === "UNAUTHORIZED") {
           window.localStorage.removeItem(TOKEN_KEY);
           setToken(null);
-          setAuthError("That token was rejected. Check CRON_SECRET and try again.");
+          setAuthError("That password was rejected. Check it and try again.");
           return;
         }
         setLoadError(err instanceof Error ? err.message : String(err));
@@ -559,6 +576,16 @@ function AdminLogs() {
     const id = setInterval(() => void load(token, false), POLL_MS);
     return () => clearInterval(id);
   }, [token, load]);
+
+  /** Leaving the products tab mid-edit asks first; every other switch is instant. */
+  function switchView(next: View) {
+    if (next === view) return;
+    if (view === "products" && editingProduct) {
+      setPendingView(next);
+      return;
+    }
+    setView(next);
+  }
 
   if (!token) {
     return (
@@ -577,115 +604,170 @@ function AdminLogs() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-card px-6 py-3.5">
+      <header className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-border bg-card px-6 py-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="h-3.5 w-3.5 text-foreground" />
+            <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <h1 className="text-sm font-semibold text-foreground">Comfortel workspace</h1>
-          <span className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-emerald-400/20">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+          <h1 className="text-sm font-semibold">Comfortel workspace</h1>
+          <span className="hidden items-center gap-1.5 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-emerald-400/20 sm:flex">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
             Live
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            className="rounded-lg border border-border px-3 py-1 text-sm"
-            onClick={() => {
-              if (editingProduct && !window.confirm("Discard your unsaved product draft?")) return;
-              setShowProducts(false);
-              setShowRequests((value) => !value);
-            }}
-          >
-            {showRequests ? "Conversation logs" : "Requests inbox"}
-          </button>
-          <button
-            className="rounded-lg border border-border px-3 py-1 text-sm"
-            onClick={() => {
-              if (editingProduct && !window.confirm("Discard your unsaved product draft?")) return;
-              setShowProducts((v) => !v);
-              setShowRequests(false);
-            }}
-          >
-            {showProducts ? "Conversation logs" : "Products"}
-          </button>
-          <label
-            className={`${showRequests || showProducts ? "hidden" : "flex"} items-center gap-1.5 text-xs text-muted-foreground`}
-          >
-            <input
-              type="checkbox"
-              checked={errorsOnly}
-              onChange={(e) => setErrorsOnly(e.target.checked)}
-              className="accent-rose-400"
-            />
-            Errors only
-          </label>
-          <button
-            onClick={() => void load(token, true)}
-            className="rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
-            title="Refresh now"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
+
+        <Tabs value={view} onValueChange={(v) => switchView(v as View)}>
+          <TabsList className="h-9 rounded-lg bg-secondary/70 p-1">
+            <TabsTrigger
+              value="conversations"
+              className="gap-1.5 rounded-md px-3 text-xs data-[state=active]:shadow-sm"
+            >
+              <MessagesSquare className="h-3.5 w-3.5" />
+              Conversations
+              {errorCount > 0 && (
+                <span className="ml-0.5 rounded-full bg-rose-500/15 px-1.5 text-[10px] font-semibold tabular-nums text-rose-700">
+                  {errorCount}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="inbox"
+              className="gap-1.5 rounded-md px-3 text-xs data-[state=active]:shadow-sm"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              Inbox
+            </TabsTrigger>
+            <TabsTrigger
+              value="products"
+              className="gap-1.5 rounded-md px-3 text-xs data-[state=active]:shadow-sm"
+            >
+              <Package className="h-3.5 w-3.5" />
+              Products
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center justify-end gap-3">
+          {view === "conversations" && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={errorsOnly}
+                  onChange={(e) => setErrorsOnly(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-rose-500"
+                />
+                Errors only
+              </label>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => void load(token, true)}
+                aria-label="Refresh now"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
       {loadError && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-rose-400/20 bg-rose-400/10 px-6 py-2 text-xs text-rose-700">
+        <div className="flex shrink-0 items-center gap-2 border-b border-rose-200 bg-rose-50 px-6 py-2 text-xs text-rose-800">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           {loadError}
         </div>
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside
-          className={`${showRequests || showProducts ? "hidden" : "flex"} w-96 shrink-0 flex-col border-r border-border bg-card`}
-        >
-          <div className="shrink-0 px-4 py-3 text-xs text-muted-foreground">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
-            {errorCount > 0 && (
-              <span className="font-medium text-rose-700"> · {errorCount} with errors</span>
-            )}
-          </div>
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
-            {sessions.length === 0 && !loading && (
-              <p className="mt-8 px-2 text-center text-sm text-muted-foreground">
-                {errorsOnly ? "No sessions with errors right now." : "No activity yet."}
-              </p>
-            )}
-            {sessions.map((s) => (
-              <SessionCard
-                key={s.sessionKey}
-                session={s}
-                active={selected === s.sessionKey}
-                onClick={() => setSelected(s.sessionKey)}
-              />
-            ))}
-          </div>
-        </aside>
+        {view === "conversations" && (
+          <aside className="flex w-96 shrink-0 flex-col border-r border-border bg-card">
+            <div className="shrink-0 px-4 py-3 text-xs text-muted-foreground">
+              {loaded ? (
+                <>
+                  {sessions.length} session{sessions.length === 1 ? "" : "s"}
+                  {errorCount > 0 && (
+                    <span className="font-medium text-rose-700"> · {errorCount} with errors</span>
+                  )}
+                </>
+              ) : (
+                "Loading sessions…"
+              )}
+            </div>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-4">
+              {!loaded &&
+                Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl px-3 py-3">
+                    <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2 pt-1">
+                      <Skeleton className="h-3 w-2/3" />
+                      <Skeleton className="h-3 w-full" />
+                    </div>
+                  </div>
+                ))}
+              {loaded && sessions.length === 0 && (
+                <div className="mt-10 px-4 text-center">
+                  <p className="text-sm font-medium">
+                    {errorsOnly ? "No sessions with errors" : "No conversations yet"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {errorsOnly
+                      ? "Everything is running clean right now."
+                      : "Each customer who messages the WhatsApp number shows up here, newest first."}
+                  </p>
+                </div>
+              )}
+              {sessions.map((s) => (
+                <SessionCard
+                  key={s.sessionKey}
+                  session={s}
+                  active={selected === s.sessionKey}
+                  onClick={() => setSelected(s.sessionKey)}
+                />
+              ))}
+            </div>
+          </aside>
+        )}
 
         <main className="min-h-0 min-w-0 flex-1 bg-background">
-          {showProducts ? (
+          {view === "products" ? (
             <ProductManager token={token} onEditingChange={setEditingProduct} />
-          ) : showRequests ? (
+          ) : view === "inbox" ? (
             <RequestsInbox
               token={token}
               onSession={(key) => {
                 setSelected(key);
-                setShowRequests(false);
+                setView("conversations");
               }}
             />
           ) : selected ? (
             <SessionPane sessionKey={selected} token={token} />
           ) : (
             <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-muted-foreground">
-                Select a session to see its full timeline.
-              </p>
+              <div className="text-center">
+                <p className="text-sm font-medium">Pick a conversation</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The full timeline — messages, renders and delivery status — appears here.
+                </p>
+              </div>
             </div>
           )}
         </main>
       </div>
+
+      <ConfirmDialog
+        open={pendingView !== null}
+        onOpenChange={(open) => !open && setPendingView(null)}
+        title="Leave without saving?"
+        description="You have an unsaved product draft. Switching views discards it; the saved version isn't affected."
+        confirmLabel="Discard and switch"
+        destructive
+        onConfirm={() => {
+          if (pendingView) setView(pendingView);
+          setPendingView(null);
+        }}
+      />
     </div>
   );
 }

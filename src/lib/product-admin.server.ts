@@ -6,6 +6,31 @@ import slim from "@/data/catalog-slim.json";
 import { cdnFor } from "@/lib/cdn-assets";
 import { withProductSpecifications } from "@/lib/product-specifications";
 import type { FullProduct } from "@/lib/catalog";
+import type { ManagedProduct } from "@/lib/product-management";
+import { isCdnUrl, mirrorImageToCdn } from "@/lib/asset-cdn.server";
+import { IMPORT_CHUNK } from "@/lib/product-csv";
+
+/**
+ * Every image a product will be served from goes onto our CDN first; the
+ * original stays in `source_image_link` untouched. Same URL twice in one
+ * product uploads once. Anything already on the CDN is left alone.
+ */
+async function withCdnImages(product: ManagedProduct): Promise<ManagedProduct> {
+  const primary = product.updated_image_link || product.source_image_link;
+  const wanted = [primary, ...product.images].filter((u) => u && !isCdnUrl(u));
+  const mirrored = new Map<string, string>();
+  await Promise.all(
+    [...new Set(wanted)].map(async (u) => mirrored.set(u, await mirrorImageToCdn(u))),
+  );
+  const cdn = (u: string) => mirrored.get(u) ?? u;
+  return {
+    ...product,
+    updated_image_link: primary ? cdn(primary) : product.updated_image_link,
+    images: product.images.map(cdn),
+  };
+}
+
+type ImportResult = { id: string; status: "added" | "updated" | "failed"; error?: string };
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "cache-control": "no-store" } });
 export async function handleProductAdmin(request: Request): Promise<Response> {
@@ -59,6 +84,54 @@ export async function handleProductAdmin(request: Request): Promise<Response> {
         added++;
       }
       return json({ added, remaining: Math.max(0, remaining.length - added) });
+    }
+    if (body.action === "import") {
+      if (!Array.isArray(body.products)) return json({ error: "products must be an array" }, 400);
+      if (body.products.length > IMPORT_CHUNK)
+        return json({ error: `Import at most ${IMPORT_CHUNK} products per request` }, 400);
+      // Matching is by id against what exists right now; a product absent from
+      // the file is never touched, so there is no delete path here at all.
+      const revisions = new Map((await readProducts()).map((r) => [r.id, r.revision]));
+      const results: ImportResult[] = [];
+      for (const raw of body.products) {
+        const id = typeof raw?.id === "string" ? raw.id : "?";
+        const parsed = managedProductSchema.safeParse(raw);
+        if (!parsed.success) {
+          results.push({
+            id,
+            status: "failed",
+            error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+          });
+          continue;
+        }
+        let product: ManagedProduct;
+        try {
+          product = await withCdnImages(parsed.data);
+        } catch (err) {
+          results.push({
+            id,
+            status: "failed",
+            error: `Image upload failed: ${err instanceof Error ? err.message : "unknown"}`,
+          });
+          continue;
+        }
+        const revision = revisions.get(product.id);
+        const { error } = await productDb.rpc("save_managed_product", {
+          p_product: product,
+          p_expected_revision: revision ?? 0,
+        });
+        if (error)
+          results.push({
+            id,
+            status: "failed",
+            error:
+              error.code === "PT409"
+                ? "Someone edited this product. Reload it before saving."
+                : "Product could not be saved",
+          });
+        else results.push({ id, status: revision === undefined ? "added" : "updated" });
+      }
+      return json({ results });
     }
     if (body.action === "sync") {
       const { runProductSync } = await import("@/lib/product-sync.server");

@@ -328,6 +328,11 @@ export async function prepareAdvisorRender(
       session,
       "Your selection includes more than 20 of one product. Which smaller area should we visualise? Your quote quantities haven’t changed.",
     );
+  if (session.plan.ids.length > 10)
+    return messageResult(
+      session,
+      "This plan contains more than 10 different products. Please choose a smaller area to visualise first so no selected products are silently omitted. Your full estimate is unchanged.",
+    );
   return proposeRender(session, {
     mode,
     productIds: [...session.plan.ids],

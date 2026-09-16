@@ -1,5 +1,6 @@
 import additions from "@/data/product-spec-enrichment.json";
 import { CATALOG_FULL, type FullProduct } from "@/lib/catalog";
+import { selectionEvidenceFor } from "@/lib/product-selection";
 
 type Enrichment = {
   name: string;
@@ -22,7 +23,14 @@ export function productEnrichment(product: FullProduct): Enrichment | null {
  * dimensions used by the webapp/render planner are deliberately untouched. */
 export function withProductSpecifications(product: FullProduct): FullProduct {
   const record = productEnrichment(product);
-  return record ? { ...product, specs: { ...record.specs, ...product.specs } } : product;
+  const source = selectionEvidenceFor(product);
+  return record || source
+    ? {
+        ...product,
+        description: product.description || source?.description || null,
+        specs: { ...source?.specs, ...record?.specs, ...product.specs },
+      }
+    : product;
 }
 
 const tokens = (value: string) => value.toLowerCase().match(/[a-z0-9]+/g) ?? [];

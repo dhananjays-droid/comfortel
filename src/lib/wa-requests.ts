@@ -64,7 +64,7 @@ export function requestMenu(): WaTurn {
     text: "How can I help? Choose an option below, or tell me what you need.",
     action: {
       kind: "list",
-      button: "Choose help",
+      button: "View options",
       rows: [
         { id: "request:sales", title: "Sales / visit request" },
         { id: "request:support", title: "Product support" },

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { RequestRecord } from "@/lib/wa-requests";
 import type { StaffMessage, StaffReply, StaffThread } from "@/lib/wa-staff";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type InboxRequest = RequestRecord & { created_at: string; updated_at: string };
 type Fetcher = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
@@ -271,6 +272,7 @@ function RequestPane({
   const [draft, updateDraft] = useState(drafts[r.reference]?.draft ?? "");
   const [contact, setContact] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmNewReply, setConfirmNewReply] = useState(false);
   const [attempt, updateAttempt] = useState(drafts[r.reference]?.attempt ?? null);
   function setDraft(value: string) {
     drafts[r.reference] = { draft: value, attempt: drafts[r.reference]?.attempt ?? null };
@@ -542,21 +544,25 @@ function RequestPane({
           <button
             className="mt-2 text-[10px] text-muted-foreground underline"
             disabled={busy}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Only continue if you have checked WhatsApp and the reply history. An unconfirmed message may already have been sent. Start a separate reply?",
-                )
-              ) {
-                setAttempt(null);
-                setDraft("");
-                setNotice(null);
-              }
-            }}
+            onClick={() => setConfirmNewReply(true)}
           >
             I have checked the outcome · start a new reply
           </button>
         )}
+        <ConfirmDialog
+          open={confirmNewReply}
+          onOpenChange={setConfirmNewReply}
+          title="Start a separate reply?"
+          description="Only continue if you've checked WhatsApp and the reply history. The message you sent may already have reached the customer, and a second reply would arrive as a new message."
+          confirmLabel="Start a new reply"
+          destructive
+          onConfirm={() => {
+            setConfirmNewReply(false);
+            setAttempt(null);
+            setDraft("");
+            setNotice(null);
+          }}
+        />
       </div>
     </>
   );

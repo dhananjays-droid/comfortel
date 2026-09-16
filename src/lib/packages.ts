@@ -1,4 +1,5 @@
 import { CATALOG_FULL, type FullProduct } from "@/lib/catalog";
+import { productPurpose } from "@/lib/product-purpose";
 
 /**
  * Turning "a four-chair salon for $15,000" into an actual list of products.
@@ -96,6 +97,8 @@ export function candidates(role: Role): FullProduct[] {
     .filter((p) => {
       if (!p.price || p.price < source.minPrice) return false;
       if (p.is_component) return false;
+      const purpose = role === "styling" ? "chair" : role;
+      if (productPurpose(p) !== purpose) return false;
       if (ACCESSORY.test(p.name)) return false;
       if (ROLE_MATCH[role] && !ROLE_MATCH[role]!.test(p.name)) return false;
       if (ROLE_EXCLUDE[role]?.test(p.name)) return false;

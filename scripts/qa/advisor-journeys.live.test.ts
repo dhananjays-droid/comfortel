@@ -33,12 +33,20 @@ import { handleInboundMessage, prepareAdvisorRender, type InboundEvent } from "@
 import { CATALOG_FULL } from "@/lib/catalog";
 import type { RequestRecord } from "@/lib/wa-requests";
 import type { Database } from "@/integrations/supabase/types";
+import { scriptedAdvisor } from "./scripted-advisor";
+
+// ADVISOR_SCRIPTED_MODEL=true drives every journey with scripts/qa/scripted-advisor.ts
+// instead of the provider: no API spend, and the key is deliberately invalid so an
+// accidental real call fails the journey instead of billing anyone.
+const SCRIPTED = process.env["ADVISOR_SCRIPTED_MODEL"] === "true";
 
 test.skipIf(process.env["RUN_ADVISOR_JOURNEYS"] !== "true")(
   "100 parameterized multi-turn journeys with real model and isolated action stores",
   async () => {
     const env = parseEnv(readFileSync(".env", "utf8"));
-    process.env["ANTHROPIC_API_KEY"] ||= env["ANTHROPIC_API_KEY"];
+    process.env["ANTHROPIC_API_KEY"] = SCRIPTED
+      ? "scripted-run-no-provider-calls"
+      : process.env["ANTHROPIC_API_KEY"] || env["ANTHROPIC_API_KEY"];
     process.env["WHATSAPP_PHONE_ENC_KEY"] = "synthetic-qa-only";
     const limit = Number(process.env["ADVISOR_JOURNEY_COUNT"] || 100);
     const results: {
@@ -85,6 +93,7 @@ test.skipIf(process.env["RUN_ADVISOR_JOURNEYS"] !== "true")(
         document: handleDocumentInbound,
         runtime: handleInboundMessage,
         render: prepareAdvisorRender,
+        ...(SCRIPTED ? { model: scriptedAdvisor } : {}),
       };
       let serial = 0;
       async function send(input: string | InboundEvent) {
@@ -212,7 +221,7 @@ test.skipIf(process.env["RUN_ADVISOR_JOURNEYS"] !== "true")(
       }
       mkdirSync("outputs/advisor-qa-2026-09-16", { recursive: true });
       writeFileSync(
-        "outputs/advisor-qa-2026-09-16/journeys.json",
+        `outputs/advisor-qa-2026-09-16/journeys${SCRIPTED ? "-scripted" : ""}.json`,
         JSON.stringify(
           results.sort((a, b) => a.id - b.id),
           null,

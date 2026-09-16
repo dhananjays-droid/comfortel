@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { CATALOG_FULL, CATALOG_SLIM } from "@/lib/catalog";
 import { withProductSpecifications } from "@/lib/product-specifications";
-import { buildPackages, needsFor, candidates } from "@/lib/packages";
+import { buildPackages, needsFor, candidates, type Need } from "@/lib/packages";
+import { productFit } from "@/lib/wa-product-fit";
+import { selectionProfile, selectionEvidenceFor } from "@/lib/product-selection";
+import { matchesProductPurpose, productPurpose } from "@/lib/product-purpose";
 
 export const ProductQuery = z
   .object({
@@ -42,15 +45,31 @@ export function productFacts(id: string) {
   const p = CATALOG_FULL[id];
   if (!p) throw new Error("Product is no longer available in the catalog");
   const full = withProductSpecifications(p);
+  const profile = selectionProfile(p);
   return {
     id,
     name: p.name,
     price: p.price,
     currency: "USD",
     available: p.in_stock,
-    description: p.description?.slice(0, 700),
+    productPurpose: productPurpose(p),
+    description: full.description?.slice(0, 700),
+    selection_profile: {
+      primaryUse: profile.primaryUse,
+      mirrorLayout: profile.mirrorLayout,
+      mounting: profile.mounting,
+      documentedFeatures: Object.entries(profile.features)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key),
+      checks: profile.checks,
+      sourceUrl: profile.sourceUrl,
+      checkedAt: profile.checkedAt,
+      evidenceStatus: profile.evidenceStatus,
+      missingFacts: profile.missingFacts,
+    },
     specs: full.specs,
     url: p.url,
+    ...(p.salon_placement === "mirror_unit" ? { suitability: productFit(p) } : {}),
   };
 }
 
@@ -78,12 +97,30 @@ export function recommendProducts(input: unknown) {
   const terms = tokens(args.query);
   return (
     CATALOG_SLIM.map((p) => {
-      const words = new Set(tokens(`${p.n} ${p.c} ${p.col}`));
+      const full = CATALOG_FULL[p.id]!;
+      const profile = selectionProfile(full);
+      const source = selectionEvidenceFor(full);
+      const words = new Set(
+        tokens(
+          `${p.n} ${p.c} ${p.col} ${source?.description || full.description || ""} ${source?.details?.join(" ") || ""} ${source?.features.join(" ") || ""} ${source?.intendedUses.join(" ") || ""} ${profile.primaryUse} ${Object.entries(
+            profile.features,
+          )
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+            .join(" ")}`,
+        ),
+      );
       const matched = terms.filter((w) => words.has(w));
-      return { p, score: matched.length, exact: matched.length === terms.length };
+      const fits =
+        matchesProductPurpose(full, args.query) &&
+        (!terms.includes("led") || profile.features.led === true) &&
+        (!terms.includes("compact") || profile.features.compact === true) &&
+        (!terms.includes("reclining") || profile.features.reclining === true);
+      return { p, score: matched.length, exact: matched.length === terms.length, fits };
     })
       .filter(
-        ({ p, score }) =>
+        ({ p, score, fits }) =>
+          (args.ids || fits) &&
           (!args.ids || args.ids.includes(p.id)) &&
           (args.ids || !terms.length || score > 0) &&
           (args.max_price === undefined || (p.p !== null && p.p <= args.max_price)),
@@ -111,6 +148,11 @@ export const SalonPlanInput = z
     scope: z.literal("equipment"),
     business: z.enum(["salon", "barbershop"]).default("salon"),
     finish: z.string().max(60).optional(),
+    mirror_layout: z.enum(["wall", "island"]).default("wall"),
+    mirror_feature: z.enum(["any", "led", "work_surface"]).default("any"),
+    chair_feature: z.enum(["any", "reclining"]).default("any"),
+    service_focus: z.enum(["hair_styling", "colour", "makeup_brows", "barber"]).optional(),
+    chair_priority: z.enum(["any", "compact", "easy_clean"]).default("any"),
   })
   .strict();
 
@@ -118,40 +160,183 @@ export function salonPlans(input: unknown) {
   const args = SalonPlanInput.parse(input);
   if (args.finish && /^(?:standard|default|any|none|unspecified)$/i.test(args.finish))
     delete args.finish;
-  const needs = needsFor(args.stations);
-  const packages = buildPackages(args.budget, needs, (role) =>
-    candidates(role).filter(
+  const service =
+    args.service_focus ?? (args.business === "barbershop" ? "barber" : "hair_styling");
+  const needs = needsFor(args.stations).filter(
+    (n) => service !== "makeup_brows" || n.role !== "wash",
+  );
+  const matching = (role: Parameters<typeof candidates>[0]) => {
+    const pool = candidates(role).filter(
       (p) =>
         p.in_stock &&
-        (role !== "mirror" || !/\bdouble\b/i.test(p.name)) &&
+        (role !== "mirror" ||
+          productFit(p).mirrorLayout ===
+            (args.mirror_layout === "wall" ? "wall-assumed" : "island")) &&
+        (role !== "mirror" ||
+          args.mirror_layout !== "island" ||
+          productFit(p).stationFaces === 2) &&
+        (role !== "mirror" ||
+          args.mirror_feature !== "led" ||
+          selectionProfile(p).features.led === true) &&
+        (role !== "mirror" ||
+          args.mirror_feature !== "work_surface" ||
+          productFit(p).workSurface) &&
         (role !== "styling" ||
-          (args.business === "barbershop" ? /barber/i.test(p.name) : !/barber/i.test(p.name))) &&
+          args.chair_feature !== "reclining" ||
+          selectionProfile(p).features.reclining === true) &&
+        (role !== "styling" ||
+          (service === "barber"
+            ? selectionProfile(p).primaryUse === "barber"
+            : service === "makeup_brows"
+              ? selectionProfile(p).primaryUse === "beauty_services"
+              : args.chair_feature === "reclining"
+                ? selectionProfile(p).primaryUse !== "barber"
+                : selectionProfile(p).primaryUse === "hair_styling")) &&
+        (role !== "styling" ||
+          args.chair_priority !== "compact" ||
+          selectionProfile(p).features.compact === true) &&
+        (role !== "styling" ||
+          args.chair_priority !== "easy_clean" ||
+          selectionProfile(p).features.easyClean === true) &&
         (!args.finish ||
           !["styling", "wash"].includes(role) ||
           p.name.toLowerCase().includes(args.finish.toLowerCase())),
-    ),
-  );
+    );
+    // Colour work can prefer documented daylight lighting, but not override
+    // an explicit bench request or imply a certified colour-rendering score.
+    if (role === "mirror" && service === "colour" && args.mirror_feature === "any") {
+      const daylight = pool.filter((p) => selectionProfile(p).features.daylightLighting);
+      if (daylight.length) return daylight;
+    }
+    return pool;
+  };
+  if (args.mirror_layout === "island") {
+    // Use one consistent face count per plan rather than mixing single and
+    // double-sided units while counting each as one station.
+    needs.find((n) => n.role === "mirror")!.qty = Math.ceil(args.stations / 2);
+  }
+  const packages = buildPackages(args.budget, needs, matching);
+  const base = packages.find((p) => p.tier === "balanced")!;
+  // Improve useful capacity, not station count. This is an optional equipment
+  // scenario, not permission to add plumbing or an assertion about room fit.
+  const enhancedNeeds = needs.map((n) => ({
+    ...n,
+    qty:
+      n.role === "trolley"
+        ? args.stations
+        : n.role === "wash"
+          ? Math.ceil(args.stations / 2)
+          : n.role === "waiting"
+            ? Math.min(2, Math.ceil(args.stations / 3))
+            : n.qty,
+  }));
+  const enhanced = buildPackages(args.budget, enhancedNeeds, matching).find(
+    (p) => p.tier === "balanced",
+  )!;
+  const useEnhanced =
+    base.total < args.budget * 0.8 && enhanced.total > base.total && enhanced.total <= args.budget;
+  // All tiers compare the SAME quantities. Never replace only the balanced
+  // tier with a larger equipment mix while leaving "premium" smaller.
+  const comparisonNeeds = useEnhanced ? enhancedNeeds : needs;
+  const comparisons = useEnhanced
+    ? buildPackages(args.budget, comparisonNeeds, matching)
+    : packages;
+  const minimumFor = (required: Need[]) => buildPackages(0, required, matching)[0]!;
+  const minimum = minimumFor(comparisonNeeds);
+  if (!comparisons.some((p) => p.total <= args.budget)) {
+    comparisons[0] = { ...minimum, tier: "lean" };
+  }
+  const recommended =
+    comparisons.find((p) => p.tier === "balanced" && p.total <= args.budget) ??
+    comparisons.find((p) => p.total <= args.budget) ??
+    comparisons[0]!;
+  const shortfall = Math.max(0, recommended.total - args.budget);
+  const missingRoles = comparisonNeeds
+    .filter((n) => !recommended.lines.some((l) => l.role === n.role))
+    .map((n) => n.role);
+  const money = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  const core = minimumFor(needs.filter((n) => n.role === "styling" || n.role === "mirror"));
+  const reducedScope =
+    shortfall > 0 && core.lines.length === 2 && core.total <= args.budget
+      ? {
+          total: core.total,
+          lines: core.lines.map((l) => ({ id: l.product.id, name: l.product.name, qty: l.qty })),
+          excludedRoles: needs
+            .filter((n) => n.role !== "styling" && n.role !== "mirror")
+            .map((n) => n.role),
+        }
+      : null;
+  const remaining = Math.max(0, args.budget - recommended.total);
+  const expansionOptions =
+    !shortfall && !missingRoles.length && remaining > args.budget * 0.2
+      ? Object.values(CATALOG_FULL)
+          .filter(
+            (p) =>
+              p.in_stock &&
+              !p.is_component &&
+              p.price !== null &&
+              p.price > 0 &&
+              p.price <= remaining &&
+              /retail shelves/i.test(p.name),
+          )
+          .sort((a, b) => a.price! - b.price!)
+          .slice(0, 2)
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            price: p.price!,
+            qty: 1,
+            requiresConfirmation: true as const,
+          }))
+      : [];
+  const budgetNote = missingRoles.length
+    ? `No matching products were found for ${missingRoles.join(", ")}. This is an incomplete estimate, not a full salon within budget.`
+    : shortfall > 0
+      ? `The lowest-cost complete mix matching these requirements is ${money(recommended.total)} USD, ${money(shortfall)} above your budget.${reducedScope ? ` Chairs and mirrors only could start at ${money(core.total)} USD; that excludes wash units, stools, trolleys, reception and waiting seating. Would you like to start with that smaller scope?` : " Would you like to change the equipment scope or station count?"} Your draft has not been reduced automatically.`
+      : `Equipment subtotal: ${money(recommended.total)} USD; ${money(remaining)} remains.${remaining > args.budget * 0.2 ? ` I have not added extra stations or unrelated products just to spend it.${expansionOptions.length ? ` If you sell retail products, optional display choices are ${expansionOptions.map((p) => `${p.name} (${money(p.price)} each)`).join(" or ")}. Would either be useful? These are alternatives, not included in your subtotal.` : " What else does the salon need—retail display, storage or another service area?"}` : ""} Delivery, tax, installation and building work are excluded.`;
   return {
     requirements: args,
-    assumptions:
-      "Draft equipment mix: one chair, mirror and stool per station; one wash unit per three stations; one trolley per two; one reception desk and waiting seat. Quantities can be changed. Not a verified space/layout or plumbing assessment.",
+    essentialsTotal: base.total,
+    recommendedTier: recommended.tier,
+    reducedScope,
+    expansionOptions,
+    selectionReasons: recommended.lines
+      .filter((l) => l.role === "mirror" || l.role === "styling")
+      .map((l) => {
+        const profile = selectionProfile(l.product);
+        return l.role === "mirror"
+          ? `${l.product.name}: ${service === "colour" && profile.features.daylightLighting ? "Published daylight LED lighting is relevant to colour services; room lighting and electrical compatibility still need checking. " : ""}${productFit(l.product).reason}`
+          : `${l.product.name}: catalog identifies ${profile.primaryUse.replaceAll("_", " ")}${profile.features.compact && args.chair_priority === "compact" ? "; manufacturer describes a compact design, but measure the complete operating footprint" : ""}${profile.features.easyClean && args.chair_priority === "easy_clean" ? "; documented cleaning/hair-trap design matches your maintenance priority" : ""}. Confirm height range, base configuration and load rating.`;
+      }),
+    budgetNote,
+    enhancement: useEnhanced
+      ? `Enhanced option: a trolley for each station${service === "makeup_brows" ? ". Wash units omitted for the dedicated makeup/brow brief; add only if you also offer hair washing." : " and up to one wash unit per two stations. Extra plumbing and floor space must be checked before purchase."}`
+      : null,
+    assumptions: `${args.mirror_layout === "wall" ? "Assumes wall-based stations" : "Assumes island stations; mirror quantities account for documented faces where consistent"}, with one chair and stool per station. A mirror without a documented work surface may need a separate bench, not included here. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan.`,
     exclusions:
       "Equipment only, USD. Excludes delivery, tax, installation, building work and stock reservation.",
-    options: packages.map((p) => ({
-      tier: p.tier,
-      total: Math.round(p.total * 100) / 100,
-      missingRoles: needs.filter((n) => !p.lines.some((l) => l.role === n.role)).map((n) => n.role),
-      withinBudget: p.total <= args.budget,
-      reasons: p.reasons,
-      lines: p.lines.map((l) => ({
-        id: l.product.id,
-        name: l.product.name,
-        price: l.product.price,
-        available: l.product.in_stock,
-        role: l.role,
-        qty: l.qty,
-        subtotal: l.subtotal,
-      })),
-    })),
+    options: comparisons.map((p) => {
+      return {
+        tier: p.tier,
+        total: Math.round(p.total * 100) / 100,
+        missingRoles: needs
+          .filter((n) => !p.lines.some((l) => l.role === n.role))
+          .map((n) => n.role),
+        withinBudget: p.total <= args.budget,
+        reasons: [
+          `${money(p.total)} USD for the stated quantities; ${p.total > args.budget ? `${money(p.total - args.budget)} over budget` : `${money(args.budget - p.total)} remaining`}.`,
+          "Price differences are not a verified quality ranking.",
+        ],
+        lines: p.lines.map((l) => ({
+          id: l.product.id,
+          name: l.product.name,
+          price: l.product.price,
+          available: l.product.in_stock,
+          role: l.role,
+          qty: l.qty,
+          subtotal: l.subtotal,
+        })),
+      };
+    }),
   };
 }

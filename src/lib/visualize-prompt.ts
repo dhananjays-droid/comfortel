@@ -562,6 +562,9 @@ function buildRefitPrompt(
 
   return assemble([
     req(
+      `SELECTED PRODUCT CONTRACT: install exactly the listed product models, finishes and quantities from their assigned references; never substitute another model for visual convenience. Show all requested station chairs and mirrors as distinct physical objects, not counts satisfied by reflections. Preserve the real photo's architecture and camera position; do not invent hidden room space to fit the plan.`,
+    ),
+    req(
       `The first image is a photograph of a real hair salon. The images after it are Comfortel product references, grouped by product. ${list}.`,
     ),
     priorityClause(true),
@@ -731,6 +734,9 @@ function buildStagedPrompt(
 
   return assemble([
     req(
+      `COMPOSITION AND PRODUCT CONTRACT: use exactly the listed product models, finishes and quantities from their assigned reference images. Choose a wide corner-to-corner establishing view that shows every requested station separately, with each chair and its mirror visible. Do not deliver a close-up of one station when several were ordered; reflections are not extra stations. For a dimensioned room preserve its stated size; never enlarge it to hide a fit problem.`,
+    ),
+    req(
       `Every image here is a Comfortel product reference, grouped by product. There is NO photograph of a room — you are building the room. ${list}.`,
     ),
     priorityClause(false),
@@ -786,7 +792,7 @@ function buildStagedPrompt(
     // asked — make the room bigger instead. Never shrink a piece, overlap
     // two, or sink one into a wall to force the count in either direction.
     req(
-      `Every count above must be met in full — ${tally}. If a natural composition feels tight, make the room larger or the framing wider; do not leave any piece out. This is the one mode where the room is entirely invented, so there is no real floor to run out of, unlike a photo of the customer's actual space.`,
+      `Every count above must be met in full — ${tally}. If a natural composition feels tight, use wider framing; do not leave any piece out. Only when NO room dimensions were supplied may you make this invented room larger. Never enlarge a dimensioned room or shrink furniture to hide a fit problem.`,
     ),
   ]);
 }
