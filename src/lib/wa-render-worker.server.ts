@@ -25,6 +25,7 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
+import { quantityReview } from "@/lib/wa-render-acceptance";
 
 import { getProduct, type FullProduct } from "@/lib/catalog";
 import { expectedFrom, linesFrom } from "@/lib/plan";
@@ -386,6 +387,7 @@ async function deliverImage(
   // the re-host fails — kie's own CDN survives long enough for one delivery.
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
   const shortfall = shortfallFrom(expectedForJob(job), verdict);
+  const review = quantityReview(expectedForJob(job), verdict);
   const note =
     verdict.inspection === "unavailable"
       ? "I couldn’t verify this image automatically. Please check the products and quantities carefully."
@@ -394,13 +396,13 @@ async function deliverImage(
         : shortfall.length
           ? `This image doesn’t show your full selection: ${shortfall.map((item) => `${item.seen} of ${item.asked} × ${item.name}`).join("; ")}. Your saved plan quantities haven’t changed. You can ask me to adjust the image.`
           : "";
-  const cta = renderCta(job.mode);
-  const buttons = renderCtaButtons(job.mode, job.product_ids, job.quantities);
+  const cta = review.accepted ? renderCta(job.mode) : "The preview needs review. No further generation will start automatically.";
+  const buttons = review.accepted ? renderCtaButtons(job.mode, job.product_ids, job.quantities) : [];
   // The CTA moves into the follow-up buttons message when there is a real
   // action to offer; lineup has none, so it stays in the caption exactly
   // as before.
   const reviewNote =
-    note || "AI visualisation—please check the products, colours and quantities before ordering.";
+    review.message || note || "AI visualisation—please check the products, colours and quantities before ordering.";
   const caption = buttons.length ? reviewNote : `${reviewNote}\n\n${cta}`;
 
   // Claim before sending, not after. Whichever tick wins this update owns the
