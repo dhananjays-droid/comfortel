@@ -190,6 +190,15 @@ export async function handleRequestInbound(
       ]);
   }
   if (record?.status === "draft") {
+    const newQuote = quoteRequestContext(button);
+    if (newQuote) {
+      if (record.category !== "sales")
+        return textTurn("You already have an unfinished support or order request. Please cancel that request or finish it before starting a delivery enquiry.");
+      return saveReply(
+        { stage: "details", details: [{ messageId: waMessageId, text: newQuote }] as unknown as Json },
+        textTurn("I’ve updated your unsent delivery enquiry to this estimate and replaced the previous estimate details. What is your delivery postcode and country? I’ll show the updated request for review before sending it."),
+      );
+    }
     // Navigation pauses a draft; it never turns navigation text into details,
     // submits it or forces an empty confirmation. The unified controller can
     // resume this durable draft explicitly later.
@@ -232,7 +241,9 @@ export async function handleRequestInbound(
       button.startsWith("request:") ||
       event.kind === "button"
     )
-      return [
+      return record.stage !== "confirm" || !requestHasDetails(record)
+        ? textTurn("Your request still needs details before it can be submitted. Please share what you need; for delivery, include your postcode and country.")
+        : [
         confirmationTurn(record),
         ...textTurn(
           "We haven't sent this request yet. You can submit it, add details, or type 'cancel request' to do something else.",

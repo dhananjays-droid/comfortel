@@ -21,6 +21,7 @@ import {
 import { conversationMemory } from "@/lib/wa-conversation-state";
 import type { SessionState } from "@/lib/wa-session";
 import { CATALOG_FULL } from "@/lib/catalog";
+import { clearShoppingPlan } from "@/lib/wa-clear-plan";
 
 export type ConversationInput = {
   sessionKey: string;
@@ -57,6 +58,7 @@ export async function handleConversation(
   let event = input.event;
   const text = event.kind === "text" ? event.text.trim() : "";
   const button = event.kind === "button" ? event.id : "";
+  let clearedPlan = false;
   const runtime = async (e: InboundEvent) => {
     const result = await services.runtime(session, input.sessionKey, input.phone, e);
     Object.assign(session, result.session);
@@ -81,7 +83,7 @@ export async function handleConversation(
     }
     // All paths append exactly once, including native buttons/domain adapters.
     session.transcript = [
-      ...original.transcript,
+      ...(clearedPlan ? [] : original.transcript),
       {
         role: "user" as const,
         content:
@@ -98,7 +100,20 @@ export async function handleConversation(
     ].slice(-24);
     return { session, turns };
   };
+  if (button === "shop:clear" || /^(?:please |plz )?(?:clear|clear (?:my |the )?(?:plan|selection|cart)|reset (?:my |the )?plan)[.! ]*$/i.test(text)) {
+    clearShoppingPlan(session);
+    clearedPlan = true;
+    return respond(say("Your product selection, budget and station requirements are cleared. I’ve kept your room photo. Existing staff requests and running images are unchanged. What would you like to plan next?"));
+  }
   // Existing confirmation/status/cancel guards remain deterministic, ahead of AI.
+  if (/^(?:please )?add (?:this|these|it)?\s*to my plan[.! ]*$/i.test(text)) {
+    const render = session.lastRender;
+    if (render?.productIds.length) {
+      const items = render.productIds.map(id => `${id}:${render.quantities[id] ?? 1}`).join(",");
+      return respond(await runtime({ kind: "button", id: `plan:add:${items}` }));
+    }
+    return respond(say("Which products would you like in your plan? Choose a product or tell me its name and quantity."));
+  }
   if (
     button.startsWith("render:") ||
     /^(?:render status|check render status|cancel render)$/i.test(text)

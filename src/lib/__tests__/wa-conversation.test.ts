@@ -46,6 +46,28 @@ function setup(model: ShoppingModel = finish({ action: "answer", text: "Which pr
   return { services, session, send };
 }
 describe("unified conversation owner", () => {
+  it("resolves add to my plan against the last render without asking the model", async () => {
+    const { session, send, services } = setup();
+    session.lastRender = { resultUrl: "https://example.com/render.jpg", mode: "refit_room", productIds: ["330334"], quantities: { "330334": 5 }, at: 1 };
+    await send("add to my plan");
+    expect(services.runtime).toHaveBeenCalledWith(expect.anything(), "test", "15550000000", { kind: "button", id: "plan:add:330334:5" });
+    expect(services.model).not.toHaveBeenCalled();
+  });
+  it("clears the whole shopping project before the model or pending staff intake", async () => {
+    const { session, send, services } = setup();
+    session.plan = { ids: ["330334"], qty: { "330334": 5 } };
+    session.conversation = conversationMemory({ stations: 5, budget: 25000, activeTask: "request" });
+    session.transcript = [{ role: "user", content: "I want 5 stations for 25000" }];
+    session.room = { url: "https://example.com/room.jpg", at: 1 };
+    const result = await send("clear");
+    expect(result.session.plan.ids).toEqual([]);
+    expect(result.session.conversation?.budget).toBeNull();
+    expect(result.session.conversation?.stations).toBeNull();
+    expect(result.session.room).toEqual(session.room);
+    expect(JSON.stringify(result.session.transcript)).not.toContain("25000");
+    expect(services.model).not.toHaveBeenCalled();
+    expect(services.request).not.toHaveBeenCalled();
+  });
   it("routes explicit support directly without an advisor call", async () => {
     const model = finish({ action: "answer", text: "unused" });
     const { services, send } = setup(model);

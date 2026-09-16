@@ -9,6 +9,7 @@ import { shoppingEligible } from "@/lib/wa-shopping-routing";
 import { ConversationPatch, conversationMemory } from "@/lib/wa-conversation-state";
 import { productSummaries, recommendProducts, salonPlans } from "@/lib/wa-advisor-tools";
 import { matchesProductPurpose } from "@/lib/product-purpose";
+import { clearShoppingPlan } from "@/lib/wa-clear-plan";
 
 const memorySchema = {
   type: "object",
@@ -442,9 +443,7 @@ export async function handleShoppingInbound(
       return selectionTurns(session);
     }
     if (event.id === "shop:clear") {
-      session.plan = { ids: [], qty: {} };
-      session.shoppingMemory = {};
-      session.pendingRender = null;
+      clearShoppingPlan(session);
       return [
         {
           kind: "text",
@@ -699,8 +698,7 @@ export async function handleShoppingInbound(
         ];
       }
       if (decision.action === "clear_selection") {
-        session.plan = { ids: [], qty: {} };
-        session.pendingRender = null;
+        clearShoppingPlan(session);
         return [
           {
             kind: "text",

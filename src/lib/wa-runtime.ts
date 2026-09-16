@@ -1160,7 +1160,8 @@ function mergeIntoPlan(plan: SessionPlan, items: Array<{ id: string; qty: number
   const qty = { ...plan.qty };
   for (const item of items) {
     if (!ids.includes(item.id)) ids.push(item.id);
-    qty[item.id] = (qty[item.id] ?? 0) + item.qty;
+    // A render button represents a selection snapshot, not extra units.
+    qty[item.id] = item.qty;
   }
   return { ids, qty };
 }
@@ -1186,7 +1187,7 @@ function addToPlanTurn(session: SessionState, tappedId: string): RuntimeResult {
   const products = plan.ids.map((id) => getProduct(id)).filter((p): p is FullProduct => Boolean(p));
   const lines = linesFrom(products, plan.qty);
   const pieces = planPieces(lines);
-  const replyText = `Added ${names} to your plan, now ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Type 'PDF quote' for an itemised estimate, or tell me what you'd like to add next.`;
+  const replyText = `Saved ${names} to your plan using the pictured selection’s quantities: ${pieces} piece${pieces === 1 ? "" : "s"} at ${formatPrice(planTotal(lines))}. Existing quantities for these products were replaced, not added again. Type 'PDF quote' for an itemised estimate.`;
   return { session: { ...session, plan }, turns: [{ kind: "text", text: replyText }] };
 }
 

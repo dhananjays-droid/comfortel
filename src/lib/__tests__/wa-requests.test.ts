@@ -100,6 +100,17 @@ describe("WhatsApp intent routing", () => {
 });
 
 describe("durable request intake", () => {
+  it("replaces an old unsent estimate before reviewing delivery for a new PDF", async () => {
+    await send({ kind: "button", id: "request:sales:quote:330334:1:CQ-ABCDEF1234" });
+    const reply = await send({ kind: "button", id: "request:sales:quote:330283:5:CQ-B6E352D644" });
+    expect(JSON.stringify(rows[0]?.details)).toContain("CQ-B6E352D644");
+    expect(JSON.stringify(rows[0]?.details)).not.toContain("CQ-ABCDEF1234");
+    expect(JSON.stringify(reply)).not.toContain("Submit request");
+    expect(rows[0]?.stage).toBe("details");
+    await text("Delivery to 10001 USA");
+    await text("submit request");
+    expect(rows[0]?.status).toBe("open");
+  });
   it("keeps PDF products and quantities in the draft for staff review", async () => {
     const reply = await send({
       kind: "button",

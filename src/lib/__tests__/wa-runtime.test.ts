@@ -681,7 +681,7 @@ describe("handleInboundMessage — add to plan", () => {
     }
   });
 
-  it("adds to an existing quantity rather than overwriting it", async () => {
+  it("sets snapshot quantities instead of doubling the existing plan", async () => {
     const state: SessionState = {
       ...fresh(),
       transcript: [{ role: "assistant", content: "already greeted" }],
@@ -691,7 +691,11 @@ describe("handleInboundMessage — add to plan", () => {
       kind: "button",
       id: `plan:add:${REAL_ID}:1`,
     });
-    expect(session.plan.qty[REAL_ID]).toBe(3);
+    expect(session.plan.qty[REAL_ID]).toBe(1);
+    const again = await handleInboundMessage(session, SESSION_KEY, TEST_PHONE, {
+      kind: "button", id: `plan:add:${REAL_ID}:1`,
+    });
+    expect(again.session.plan.qty[REAL_ID]).toBe(1);
   });
 
   it("ignores a tap naming no real product", async () => {
