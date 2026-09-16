@@ -409,7 +409,7 @@ async function deliver(to: string, sessionKey: string, turns: WaTurn[]): Promise
       }
       const waMessageId =
         turn.kind === "catalog"
-          ? await sendCatalog(to, turn.text)
+          ? await sendCatalog(to, turn.text, turn.thumbnailProductRetailerId)
           : turn.kind === "document"
             ? await sendDocument(to, turn.bytes, turn.filename, turn.caption)
             : turn.kind === "buttons"

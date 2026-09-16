@@ -30,6 +30,27 @@ beforeEach(() => {
     if (table === "managed_products")
       return {
         select: () => ({
+          not: () => ({
+            order: () => ({
+              limit: async () => ({
+                data: [
+                  {
+                    id: "chair",
+                    meta_id: "meta-chair",
+                    product: {
+                      name: "Chair",
+                      price: 15,
+                      currency: "USD",
+                      in_stock: true,
+                      archived: false,
+                      updated_image_link: "https://cdn.example.com/chair.jpg",
+                    },
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
           in: async () => ({
             data: [
               {
@@ -60,6 +81,7 @@ describe("WhatsApp cart to staff lead", () => {
   it("opens the native catalog with honest order wording", async () =>
     expect(await catalogTurn()).toMatchObject({
       kind: "catalog",
+      thumbnailProductRetailerId: "chair",
       text: expect.stringContaining("does not confirm an order"),
     }));
   it("saves the submitted price and flags a changed master price", async () => {

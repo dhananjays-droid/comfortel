@@ -9,15 +9,40 @@ export async function catalogTurn(): Promise<WaTurn> {
     .select("*")
     .eq("id", true)
     .single();
-  return !error && data?.enabled && data.catalog_id
-    ? {
-        kind: "catalog",
-        text: "Browse our products, choose quantities and send your cart here. Our team will help with delivery and the next steps—sending a cart does not confirm an order.",
-      }
-    : {
-        kind: "text",
-        text: "Our WhatsApp catalog is not available yet. Tell me what you’re looking for and I’ll show you the options here.",
-      };
+  if (error || !data?.enabled || !data.catalog_id)
+    return {
+      kind: "text",
+      text: "Our WhatsApp catalog is not available yet. Tell me what you’re looking for and I’ll show you the options here.",
+    };
+
+  // Meta's catalog-message action needs a real, published retailer ID to
+  // resolve the linked catalog. Prefer rows that the sync worker has already
+  // acknowledged with a Meta ID, then verify the product is still sellable.
+  const { data: rows, error: productError } = await productDb
+    .from("managed_products")
+    .select("id, product, meta_id")
+    .not("meta_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  const thumbnail = (rows as Array<Pick<ProductRow, "id" | "product">> | null)?.find(
+    ({ product }) =>
+      !product.archived &&
+      product.in_stock &&
+      product.price !== null &&
+      product.price > 0 &&
+      Boolean(product.updated_image_link),
+  );
+  if (productError || !thumbnail)
+    return {
+      kind: "text",
+      text: "Our WhatsApp catalog is not available yet. Tell me what you’re looking for and I’ll show you the options here.",
+    };
+
+  return {
+    kind: "catalog",
+    thumbnailProductRetailerId: thumbnail.id,
+    text: "Browse our products, choose quantities and send your cart here. Our team will help with delivery and the next steps—sending a cart does not confirm an order.",
+  };
 }
 export async function receiveCatalogCart(input: {
   sessionKey: string;

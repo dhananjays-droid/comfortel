@@ -99,8 +99,23 @@ export async function sendText(to: string, body: string, signal?: AbortSignal): 
   return send({ to, type: "text", text: { body: truncate(body, WA.body) } }, signal);
 }
 
-export async function sendCatalog(to:string,body:string):Promise<string> {
-  return send({to,type:"interactive",interactive:{type:"catalog_message",body:{text:body},action:{name:"catalog_message"}}});
+export async function sendCatalog(
+  to: string,
+  body: string,
+  thumbnailProductRetailerId: string,
+): Promise<string> {
+  return send({
+    to,
+    type: "interactive",
+    interactive: {
+      type: "catalog_message",
+      body: { text: body },
+      action: {
+        name: "catalog_message",
+        parameters: { thumbnail_product_retailer_id: thumbnailProductRetailerId },
+      },
+    },
+  });
 }
 
 /** Staff replies must never be silently truncated by the bot's shorter limit. */

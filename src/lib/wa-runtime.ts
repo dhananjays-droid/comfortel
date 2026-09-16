@@ -111,7 +111,7 @@ function wantsHandoff(text: string): boolean {
 }
 
 export type WaTurn =
-  | { kind: "catalog"; text: string }
+  | { kind: "catalog"; text: string; thumbnailProductRetailerId: string }
   | { kind: "document"; bytes: Uint8Array; filename: string; caption: string; reference: string }
   | { kind: "text"; text: string }
   | {
