@@ -299,7 +299,14 @@ async function requestShoppingModel(
         {
           type: "text",
           text: `${whatsappKnowledgeInstructions().replace("You cannot create a ticket yourself: ask the customer to type support, order help, complaint or sales request to enter the saved-request flow.", "Use the request_start tool action to prepare a staff request; only customer confirmation may submit it.")}\n${INSTRUCTIONS}`,
-          cache_control: { type: "ephemeral" },
+          // One hour, not five minutes. This prefix is identical for every
+          // customer, and WhatsApp turns arrive minutes apart: with the 5m TTL
+          // a customer who paused to check a price re-wrote the whole 6k-token
+          // prefix on their next message. The 1h write costs 2x base input
+          // against 1.25x — about $0.009 more per cold start on Sonnet 5 — and
+          // is repaid by the first read that lands between 5 and 60 minutes
+          // later, from this customer or any other.
+          cache_control: { type: "ephemeral", ttl: "1h" },
         },
         {
           type: "text",

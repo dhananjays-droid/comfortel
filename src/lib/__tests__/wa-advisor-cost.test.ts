@@ -51,7 +51,7 @@ describe("advisor cost routing", () => {
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(bodies[0].model).toBe("claude-haiku-4-5-20251001");
     expect(bodies[0].system[0]).toEqual(bodies[1].system[0]);
-    expect(bodies[0].system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(bodies[0].system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(bodies[0].system[0].text).not.toContain("synthetic-A");
     expect(bodies[0].system[1].cache_control).toBeUndefined();
     expect(bodies[0].system[1].text).toContain("synthetic-A");
