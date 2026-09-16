@@ -30,27 +30,6 @@ beforeEach(() => {
     if (table === "managed_products")
       return {
         select: () => ({
-          not: () => ({
-            order: () => ({
-              limit: async () => ({
-                data: [
-                  {
-                    id: "chair",
-                    meta_id: "meta-chair",
-                    product: {
-                      name: "Chair",
-                      price: 15,
-                      currency: "USD",
-                      in_stock: true,
-                      archived: false,
-                      updated_image_link: "https://cdn.example.com/chair.jpg",
-                    },
-                  },
-                ],
-                error: null,
-              }),
-            }),
-          }),
           in: async () => ({
             data: [
               {
@@ -62,10 +41,23 @@ beforeEach(() => {
                   currency: "USD",
                   in_stock: true,
                   archived: false,
+                  updated_image_link: "https://cdn.example.com/chair.jpg",
                 },
               },
             ],
             error: null,
+          }),
+        }),
+      };
+    if (table === "product_meta_sync")
+      return {
+        select: () => ({
+          eq: () => ({
+            not: () => ({
+              order: () => ({
+                limit: async () => ({ data: [{ product_id: "chair" }], error: null }),
+              }),
+            }),
           }),
         }),
       };

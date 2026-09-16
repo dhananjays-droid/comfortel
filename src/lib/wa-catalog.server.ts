@@ -18,12 +18,19 @@ export async function catalogTurn(): Promise<WaTurn> {
   // Meta's catalog-message action needs a real, published retailer ID to
   // resolve the linked catalog. Prefer rows that the sync worker has already
   // acknowledged with a Meta ID, then verify the product is still sellable.
-  const { data: rows, error: productError } = await productDb
-    .from("managed_products")
-    .select("id, product, meta_id")
+  const { data: synced, error: syncError } = await productDb
+    .from("product_meta_sync")
+    .select("product_id")
+    .eq("state", "synced")
     .not("meta_id", "is", null)
     .order("updated_at", { ascending: false })
     .limit(50);
+  const syncedIds = (synced as Array<{ product_id: string }> | null)?.map(
+    ({ product_id }) => product_id,
+  );
+  const { data: rows, error: productError } = syncedIds?.length
+    ? await productDb.from("managed_products").select("id, product").in("id", syncedIds)
+    : { data: null, error: syncError ?? new Error("No synced catalog products") };
   const thumbnail = (rows as Array<Pick<ProductRow, "id" | "product">> | null)?.find(
     ({ product }) =>
       !product.archived &&
@@ -32,7 +39,7 @@ export async function catalogTurn(): Promise<WaTurn> {
       product.price > 0 &&
       Boolean(product.updated_image_link),
   );
-  if (productError || !thumbnail)
+  if (syncError || productError || !thumbnail)
     return {
       kind: "text",
       text: "Our WhatsApp catalog is not available yet. Tell me what you’re looking for and I’ll show you the options here.",
