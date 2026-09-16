@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdir, writeFile } from "node:fs/promises";
 import { PDFDocument, PDFName } from "pdf-lib";
+import sharp from "sharp";
 import { CATALOG_FULL } from "@/lib/catalog";
 import {
   documentLines,
@@ -143,4 +144,54 @@ describe("PDF generation", () => {
     },
     30000,
   );
+});
+
+describe("loadProductImage sourcing", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("serves the photo from our CDN copy and never needs the vendor host", async () => {
+    // The vendor host is exactly the one that failed intermittently from Vercel
+    // and produced "image unavailable" boxes; the CDN mirror must be enough.
+    const jpeg = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: "#cc9966" },
+    })
+      .jpeg()
+      .toBuffer();
+    const hosts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | string) => {
+        const url = new URL(String(input));
+        hosts.push(url.hostname);
+        if (url.hostname === "comfortelfurniture.com") throw new Error("vendor host unreachable");
+        return new Response(jpeg, { status: 200, headers: { "content-type": "image/jpeg" } });
+      }),
+    );
+    const vendorUrl = Object.values(CATALOG_FULL).find((p) => p.images[0])!.images[0]!;
+    const bytes = await loadProductImage(vendorUrl);
+    expect(bytes).not.toBeNull();
+    expect(hosts[0]).toBe("web-assets.quickads.ai");
+    expect(hosts).not.toContain("comfortelfurniture.com");
+  });
+
+  it("falls back to the vendor URL for a photo the CDN does not have yet", async () => {
+    const jpeg = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: "#336699" },
+    })
+      .jpeg()
+      .toBuffer();
+    const hosts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | string) => {
+        hosts.push(new URL(String(input)).hostname);
+        return new Response(jpeg, { status: 200 });
+      }),
+    );
+    const bytes = await loadProductImage(
+      "https://comfortelfurniture.com/wp-content/uploads/not-yet-synced.jpg",
+    );
+    expect(bytes).not.toBeNull();
+    expect(hosts).toEqual(["comfortelfurniture.com"]);
+  });
 });
