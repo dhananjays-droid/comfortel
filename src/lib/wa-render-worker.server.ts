@@ -359,7 +359,10 @@ export function renderCtaButtons(
   mode: VisualizeMode,
   productIds: string[],
   quantities: Record<string, number> | null,
+  sample = false,
 ): Array<{ id: string; title: string }> {
+  // A preview is not a replacement shopping selection or a smaller quote.
+  if (sample) return [{ id: "render:adjust", title: "Adjust image" }];
   if (mode === "edit")
     return [
       { id: "render:adjust", title: "Adjust image" },
@@ -396,14 +399,17 @@ async function deliverImage(
         : shortfall.length
           ? `This image doesn’t show your full selection: ${shortfall.map((item) => `${item.seen} of ${item.asked} × ${item.name}`).join("; ")}. Your saved plan quantities haven’t changed. You can ask me to adjust the image.`
           : "";
-  const cta = review.accepted ? renderCta(job.mode) : "The preview needs review. No further generation will start automatically.";
-  const buttons = review.accepted ? renderCtaButtons(job.mode, job.product_ids, job.quantities) : [];
+  const sample = /^(Partial look-and-feel sample|Vista parcial de ejemplo)/.test(job.note ?? "");
+  const cta = sample
+    ? "This is a partial style preview, not your full salon plan. Your full quote is unchanged."
+    : review.accepted ? renderCta(job.mode) : "The preview needs review. No further generation will start automatically.";
+  const buttons = review.accepted ? renderCtaButtons(job.mode, job.product_ids, job.quantities, sample) : [];
   // The CTA moves into the follow-up buttons message when there is a real
   // action to offer; lineup has none, so it stays in the caption exactly
   // as before.
   const reviewNote =
     review.message || note || "AI visualisation—please check the products, colours and quantities before ordering.";
-  const caption = buttons.length ? reviewNote : `${reviewNote}\n\n${cta}`;
+  const caption = buttons.length && !sample ? reviewNote : `${reviewNote}\n\n${cta}`;
 
   // Claim before sending, not after. Whichever tick wins this update owns the
   // delivery; the loser returns having sent nothing, which is the only thing

@@ -323,23 +323,34 @@ export async function prepareAdvisorRender(
       session,
       "Please upload a photo of your salon. I’ll show you the products and image request to confirm before generating anything.",
     );
-  if (session.plan.ids.some((id) => (session.plan.qty[id] ?? 1) > 20))
-    return messageResult(
-      session,
-      "Your selection includes more than 20 of one product. Which smaller area should we visualise? Your quote quantities haven’t changed.",
-    );
-  if (session.plan.ids.length > 10)
-    return messageResult(
-      session,
-      "This plan contains more than 10 different products. Please choose a smaller area to visualise first so no selected products are silently omitted. Your full estimate is unchanged.",
-    );
+  // Render scope is independent of the shopping plan. Never shrink the quote
+  // to satisfy the image provider's limits, or enqueue without confirmation.
+  const sample = session.plan.ids.length > 10 ||
+    session.plan.ids.some((id) => (session.plan.qty[id] ?? 1) > 20);
+  const productIds = sample ? session.plan.ids.slice(0, 10) : [...session.plan.ids];
+  let quantities = { ...session.plan.qty };
+  if (sample) {
+    const largest = Math.max(...productIds.map((id) => session.plan.qty[id] ?? 1));
+    quantities = Object.fromEntries(productIds.map((id) => [
+      id, Math.max(1, Math.floor((session.plan.qty[id] ?? 1) * Math.min(1, 6 / largest))),
+    ]));
+    // Bound visual complexity as well as each individual quantity. Keep at
+    // least one of each selected product; stable ties preserve plan ordering.
+    while (Object.values(quantities).reduce((sum, n) => sum + n, 0) > 18) {
+      const largestId = productIds.reduce((a, b) => quantities[a]! >= quantities[b]! ? a : b);
+      quantities[largestId] = quantities[largestId]! - 1;
+    }
+  }
+  const sampleNote = session.locale === "es"
+    ? "Vista parcial de ejemplo, no el salón completo. Solo se mostrarán los productos y cantidades indicados arriba; el presupuesto completo no cambia. No confirma la capacidad del espacio ni garantiza cantidades exactas en la imagen."
+    : "Partial look-and-feel sample, not the full salon plan. Only the products and quantities listed above are included in this preview; your full quote is unchanged. This is not verified room capacity or a guarantee of exact image counts.";
   return proposeRender(session, {
     mode,
-    productIds: [...session.plan.ids],
-    quantities: { ...session.plan.qty },
+    productIds,
+    quantities,
     room: mode === "staged_room" ? null : session.room,
     roomSpec: session.roomSpec,
-    note,
+    note: sample ? `${sampleNote}\nRender only this sample, not all quoted equipment. ${note ? `Style request (sample quantities above take precedence): ${note}` : ""}` : note,
   });
 }
 

@@ -37,6 +37,11 @@ describe("renderCta", () => {
 });
 
 describe("renderCtaButtons", () => {
+  it("never offers to add sample quantities or quote the sample", () => {
+    expect(renderCtaButtons("refit_room", ["a"], { a: 6 }, true)).toEqual([
+      { id: "render:adjust", title: "Adjust image" },
+    ]);
+  });
   it("offers an adjustment action after an edit without inventing a new render", () => {
     expect(renderCtaButtons("edit", [], null)).toContainEqual({
       id: "render:adjust",

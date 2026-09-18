@@ -8,7 +8,7 @@ vi.mock("@/lib/wa-render-jobs.server", () => ({
 }));
 vi.mock("@/lib/wa-rate-limit.server", () => ({ tooManyRenderRequests: vi.fn(async () => false) }));
 vi.mock("@/lib/wa-render-guards.server", () => ({ claimRenderAction: m.claim }));
-import { handleInboundMessage } from "@/lib/wa-runtime";
+import { handleInboundMessage, prepareAdvisorRender } from "@/lib/wa-runtime";
 import { EMPTY_SESSION, liveRoom, sanitizeSession, type SessionState } from "@/lib/wa-session";
 import { CATALOG_FULL } from "@/lib/catalog";
 import { groupByZone } from "@/lib/zones";
@@ -44,6 +44,56 @@ beforeEach(() => {
   });
 });
 describe("WhatsApp explicit render confirmation", () => {
+  it("offers a disclosed sample of a large quote without generating or changing the quote", async () => {
+    const ids = Object.keys(CATALOG_FULL).slice(0, 9);
+    const qty = Object.fromEntries(ids.map((id, i) => [id, [32, 34, 12, 12, 34, 1, 1, 1, 1][i]!]));
+    const s = { ...fresh(), plan: { ids, qty } };
+    const before = structuredClone(s.plan);
+    const r = await prepareAdvisorRender(s, "wa:test", "anything just give me salon visual");
+    expect(r.session.plan).toEqual(before);
+    expect(s.plan).toEqual(before);
+    expect(r.session.pendingRender?.room).toEqual(room);
+    expect(words(r)).toContain("Partial look-and-feel sample");
+    expect(words(r)).toContain("full quote is unchanged");
+    expect(words(r)).not.toContain("Which smaller area");
+    expect(Math.max(...Object.values(r.session.pendingRender!.quantities))).toBeLessThanOrEqual(6);
+    expect(Object.values(r.session.pendingRender!.quantities).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(18);
+    expect(m.enqueue).not.toHaveBeenCalled();
+    const stored = sanitizeSession(JSON.parse(JSON.stringify(r.session)));
+    const sent = await confirm(stored);
+    expect(m.enqueue).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(m.enqueue.mock.calls[0])).toContain("Partial look-and-feel sample");
+    expect(sent.session.plan).toEqual(before);
+  });
+
+  it("limits distinct sample products and discloses that only listed items appear", async () => {
+    const ids = Object.keys(CATALOG_FULL).slice(0, 12);
+    const s = { ...fresh(), plan: { ids, qty: Object.fromEntries(ids.map(id => [id, 1])) } };
+    const r = await prepareAdvisorRender(s, "wa:test", "show the look and feel");
+    expect(r.session.pendingRender?.productIds).toEqual(ids.slice(0, 10));
+    expect(words(r)).toContain("Only the products and quantities listed above");
+    expect(r.session.plan.ids).toHaveLength(12);
+    expect(m.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps a small plan's requested quantities and still asks for a missing photo", async () => {
+    const s = { ...fresh(), plan: { ids: [id], qty: { [id]: 4 } } };
+    const r = await prepareAdvisorRender(s, "wa:test", "show my plan");
+    expect(r.session.pendingRender?.quantities).toEqual(s.plan.qty);
+    expect(words(r)).not.toContain("Partial look-and-feel");
+    const missing = await prepareAdvisorRender({ ...s, room: null }, "wa:test", "show my plan");
+    expect(missing.session.pendingRender).toBeFalsy();
+    expect(words(missing)).toContain("upload a photo");
+  });
+
+  it("labels staged samples without substituting a room photo", async () => {
+    const s = { ...fresh(), plan: { ids: [id], qty: { [id]: 60 } } };
+    const r = await prepareAdvisorRender(s, "wa:test", "example salon", "staged_room");
+    expect(r.session.pendingRender?.room).toBeNull();
+    expect(r.session.pendingRender?.quantities[id]).toBe(6);
+    expect(words(r)).toContain("not your uploaded photo");
+    expect(r.session.plan.qty[id]).toBe(60);
+  });
   it("zone-by-zone requests require one confirmation before any images are queued", async () => {
     const groups = groupByZone(Object.values(CATALOG_FULL));
     const ids = groups.map((g) => g.products[0]!.id);
