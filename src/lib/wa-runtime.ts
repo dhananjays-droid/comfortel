@@ -476,7 +476,7 @@ async function startRenderTurn(
       : `Show me the ${products[0]?.name ?? "this piece"} in a salon.`;
 
   const subject = photo ? "your salon photo" : "an example salon";
-  const contentText = `All set—your request for ${enqueued === 1 ? "an image" : `${enqueued} images`} using ${subject} is queued for generation. I’ll send ${enqueued === 1 ? "your image" : "your images"} here automatically when ready, and keep you updated along the way. No need to check back.${enqueued < groups.length ? " Some options could not be queued; only the confirmed images will be generated." : ""}`;
+  const contentText = `All set—your request for ${enqueued === 1 ? "an image" : `${enqueued} images`} using ${subject} is queued for generation. I’ll keep you updated on progress and send ${enqueued === 1 ? "your image" : "your images"} here when ready.${enqueued < groups.length ? " Some options could not be queued; only the confirmed images will be generated." : ""}`;
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -527,7 +527,7 @@ async function startEditTurn(
 
   const askedText = note ? `Change the render: ${note}` : "Update my last render.";
   const contentText =
-    "All set—your image update is queued. I’ll send the edited image here automatically when it’s ready, and keep you updated along the way. No need to check back.";
+    "All set—your image update is queued. I’ll keep you updated on progress and send the edited image here when it’s ready.";
 
   let next = appendTranscript(session, "user", askedText);
   next = appendTranscript(next, "assistant", contentText);
@@ -582,7 +582,7 @@ async function renderPlanByZoneTurn(
   if (enqueued === 0) return { session, turns: [RENDER_FAILED_TURN] };
 
   const zones = groups.map((g) => g.label.toLowerCase()).join(", ");
-  const contentText = `All set—${enqueued} image${enqueued === 1 ? " is" : "s are"} queued for your salon areas (${zones}). I’ll send each result here automatically when it’s ready, and keep you updated along the way. No need to check back.${enqueued < groups.length ? " Some areas could not be queued." : ""}`;
+  const contentText = `All set—${enqueued} image${enqueued === 1 ? " is" : "s are"} queued for your salon areas (${zones}). I’ll keep you updated on progress and send each result here when it’s ready.${enqueued < groups.length ? " Some areas could not be queued." : ""}`;
   const next = appendTranscript(session, "assistant", contentText);
   return { session: next, turns: [{ kind: "text", text: contentText }] };
 }

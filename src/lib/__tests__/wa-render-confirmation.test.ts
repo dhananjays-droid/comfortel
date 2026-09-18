@@ -169,10 +169,11 @@ describe("WhatsApp explicit render confirmation", () => {
       expect.objectContaining({ roomUrl: room.url, mode: "refit_room", quantities: { [id]: 2 } }),
     );
     expect(words(sent)).toContain("queued");
+    expect(words(sent)).not.toContain("No need to check back");
     expect(sent.turns).toContainEqual(
       expect.objectContaining({
         kind: "text",
-        text: expect.stringContaining("automatically when ready"),
+        text: expect.stringContaining("keep you updated on progress"),
       }),
     );
     expect(JSON.stringify(sent.turns)).not.toContain("render:status");

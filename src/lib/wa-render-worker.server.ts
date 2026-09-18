@@ -389,27 +389,22 @@ async function deliverImage(
   // Falls back to the tempfile URL rather than losing the render entirely if
   // the re-host fails — kie's own CDN survives long enough for one delivery.
   const durableUrl = (await rehostRender(imageUrl)) ?? imageUrl;
-  const shortfall = shortfallFrom(expectedForJob(job), verdict);
   const review = quantityReview(expectedForJob(job), verdict);
-  const note =
-    verdict.inspection === "unavailable"
-      ? "I couldn’t verify this image automatically. Please check the products and quantities carefully."
-      : "editCheck" in verdict
-        ? editDeliveryNote(verdict as EditVerdict)
-        : shortfall.length
-          ? `This image doesn’t show your full selection: ${shortfall.map((item) => `${item.seen} of ${item.asked} × ${item.name}`).join("; ")}. Your saved plan quantities haven’t changed. You can ask me to adjust the image.`
-          : "";
   const sample = /^(Partial look-and-feel sample|Vista parcial de ejemplo)/.test(job.note ?? "");
   const cta = sample
     ? "This is a partial style preview, not your full salon plan. Your full quote is unchanged."
     : review.accepted ? renderCta(job.mode) : "The preview needs review. No further generation will start automatically.";
   const buttons = review.accepted ? renderCtaButtons(job.mode, job.product_ids, job.quantities, sample) : [];
-  // The CTA moves into the follow-up buttons message when there is a real
-  // action to offer; lineup has none, so it stays in the caption exactly
-  // as before.
-  const reviewNote =
-    review.message || note || "AI visualisation—please check the products, colours and quantities before ordering.";
-  const caption = buttons.length && !sample ? reviewNote : `${reviewNote}\n\n${cta}`;
+  // Keep per-product verification diagnostics in admin logs, not customer copy.
+  // A sample gets one disclosure, rather than repeating the same warning.
+  const previewCaption = sample
+    ? "Here’s a preview of how your salon could look with the selected furniture. It shows a sample area, not the full plan. Product details, quantities and fit may vary in the image; your quote remains unchanged."
+    : "Here’s your salon preview. Product details, quantities and fit may vary in the image; your plan and quote remain unchanged.";
+  const caption = sample
+    ? previewCaption
+    : "editCheck" in verdict
+      ? editDeliveryNote(verdict as EditVerdict)
+      : `${previewCaption}${!buttons.length && review.accepted ? `\n\n${cta}` : ""}`;
 
   // Claim before sending, not after. Whichever tick wins this update owns the
   // delivery; the loser returns having sent nothing, which is the only thing
@@ -422,6 +417,7 @@ async function deliverImage(
     await logOutbound(imageMessageId, job.session_key, "image", {
       imageUrl: durableUrl,
       caption,
+      quantityReview: review,
     });
     await recordDeliveredRender(job, durableUrl);
     if (buttons.length) {
