@@ -19,6 +19,25 @@ const other = "330283";
 const text = (text: string) => ({ kind: "text" as const, text });
 
 describe("shopping conversation tool boundary", () => {
+  it.each([
+    { stations: 34, budget: 50000, service_focus: "mixed", expected: "32 hair/colour, 1 barber, 1 makeup/brow" },
+    { stations: 29, budget: 45000, equipment_quantities: { wash: 17, trolley: 29 }, expected: "Over budget by" },
+    { stations: 4, budget: 20000, mirror_feature: "led", mirror_layout: "island", expected: "Incomplete plan:" },
+  ])("keeps essential proposal facts without duplicate messages: $expected", async ({ expected, ...input }) => {
+    const s = fresh();
+    s.conversation = { ...s.conversation!, currency: "USD", budgetScope: "equipment" };
+    const model: ShoppingModel = vi.fn(async () => [{ type: "tool_use", id: "plan-copy", name: "plan_salon", input: { ...input, currency: "USD", scope: "equipment" } }]);
+    const turns = (await handleShoppingInbound(s, text("Please prepare my USD equipment plan"), "plan-copy", model, { unified: true }))!;
+    const body = turns.map(t => "text" in t ? t.text : "").join("\n");
+    expect(body).toContain(expected);
+    expect(body.match(/Equipment subtotal:/g)).toHaveLength(1);
+    expect(body).toContain("No order placed");
+    expect(body).not.toMatch(/searched up to|Zero quantities|historical component prices|catalog identifies/);
+    expect(turns.length).toBeLessThanOrEqual(2);
+    const buttons = turns.find(t => t.kind === "buttons")!;
+    expect(buttons.text.length).toBeLessThanOrEqual(1000);
+    expect(buttons.action.buttons.map(b => b.id)).toEqual(["shop:quote", "shop:clear", "advisor:render"]);
+  });
   it("saves a $65k capacity proposal above 20 stations without rendering or truncation", async () => {
     const s = fresh();
     s.conversation = { ...s.conversation!, currency: "USD", budget: 65000, budgetScope: "equipment" };
@@ -29,8 +48,12 @@ describe("shopping conversation tool boundary", () => {
     expect(model).toHaveBeenCalledTimes(1);
     expect(s.conversation?.stations).toBeGreaterThan(20);
     expect(s.pendingRender).toBeNull();
-    expect(JSON.stringify(turns)).toContain("NOT verified room capacity");
-    expect(JSON.stringify(turns)).toContain("Catalog prices are provisional");
+    expect(JSON.stringify(turns)).toContain("Room fit and final equipment configurations need confirmation");
+    const body = turns!.map(t => "text" in t ? t.text : "").join("\n");
+    expect(body.match(/Equipment subtotal:/g)).toHaveLength(1);
+    expect(body).not.toMatch(/searched up to|Zero quantities|historical component prices|catalog identifies/);
+    expect(turns!.length).toBeLessThanOrEqual(2);
+    expect(body).toContain("Remaining:");
     const reloaded = sanitizeSession(s);
     expect(reloaded.conversation?.stations).toBe(s.conversation?.stations);
     expect(reloaded.plan).toEqual(s.plan);
@@ -47,7 +70,7 @@ describe("shopping conversation tool boundary", () => {
     expect(s.conversation?.pendingQuestion).toBeNull();
     expect(s.plan.ids.length).toBeGreaterThan(0);
     expect(model).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(turns)).toContain("Draft service split");
+    expect(JSON.stringify(turns)).toContain("3 hair/colour, 1 barber, 1 makeup/brow");
   });
   it("turns a hollow planning promise into a real plan in the same turn", async () => {
     const s = fresh();

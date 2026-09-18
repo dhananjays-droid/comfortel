@@ -375,7 +375,7 @@ async function requestShoppingModel(
   return payload.content;
 }
 
-function selectionTurn(session: SessionState): WaTurn {
+function selectionTurn(session: SessionState): Extract<WaTurn, { kind: "buttons" }> {
   const subtotal = session.plan.ids.reduce(
     (sum, id) => sum + (CATALOG_FULL[id]?.price ?? 0) * (session.plan.qty[id] ?? 1),
     0,
@@ -404,12 +404,35 @@ function selectionTurn(session: SessionState): WaTurn {
 }
 
 function selectionTurns(session: SessionState): WaTurn[] {
-  const turn = selectionTurn(session);
+  return withSelectionActions(selectionTurn(session));
+}
+
+/** WhatsApp button bodies are limited: keep the full plan once, never truncate it. */
+function withSelectionActions(turn: WaTurn): WaTurn[] {
   if (turn.kind !== "buttons" || turn.text.length <= 1000) return [turn];
   return [
     { kind: "text", text: turn.text },
     { ...turn, text: "Your draft is saved. What would you like to do next?" },
   ];
+}
+
+function proposalTurns(session: SessionState, plans: ReturnType<typeof salonPlans>): WaTurn[] {
+  const chosen = plans.options.find(p => p.tier === plans.recommendedTier)!;
+  const n = plans.requirements.stations;
+  const split = plans.requirements.service_focus === "mixed"
+    ? ` — ${n - 2} hair/colour, 1 barber, 1 makeup/brow` : "";
+  const remaining = plans.requirements.budget - chosen.total;
+  const budget = remaining >= 0
+    ? `Remaining: ${formatPrice(remaining)}.`
+    : `Over budget by ${formatPrice(-remaining)}; requested quantities kept. Change the quantities or scope to fit your budget.`;
+  const missing = chosen.missingRoles.length
+    ? `\nIncomplete plan: no matching ${chosen.missingRoles.join(", ")} products found.` : "";
+  const lines = chosen.lines.map(l => `${l.qty} × ${l.name} — ${formatPrice(l.subtotal)}`).join("\n");
+  const actions = selectionTurn(session);
+  return withSelectionActions({
+    ...actions,
+    text: `Your draft plan: ${n} stations${split}\n\n${lines}\n\nEquipment subtotal: ${formatPrice(chosen.total)} USD. ${budget}${missing}\n\nDraft estimate. Room fit and final equipment configurations need confirmation; separate work surfaces may be needed. Delivery, tax, installation and building work excluded.\nYou can change products or quantities. No order placed.`,
+  });
 }
 
 /** Feature-gated by the dispatcher. All changes are staged until a valid final
@@ -593,17 +616,7 @@ export async function handleShoppingInbound(
                 budgetScope: "equipment",
                 pendingQuestion: null,
               });
-              return [
-                {
-                  kind: "text",
-                  text: `${plans.enhancement ? `Essentials equipment option: ${formatPrice(plans.essentialsTotal)} USD. ${plans.enhancement}\n\n` : ""}${plans.budgetNote}\n\n${plans.selectionReasons.join("\n")}`,
-                },
-                {
-                  kind: "text",
-                  text: `Here’s a draft for ${plans.requirements.stations} stations using currently listed in-stock equipment. ${chosen.withinBudget ? `It leaves ${formatPrice(plans.requirements.budget - chosen.total)} of your equipment budget.` : `It exceeds your equipment budget by ${formatPrice(chosen.total - plans.requirements.budget)}; we’ll need to adjust the requirements.`}${chosen.missingRoles.length ? `\nNo matching items were found for: ${chosen.missingRoles.join(", ")}. This is an incomplete proposal.` : ""}\n\n${plans.assumptions}\n\nTell me what you’d like changed—finish, quantities or individual products.`,
-                },
-                ...selectionTurns(session),
-              ];
+              return proposalTurns(session, plans);
             }
             planned = true;
             plans.options.forEach((p) => p.lines.forEach((l) => known.add(l.id)));
