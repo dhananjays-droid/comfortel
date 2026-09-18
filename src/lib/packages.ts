@@ -1,5 +1,6 @@
 import { CATALOG_FULL, type FullProduct } from "@/lib/catalog";
 import { productPurpose } from "@/lib/product-purpose";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 /**
  * Turning "a four-chair salon for $15,000" into an actual list of products.
@@ -79,7 +80,7 @@ export type Need = { role: Role; qty: number };
  * than buried in the UI so it can be argued with.
  */
 export function needsFor(stations: number): Need[] {
-  const n = Math.max(1, Math.min(20, Math.round(stations)));
+  const n = Math.max(1, Math.min(MAX_PLAN_STATIONS, Math.round(stations)));
   return [
     { role: "styling", qty: n },
     { role: "mirror", qty: n },
@@ -404,8 +405,8 @@ function explain(pkg: Package, balanced: Package, budget: number): string[] {
  * which is where most people land and where it should be honest rather than
  * engineered.
  */
-/** A salon bigger than this is a chain, not a room. */
-export const MAX_STATIONS = 20;
+/** Operational proposal limit; actual room capacity must be checked separately. */
+export const MAX_STATIONS = MAX_PLAN_STATIONS;
 
 /**
  * How many stations a budget actually buys.

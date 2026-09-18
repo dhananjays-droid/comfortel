@@ -1,0 +1,871 @@
+{
+  "method": "Offline deterministic planner; checked-in catalog snapshot, no paid APIs or images. Prices/configurations provisional; no live inventory or floor-fit verification.",
+  "results": [
+    {
+      "name": "$18k / 8-station starter",
+      "input": {
+        "budget": 18000,
+        "stations": 8
+      },
+      "stations": 8,
+      "subtotal": 17714,
+      "remaining": 286,
+      "plan": {
+        "tier": "balanced",
+        "total": 17714,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$17,714 USD for the stated quantities; $286 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 8,
+            "subtotal": 4792
+          },
+          {
+            "id": "4162",
+            "name": "Tuscany Salon Mirror",
+            "price": 399,
+            "available": true,
+            "role": "mirror",
+            "qty": 8,
+            "subtotal": 3192
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 3,
+            "subtotal": 477
+          },
+          {
+            "id": "343614",
+            "name": "Club Sand Wash Lounge with White Basin",
+            "price": 1399,
+            "available": true,
+            "role": "wash",
+            "qty": 3,
+            "subtotal": 4197
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 8,
+            "subtotal": 3832
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 425
+          }
+        ]
+      },
+      "assumptions": "Assumes wall-based stations, with one chair per station. Support quantities are editable: 3 stool, 3 wash, 8 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$25k / 12 stations, 4 washes, 12 trolleys, 3 stools",
+      "input": {
+        "budget": 25000,
+        "stations": 12,
+        "equipment_quantities": {
+          "wash": 4,
+          "trolley": 12,
+          "stool": 3
+        }
+      },
+      "stations": 12,
+      "subtotal": 24541,
+      "remaining": 459,
+      "plan": {
+        "tier": "balanced",
+        "total": 24541,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$24,541 USD for the stated quantities; $459 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 12,
+            "subtotal": 7188
+          },
+          {
+            "id": "343709",
+            "name": "Verona Arch Salon Mirror Black",
+            "price": 359,
+            "available": true,
+            "role": "mirror",
+            "qty": 12,
+            "subtotal": 4308
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 3,
+            "subtotal": 477
+          },
+          {
+            "id": "343614",
+            "name": "Club Sand Wash Lounge with White Basin",
+            "price": 1399,
+            "available": true,
+            "role": "wash",
+            "qty": 4,
+            "subtotal": 5596
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 12,
+            "subtotal": 5748
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 425
+          }
+        ]
+      },
+      "assumptions": "Assumes wall-based stations, with one chair per station. Support quantities are editable: 3 stool, 4 wash, 12 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$35k / 20 stations, double mirrors, 5 washes",
+      "input": {
+        "budget": 35000,
+        "stations": 20,
+        "mirror_layout": "island",
+        "equipment_quantities": {
+          "wash": 5,
+          "trolley": 20,
+          "stool": 5
+        }
+      },
+      "stations": 20,
+      "subtotal": 32164,
+      "remaining": 2836,
+      "plan": {
+        "tier": "lean",
+        "total": 32164,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$32,164 USD for the stated quantities; $2,836 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "349867",
+            "name": "Blake Styling Chair Midnight",
+            "price": 499,
+            "available": true,
+            "role": "styling",
+            "qty": 20,
+            "subtotal": 9980
+          },
+          {
+            "id": "301097",
+            "name": "Halo Double Salon Mirror",
+            "price": 459,
+            "available": true,
+            "role": "mirror",
+            "qty": 10,
+            "subtotal": 4590
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 5,
+            "subtotal": 795
+          },
+          {
+            "id": "346190",
+            "name": "Zippy Textured Black Wash Lounge With Black Basin",
+            "price": 1199,
+            "available": true,
+            "role": "wash",
+            "qty": 5,
+            "subtotal": 5995
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 20,
+            "subtotal": 9580
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 425
+          }
+        ]
+      },
+      "assumptions": "Assumes island stations; mirror quantities account for documented faces where consistent, with one chair per station. Support quantities are editable: 5 stool, 5 wash, 20 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$45k / 29 stations, 17 washes",
+      "input": {
+        "budget": 45000,
+        "stations": 29,
+        "mirror_layout": "island",
+        "equipment_quantities": {
+          "wash": 17,
+          "trolley": 29,
+          "stool": 8
+        }
+      },
+      "stations": 29,
+      "subtotal": 49150,
+      "remaining": -4150,
+      "plan": {
+        "tier": "lean",
+        "total": 49150,
+        "missingRoles": [],
+        "withinBudget": false,
+        "reasons": [
+          "$49,150 USD for the stated quantities; $4,150 over budget.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "330353",
+            "name": "Rosie Blush Styling Chair",
+            "price": 389,
+            "available": true,
+            "role": "styling",
+            "qty": 29,
+            "subtotal": 11281
+          },
+          {
+            "id": "301097",
+            "name": "Halo Double Salon Mirror",
+            "price": 459,
+            "available": true,
+            "role": "mirror",
+            "qty": 15,
+            "subtotal": 6885
+          },
+          {
+            "id": "316321",
+            "name": "Blush Salon Stool",
+            "price": 119,
+            "available": true,
+            "role": "stool",
+            "qty": 8,
+            "subtotal": 952
+          },
+          {
+            "id": "346191",
+            "name": "Zippy Stone Wash Lounge With White Basin",
+            "price": 899,
+            "available": true,
+            "role": "wash",
+            "qty": 17,
+            "subtotal": 15283
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 29,
+            "subtotal": 13891
+          },
+          {
+            "id": "6574",
+            "name": "Maverick Reception Desk",
+            "price": 489,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 489
+          },
+          {
+            "id": "345792",
+            "name": "Cloud Waiting Sofa",
+            "price": 369,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 369
+          }
+        ]
+      },
+      "assumptions": "Assumes island stations; mirror quantities account for documented faces where consistent, with one chair per station. Support quantities are editable: 8 stool, 17 wash, 29 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$45k / maximum stations",
+      "input": {
+        "budget": 45000,
+        "objective": "max_stations"
+      },
+      "stations": 31,
+      "subtotal": 44513,
+      "remaining": 487,
+      "plan": {
+        "tier": "lean",
+        "total": 44513,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$44,513 USD for the stated quantities; $487 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "330353",
+            "name": "Rosie Blush Styling Chair",
+            "price": 389,
+            "available": true,
+            "role": "styling",
+            "qty": 31,
+            "subtotal": 12059
+          },
+          {
+            "id": "343689",
+            "name": "Arch LED Salon Mirror",
+            "price": 179,
+            "available": true,
+            "role": "mirror",
+            "qty": 31,
+            "subtotal": 5549
+          },
+          {
+            "id": "316321",
+            "name": "Blush Salon Stool",
+            "price": 119,
+            "available": true,
+            "role": "stool",
+            "qty": 11,
+            "subtotal": 1309
+          },
+          {
+            "id": "346191",
+            "name": "Zippy Stone Wash Lounge With White Basin",
+            "price": 899,
+            "available": true,
+            "role": "wash",
+            "qty": 11,
+            "subtotal": 9889
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 31,
+            "subtotal": 14849
+          },
+          {
+            "id": "6574",
+            "name": "Maverick Reception Desk",
+            "price": 489,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 489
+          },
+          {
+            "id": "345792",
+            "name": "Cloud Waiting Sofa",
+            "price": 369,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 369
+          }
+        ]
+      },
+      "assumptions": "Budget-based capacity draft, searched up to 60 stations; NOT verified room capacity. Assumes wall-based stations, with one chair per station. Support quantities are editable: 11 stool, 11 wash, 31 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$65k / maximum stations",
+      "input": {
+        "budget": 65000,
+        "objective": "max_stations"
+      },
+      "stations": 45,
+      "subtotal": 63243,
+      "remaining": 1757,
+      "plan": {
+        "tier": "lean",
+        "total": 63243,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$63,243 USD for the stated quantities; $1,757 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "330353",
+            "name": "Rosie Blush Styling Chair",
+            "price": 389,
+            "available": true,
+            "role": "styling",
+            "qty": 45,
+            "subtotal": 17505
+          },
+          {
+            "id": "343689",
+            "name": "Arch LED Salon Mirror",
+            "price": 179,
+            "available": true,
+            "role": "mirror",
+            "qty": 45,
+            "subtotal": 8055
+          },
+          {
+            "id": "316321",
+            "name": "Blush Salon Stool",
+            "price": 119,
+            "available": true,
+            "role": "stool",
+            "qty": 15,
+            "subtotal": 1785
+          },
+          {
+            "id": "346191",
+            "name": "Zippy Stone Wash Lounge With White Basin",
+            "price": 899,
+            "available": true,
+            "role": "wash",
+            "qty": 15,
+            "subtotal": 13485
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 45,
+            "subtotal": 21555
+          },
+          {
+            "id": "6574",
+            "name": "Maverick Reception Desk",
+            "price": 489,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 489
+          },
+          {
+            "id": "345792",
+            "name": "Cloud Waiting Sofa",
+            "price": 369,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 369
+          }
+        ]
+      },
+      "assumptions": "Budget-based capacity draft, searched up to 60 stations; NOT verified room capacity. Assumes wall-based stations, with one chair per station. Support quantities are editable: 15 stool, 15 wash, 45 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$65k / maximum island stations, limit 30",
+      "input": {
+        "budget": 65000,
+        "objective": "max_stations",
+        "max_stations": 30,
+        "mirror_layout": "island"
+      },
+      "stations": 30,
+      "subtotal": 64999,
+      "remaining": 1,
+      "plan": {
+        "tier": "balanced",
+        "total": 64999,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$64,999 USD for the stated quantities; $1 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 30,
+            "subtotal": 17970
+          },
+          {
+            "id": "349116",
+            "name": "Arch LED with Pole Frame Black",
+            "price": 857,
+            "available": true,
+            "role": "mirror",
+            "qty": 15,
+            "subtotal": 12855
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 10,
+            "subtotal": 1590
+          },
+          {
+            "id": "345218",
+            "name": "Harriet Connect Tan II Electric Recline Wash Lounge With Massage",
+            "price": 1699,
+            "available": true,
+            "role": "wash",
+            "qty": 10,
+            "subtotal": 16990
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 30,
+            "subtotal": 14370
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 1,
+            "subtotal": 425
+          }
+        ]
+      },
+      "assumptions": "Budget-based capacity draft, searched up to 30 stations; NOT verified room capacity. Assumes island stations; mirror quantities account for documented faces where consistent, with one chair per station. Support quantities are editable: 10 stool, 10 wash, 30 trolley, 1 reception, 1 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$65k / fixed 5 stations (do not waste balance)",
+      "input": {
+        "budget": 65000,
+        "stations": 5
+      },
+      "stations": 5,
+      "subtotal": 16569,
+      "remaining": 48431,
+      "plan": {
+        "tier": "balanced",
+        "total": 16569,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$16,569 USD for the stated quantities; $48,431 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 5,
+            "subtotal": 2995
+          },
+          {
+            "id": "343727",
+            "name": "Verona Grande Blanco Terrazzo Salon Mirror – Single",
+            "price": 633,
+            "available": true,
+            "role": "mirror",
+            "qty": 5,
+            "subtotal": 3165
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 2,
+            "subtotal": 318
+          },
+          {
+            "id": "349909",
+            "name": "Harlow Textured Black Electric Recline Wash Lounge With Massage",
+            "price": 1899,
+            "available": true,
+            "role": "wash",
+            "qty": 3,
+            "subtotal": 5697
+          },
+          {
+            "id": "300870",
+            "name": "Studio 4 Drawer Steel Locking Salon Trolley Black",
+            "price": 549,
+            "available": true,
+            "role": "trolley",
+            "qty": 5,
+            "subtotal": 2745
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 2,
+            "subtotal": 850
+          }
+        ]
+      },
+      "assumptions": "Assumes wall-based stations, with one chair per station. Support quantities are editable: 2 stool, 3 wash, 5 trolley, 1 reception, 2 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$65k / 24-station colour salon with LED mirrors",
+      "input": {
+        "budget": 65000,
+        "stations": 24,
+        "service_focus": "colour",
+        "mirror_feature": "led",
+        "equipment_quantities": {
+          "wash": 8,
+          "trolley": 24,
+          "stool": 6
+        }
+      },
+      "stations": 24,
+      "subtotal": 50843,
+      "remaining": 14157,
+      "plan": {
+        "tier": "balanced",
+        "total": 50843,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$50,843 USD for the stated quantities; $14,157 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 24,
+            "subtotal": 14376
+          },
+          {
+            "id": "343225",
+            "name": "Oval LED Salon Mirror",
+            "price": 299,
+            "available": true,
+            "role": "mirror",
+            "qty": 24,
+            "subtotal": 7176
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 6,
+            "subtotal": 954
+          },
+          {
+            "id": "349909",
+            "name": "Harlow Textured Black Electric Recline Wash Lounge With Massage",
+            "price": 1899,
+            "available": true,
+            "role": "wash",
+            "qty": 8,
+            "subtotal": 15192
+          },
+          {
+            "id": "324960",
+            "name": "Mova Salon Trolley – Bronze",
+            "price": 479,
+            "available": true,
+            "role": "trolley",
+            "qty": 24,
+            "subtotal": 11496
+          },
+          {
+            "id": "343746",
+            "name": "Walker Reception Desk",
+            "price": 799,
+            "available": true,
+            "role": "reception",
+            "qty": 1,
+            "subtotal": 799
+          },
+          {
+            "id": "300864",
+            "name": "Ivy Waiting Sofa II Sage Green",
+            "price": 425,
+            "available": true,
+            "role": "waiting",
+            "qty": 2,
+            "subtotal": 850
+          }
+        ]
+      },
+      "assumptions": "Assumes wall-based stations, with one chair per station. Support quantities are editable: 6 stool, 8 wash, 24 trolley, 1 reception, 2 waiting. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    },
+    {
+      "name": "$65k / 30-station expansion, existing wash/reception/waiting",
+      "input": {
+        "budget": 65000,
+        "stations": 30,
+        "equipment_quantities": {
+          "wash": 0,
+          "reception": 0,
+          "waiting": 0,
+          "trolley": 10,
+          "stool": 5
+        }
+      },
+      "stations": 30,
+      "subtotal": 43245,
+      "remaining": 21755,
+      "plan": {
+        "tier": "balanced",
+        "total": 43245,
+        "missingRoles": [],
+        "withinBudget": true,
+        "reasons": [
+          "$43,245 USD for the stated quantities; $21,755 remaining.",
+          "Price differences are not a verified quality ranking."
+        ],
+        "lines": [
+          {
+            "id": "350104",
+            "name": "Oakley Styling Chair Tan",
+            "price": 599,
+            "available": true,
+            "role": "styling",
+            "qty": 30,
+            "subtotal": 17970
+          },
+          {
+            "id": "343727",
+            "name": "Verona Grande Blanco Terrazzo Salon Mirror – Single",
+            "price": 633,
+            "available": true,
+            "role": "mirror",
+            "qty": 30,
+            "subtotal": 18990
+          },
+          {
+            "id": "316365",
+            "name": "Tan Saddle Salon Stool with Aluminium Base",
+            "price": 159,
+            "available": true,
+            "role": "stool",
+            "qty": 5,
+            "subtotal": 795
+          },
+          {
+            "id": "300870",
+            "name": "Studio 4 Drawer Steel Locking Salon Trolley Black",
+            "price": 549,
+            "available": true,
+            "role": "trolley",
+            "qty": 10,
+            "subtotal": 5490
+          }
+        ]
+      },
+      "assumptions": "Assumes wall-based stations, with one chair per station. Support quantities are editable: 5 stool, 10 trolley. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan."
+    }
+  ]
+}

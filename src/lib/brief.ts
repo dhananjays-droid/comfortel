@@ -11,6 +11,8 @@
  * regular expression.
  */
 
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
+
 const WORD_NUMBER: Record<string, number> = {
   one: 1,
   two: 2,
@@ -73,7 +75,7 @@ function readStations(text: string): number | undefined {
 
   const raw = match[1].toLowerCase();
   const value = WORD_NUMBER[raw] ?? Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || value < 1 || value > 20) return undefined;
+  if (!Number.isFinite(value) || value < 1 || value > MAX_PLAN_STATIONS) return undefined;
   return value;
 }
 

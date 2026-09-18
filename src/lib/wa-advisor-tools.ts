@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { CATALOG_FULL, CATALOG_SLIM } from "@/lib/catalog";
 import { withProductSpecifications } from "@/lib/product-specifications";
-import { buildPackages, needsFor, candidates, type Need } from "@/lib/packages";
+import { buildPackages, needsFor, candidates, type Need, type Role } from "@/lib/packages";
 import { productFit } from "@/lib/wa-product-fit";
 import { selectionProfile, selectionEvidenceFor } from "@/lib/product-selection";
 import { matchesProductPurpose, productPurpose } from "@/lib/product-purpose";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 export const ProductQuery = z
   .object({
@@ -142,7 +143,16 @@ export function recommendProducts(input: unknown) {
 
 export const SalonPlanInput = z
   .object({
-    stations: z.number().int().min(1).max(20),
+    stations: z.number().int().min(1).max(MAX_PLAN_STATIONS).optional(),
+    objective: z.enum(["fixed_stations", "max_stations"]).default("fixed_stations"),
+    max_stations: z.number().int().min(1).max(MAX_PLAN_STATIONS).optional(),
+    equipment_quantities: z.object({
+      wash: z.number().int().min(0).max(MAX_PLAN_STATIONS).optional(),
+      trolley: z.number().int().min(0).max(MAX_PLAN_STATIONS).optional(),
+      stool: z.number().int().min(0).max(MAX_PLAN_STATIONS).optional(),
+      reception: z.number().int().min(0).max(5).optional(),
+      waiting: z.number().int().min(0).max(10).optional(),
+    }).strict().optional(),
     budget: z.number().finite().positive().max(1000000),
     currency: z.literal("USD"),
     scope: z.literal("equipment"),
@@ -157,14 +167,47 @@ export const SalonPlanInput = z
   .strict();
 
 export function salonPlans(input: unknown) {
-  const args = SalonPlanInput.parse(input);
+  const parsed = SalonPlanInput.parse(input);
+  if (parsed.objective === "max_stations") {
+    // Enumerate against the same service/finish/layout filters used for the
+    // actual proposal. Never claim that a financial capacity is a measured fit.
+    const start = parsed.service_focus === "mixed" ? 3 : 1;
+    const limit = Math.min(parsed.max_stations ?? MAX_PLAN_STATIONS, parsed.stations ?? MAX_PLAN_STATIONS);
+    if (limit < start) throw new Error("The station limit is too small for the requested service split.");
+    let best: ReturnType<typeof fixedSalonPlans> | undefined;
+    const pools = new Map<Role, (typeof CATALOG_FULL)[string][]>();
+    // Descending exhaustive search stops at the first feasible count. Candidate
+    // filtering is invariant across counts; cache only within this request so
+    // another customer's preferences/catalog snapshot can never leak in.
+    for (let stations = limit; stations >= start; stations--) {
+      const result = fixedSalonPlans({ ...parsed, objective: "fixed_stations", stations }, pools);
+      const chosen = result.options.find(p => p.tier === result.recommendedTier)!;
+      if (chosen.withinBudget && !chosen.missingRoles.length) { best = result; break; }
+    }
+    const result = best ?? fixedSalonPlans({ ...parsed, objective: "fixed_stations", stations: start });
+    return {
+      ...result,
+      requirements: { ...result.requirements, objective: "max_stations" as const },
+      assumptions: `Budget-based capacity draft, searched up to ${limit} stations; NOT verified room capacity. ${result.assumptions}`,
+    };
+  }
+  if (parsed.stations === undefined) throw new Error("Give the requested station count, or explicitly choose maximum stations within budget.");
+  return fixedSalonPlans({ ...parsed, stations: parsed.stations });
+}
+
+function fixedSalonPlans(args: z.infer<typeof SalonPlanInput> & { stations: number }, pools = new Map<Role, (typeof CATALOG_FULL)[string][]>()) {
   if (args.finish && /^(?:standard|default|any|none|unspecified)$/i.test(args.finish))
     delete args.finish;
   const service =
     args.service_focus ?? (args.business === "barbershop" ? "barber" : "hair_styling");
-  const needs = needsFor(args.stations).filter(
-    (n) => service !== "makeup_brows" || n.role !== "wash",
-  );
+  const needs = needsFor(args.stations).map(n => ({
+    ...n,
+    // Shared stools and a working trolley per stylist are editable assumptions,
+    // not universal ratios. Explicit counts (including zero) always win.
+    qty: n.role === "stool" ? Math.ceil(args.stations / 3)
+      : n.role === "trolley" ? args.stations : n.qty,
+  })).map(n => ({ ...n, qty: args.equipment_quantities?.[n.role as keyof NonNullable<typeof args.equipment_quantities>]
+    ?? (service === "makeup_brows" && n.role === "wash" ? 0 : n.qty) })).filter(n => n.qty > 0);
   // Mixed service means distinct suitable chairs, not a styling chair claimed
   // to perform every service. Allocation is an explicit editable draft.
   if (service === "mixed" && args.stations < 3)
@@ -179,6 +222,8 @@ export function salonPlans(input: unknown) {
     throw new Error("No matching dedicated barber or makeup chair is available. Ask whether the finish or service allocation can change.");
   if (service === "mixed") needs.find(n => n.role === "styling")!.qty -= 2;
   const matching = (role: Parameters<typeof candidates>[0]) => {
+    const cached = pools.get(role);
+    if (cached) return cached;
     const pool = candidates(role).filter(
       (p) =>
         p.in_stock &&
@@ -219,8 +264,9 @@ export function salonPlans(input: unknown) {
     // an explicit bench request or imply a certified colour-rendering score.
     if (role === "mirror" && (service === "colour" || service === "mixed") && args.mirror_feature === "any") {
       const daylight = pool.filter((p) => selectionProfile(p).features.daylightLighting);
-      if (daylight.length) return daylight;
+      if (daylight.length) { pools.set(role, daylight); return daylight; }
     }
+    pools.set(role, pool);
     return pool;
   };
   if (args.mirror_layout === "island") {
@@ -244,7 +290,7 @@ export function salonPlans(input: unknown) {
   const enhancedNeeds = needs.map((n) => ({
     ...n,
     qty:
-      n.role === "trolley"
+      args.equipment_quantities?.[n.role as keyof NonNullable<typeof args.equipment_quantities>] !== undefined ? n.qty : n.role === "trolley"
         ? args.stations
         : n.role === "wash"
           ? Math.ceil(args.stations / 2)
@@ -355,7 +401,7 @@ export function salonPlans(input: unknown) {
     enhancement: useEnhanced
       ? `Enhanced option: a trolley for each station${service === "makeup_brows" ? ". Wash units omitted for the dedicated makeup/brow brief; add only if you also offer hair washing." : " and up to one wash unit per two stations. Extra plumbing and floor space must be checked before purchase."}`
       : null,
-    assumptions: `${service === "mixed" ? `Draft service split: ${args.stations - 2} hair/colour stations, 1 barber station and 1 makeup/brow station (${args.stations} total). This allocation can be changed; dedicated chairs are included. ` : ""}${args.mirror_layout === "wall" ? "Assumes wall-based stations" : "Assumes island stations; mirror quantities account for documented faces where consistent"}, with one chair and stool per station. A mirror without a documented work surface may need a separate bench, not included here. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan.`,
+    assumptions: `${service === "mixed" ? `Draft service split: ${args.stations - 2} hair/colour stations, 1 barber station and 1 makeup/brow station (${args.stations} total). This allocation can be changed; dedicated chairs are included. ` : ""}${args.mirror_layout === "wall" ? "Assumes wall-based stations" : "Assumes island stations; mirror quantities account for documented faces where consistent"}, with one chair per station. Support quantities are editable: ${comparisonNeeds.filter(n => !["styling", "mirror"].includes(n.role)).map(n => `${n.qty} ${n.role}`).join(", ")}. Zero quantities explicitly requested are omitted. A mirror without a documented work surface may need a separate bench, not included here. Catalog prices are provisional: confirm the exact chair/base/lift/footrest and wash/plumbing configuration; do not assume separately listed options are included or add historical component prices. Mounting, dimensions and plumbing need confirmation; this is not a verified floor plan.`,
     exclusions:
       "Equipment only, USD. Excludes delivery, tax, installation, building work and stock reservation.",
     options: comparisons.map((p) => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 export const Requirement = z
   .object({
@@ -14,7 +15,7 @@ export const ConversationMemory = z
     version: z.literal(1).default(1),
     activeTask: z.enum(["browse", "plan", "request", "render"]).default("browse"),
     suspendedTask: z.enum(["browse", "plan", "request", "render"]).nullable().default(null),
-    stations: z.number().int().min(1).max(20).nullable().default(null),
+    stations: z.number().int().min(1).max(MAX_PLAN_STATIONS).nullable().default(null),
     budget: z.number().finite().positive().max(1000000).nullable().default(null),
     currency: z.enum(["USD", "AUD", "CAD", "GBP", "EUR", "other"]).nullable().default(null),
     budgetScope: z.enum(["equipment", "whole_project"]).nullable().default(null),

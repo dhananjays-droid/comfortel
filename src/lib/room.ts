@@ -1,4 +1,5 @@
 import { ASSUMED, CLEARANCE, capacity, type Capacity, type Room } from "@/lib/layout";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 /**
  * The room the customer is fitting out, as they described it.
@@ -77,8 +78,8 @@ export function validate(spec: Partial<RoomSpec> & { unit: Unit }): ValidationEr
     errors.push({ field: "depth", message: "That depth looks like a units mistake." });
   }
 
-  if (stations !== undefined && (stations < 1 || stations > 20)) {
-    errors.push({ field: "stations", message: "Between 1 and 20 stations." });
+  if (stations !== undefined && (stations < 1 || stations > MAX_PLAN_STATIONS)) {
+    errors.push({ field: "stations", message: `Between 1 and ${MAX_PLAN_STATIONS} stations.` });
   }
 
   return errors;

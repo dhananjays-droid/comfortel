@@ -13,6 +13,7 @@
 
 import type { ChatMessageInput } from "@/lib/chat.functions";
 import { CATALOG_FULL } from "@/lib/catalog";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 import type { Package, Role } from "@/lib/packages";
 import { isVisualizeMode, type VisualizeMode } from "@/lib/visualize-prompt";
 import type { Await, FlowState } from "@/lib/wa-flow";
@@ -407,7 +408,7 @@ function sanitizeOfferedChoice(input: unknown): SessionOfferedChoice {
   const raw = input as
     { stations?: unknown; budget?: unknown; note?: unknown; byZone?: unknown } | null | undefined;
   return {
-    stations: clampInt(raw?.stations, 1, 20, 4),
+    stations: clampInt(raw?.stations, 1, MAX_PLAN_STATIONS, 4),
     budget: Math.max(500, Number(raw?.budget) || 15000),
     note: typeof raw?.note === "string" ? raw.note.slice(0, 800) : "",
     byZone: raw?.byZone === true,

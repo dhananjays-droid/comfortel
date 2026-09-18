@@ -75,7 +75,7 @@ describe("needsFor", () => {
 
   it("clamps absurd station counts rather than trying to serve them", () => {
     expect(needsFor(0).find((n) => n.role === "styling")?.qty).toBe(1);
-    expect(needsFor(500).find((n) => n.role === "styling")?.qty).toBe(20);
+    expect(needsFor(500).find((n) => n.role === "styling")?.qty).toBe(MAX_STATIONS);
   });
 });
 

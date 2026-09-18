@@ -19,6 +19,23 @@ const other = "330283";
 const text = (text: string) => ({ kind: "text" as const, text });
 
 describe("shopping conversation tool boundary", () => {
+  it("saves a $65k capacity proposal above 20 stations without rendering or truncation", async () => {
+    const s = fresh();
+    s.conversation = { ...s.conversation!, currency: "USD", budget: 65000, budgetScope: "equipment" };
+    const model: ShoppingModel = vi.fn(async () => [{ type: "tool_use", id: "large-plan", name: "plan_salon", input: {
+      objective: "max_stations", budget: 65000, currency: "USD", scope: "equipment",
+    } }]);
+    const turns = await handleShoppingInbound(s, text("As many stations as possible within 65000 USD for equipment"), "large-plan", model, { unified: true });
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(s.conversation?.stations).toBeGreaterThan(20);
+    expect(s.pendingRender).toBeNull();
+    expect(JSON.stringify(turns)).toContain("NOT verified room capacity");
+    expect(JSON.stringify(turns)).toContain("Catalog prices are provisional");
+    const reloaded = sanitizeSession(s);
+    expect(reloaded.conversation?.stations).toBe(s.conversation?.stations);
+    expect(reloaded.plan).toEqual(s.plan);
+    expect(Math.max(...Object.values(reloaded.plan.qty))).toBeGreaterThan(20);
+  });
   it.each(["yes, right", "yes its correct", "yes, that's right", "yes please"])("records natural USD confirmation: %s", async reply => {
     const s = fresh();
     s.conversation = { ...s.conversation!, currency: null, pendingQuestion: "confirm_usd", budget: 50000, stations: 5 };

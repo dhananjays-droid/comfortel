@@ -54,7 +54,7 @@ describe("validate", () => {
 
   it("bounds the station count", () => {
     expect(validate({ ...base, wallCm: 420, stations: 0 })[0]?.field).toBe("stations");
-    expect(validate({ ...base, wallCm: 420, stations: 21 })[0]?.field).toBe("stations");
+    expect(validate({ ...base, wallCm: 420, stations: 61 })[0]?.field).toBe("stations");
     expect(validate({ ...base, wallCm: 420, stations: 4 })).toEqual([]);
   });
 });

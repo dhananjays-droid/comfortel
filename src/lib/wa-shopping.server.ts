@@ -10,6 +10,7 @@ import { ConversationPatch, conversationMemory } from "@/lib/wa-conversation-sta
 import { productSummaries, recommendProducts, salonPlans } from "@/lib/wa-advisor-tools";
 import { matchesProductPurpose } from "@/lib/product-purpose";
 import { clearShoppingPlan } from "@/lib/wa-clear-plan";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 const memorySchema = {
   type: "object",
@@ -31,11 +32,25 @@ export const SHOPPING_TOOLS = [
   {
     name: "plan_salon",
     description:
-      "Prepare and save a DRAFT equipment proposal across categories in ONE call. Application displays actual prices, totals, assumptions and buttons and ends this turn. Requires customer asking for a salon plan, explicit station count, confirmed USD currency and equipment budget. Ask about currency/scope if unknown. Not an order, render or verified layout. Specify business salon/barbershop and requested finish. Reuse saved project requirements when correcting station count/budget.",
+      "Prepare and save a DRAFT equipment proposal across categories in ONE call. Requires a requested plan, confirmed USD equipment budget and either a fixed station count OR explicit request for as many stations as possible (objective max_stations). Supports large budgets including 65000 USD. Max capacity is financial, not verified room fit. Application displays prices and assumptions and ends this turn. Not an order or render. Preserve explicit equipment quantities and finish on revisions; do not invent upgrades just to spend the balance.",
     input_schema: {
       type: "object",
       properties: {
-        stations: { type: "integer", minimum: 1, maximum: 20 },
+        stations: { type: "integer", minimum: 1, maximum: MAX_PLAN_STATIONS },
+        objective: { enum: ["fixed_stations", "max_stations"], description: "Default fixed_stations. Use max_stations only for an explicit maximum-capacity request; omit stations unless it is a customer-specified upper limit." },
+        max_stations: { type: "integer", minimum: 1, maximum: MAX_PLAN_STATIONS, description: "Customer-specified station upper limit; never infer room capacity from a photo." },
+        equipment_quantities: {
+          type: "object",
+          properties: {
+            wash: { type: "integer", minimum: 0, maximum: MAX_PLAN_STATIONS },
+            trolley: { type: "integer", minimum: 0, maximum: MAX_PLAN_STATIONS },
+            stool: { type: "integer", minimum: 0, maximum: MAX_PLAN_STATIONS },
+            reception: { type: "integer", minimum: 0, maximum: 5 },
+            waiting: { type: "integer", minimum: 0, maximum: 10 },
+          },
+          additionalProperties: false,
+          description: "Explicit counts only. Zero means already owned/not requested. Preserve on revisions. Omit unspecified roles to use disclosed draft assumptions.",
+        },
         budget: { type: "number", exclusiveMinimum: 0 },
         currency: { enum: ["USD"] },
         scope: { enum: ["equipment"] },
@@ -71,7 +86,7 @@ export const SHOPPING_TOOLS = [
             "Optional customer-specified color only, e.g. white. Omit when unspecified. Never use standard, default or any as a color.",
         },
       },
-      required: ["stations", "budget", "currency", "scope"],
+      required: ["budget", "currency", "scope"],
       additionalProperties: false,
     },
   },
@@ -125,7 +140,7 @@ export const SHOPPING_TOOLS = [
           properties: {
             activeTask: { enum: ["browse", "plan", "request", "render"] },
             suspendedTask: { enum: ["browse", "plan", "request", "render", null] },
-            stations: { type: ["integer", "null"], minimum: 1, maximum: 20 },
+            stations: { type: ["integer", "null"], minimum: 1, maximum: MAX_PLAN_STATIONS },
             budget: { type: ["number", "null"] },
             currency: { enum: ["USD", "AUD", "CAD", "GBP", "EUR", "other", null] },
             budgetScope: { enum: ["equipment", "whole_project", null] },

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MAX_PLAN_STATIONS } from "@/lib/planning-limits";
 
 import {
   buildPackages,
@@ -188,7 +189,7 @@ export type CuratedResult = {
  */
 export function parseCurateInput(input: { brief?: string; stations: number; budget: number }) {
   {
-    const stations = Math.max(1, Math.min(20, Math.round(input?.stations ?? 4)));
+    const stations = Math.max(1, Math.min(MAX_PLAN_STATIONS, Math.round(input?.stations ?? 4)));
     const budget = Math.max(500, Math.round(input?.budget ?? 15000));
     return { brief: (input?.brief ?? "").slice(0, 800), stations, budget };
   }
