@@ -2,10 +2,10 @@ import { expect, it, vi } from "vitest";
 import { loadEnv } from "vite";
 import { handleConversation, type ConversationServices } from "@/lib/wa-conversation.server";
 import { EMPTY_SESSION, sanitizeSession } from "@/lib/wa-session";
-import { handleRequestInbound, type RequestStore } from "@/lib/wa-requests.server";
+import { handleRequestInbound, requestOverview } from "@/lib/wa-requests.server";
+import { memoryRequestStore } from "./helpers/request-store";
 import { handleDocumentInbound } from "@/lib/wa-documents.server";
 import type { RequestRecord } from "@/lib/wa-requests";
-import type { Database } from "@/integrations/supabase/types";
 import { callShoppingModel } from "@/lib/wa-shopping.server";
 
 vi.mock("@/integrations/supabase/client.server", () => ({
@@ -28,29 +28,8 @@ it.skipIf(process.env["RUN_ADVISOR_LIVE"] !== "true")(
     const env = loadEnv("development", process.cwd(), "");
     process.env["ANTHROPIC_API_KEY"] ||= env["ANTHROPIC_API_KEY"];
     process.env["WHATSAPP_PHONE_ENC_KEY"] = "synthetic-only";
-    type Row = Database["public"]["Tables"]["wa_requests"]["Row"];
-    let rows: Row[] = [];
-    const db: RequestStore = {
-      latest: async () => rows.at(-1) ?? null,
-      replay: async (_s, id) => rows.find((r) => r.last_inbound_id === id) ?? null,
-      create: async (r) => {
-        rows.push({
-          status: "draft",
-          stage: "details",
-          details: [],
-          last_inbound_id: null,
-          last_reply: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          ...r,
-        });
-      },
-      update: async (ref, _s, patch) => {
-        const r = rows.find((r) => r.reference === ref);
-        if (!r) throw new Error("Missing request");
-        Object.assign(r, patch);
-      },
-    };
+    const db = memoryRequestStore();
+    const rows = db.rows;
     const services: ConversationServices = {
       model: async (messages, context) => {
         const blocks = await callShoppingModel(messages, context);
@@ -58,6 +37,7 @@ it.skipIf(process.env["RUN_ADVISOR_LIVE"] !== "true")(
         return blocks;
       },
       requestContext: async () => (rows.at(-1) as unknown as RequestRecord) ?? null,
+      overview: (key) => requestOverview(key, db),
       request: (input) => handleRequestInbound(input, db),
       document: handleDocumentInbound,
       runtime: async (s) => ({ session: s, turns: [{ kind: "text", text: "Main menu" }] }),
@@ -119,7 +99,7 @@ it.skipIf(process.env["RUN_ADVISOR_LIVE"] !== "true")(
     expect(session.plan.ids).toEqual(before.ids);
 
     session = structuredClone(EMPTY_SESSION);
-    rows = [];
+    rows.splice(0);
     await turn(
       "I want to buy mirror. can you suggest me which mirrors i must use for 3 stations and why?",
     );

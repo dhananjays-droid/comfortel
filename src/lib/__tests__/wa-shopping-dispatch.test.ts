@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   document: vi.fn(),
   draft: vi.fn(),
+  overview: vi.fn(),
   send: vi.fn(),
   staff: vi.fn(),
 }));
@@ -23,6 +24,7 @@ vi.mock("@/lib/wa-requests.server", () => ({
   handleRequestInbound: mocks.request,
   hasActiveRequestDraft: mocks.draft,
   requestContext: mocks.draft,
+  requestOverview: mocks.overview,
 }));
 vi.mock("@/lib/wa-documents.server", () => ({ handleDocumentInbound: mocks.document }));
 vi.mock("@/lib/managed-catalog.server", () => ({
@@ -67,6 +69,7 @@ beforeEach(() => {
   mocks.save.mockResolvedValue(undefined);
   mocks.staff.mockResolvedValue(false);
   mocks.draft.mockResolvedValue(false);
+  mocks.overview.mockResolvedValue({ draft: null, otherDrafts: [], submitted: null });
   mocks.document.mockResolvedValue(null);
   mocks.request.mockResolvedValue(null);
   mocks.shopping.mockResolvedValue([{ kind: "text", text: "Which model?" }]);
@@ -101,7 +104,11 @@ it("does not fall through to a competing text handler when no decision is return
   expect(mocks.send).toHaveBeenCalledOnce();
 });
 it("keeps conversation ownership while a request draft exists", async () => {
-  mocks.draft.mockResolvedValue({ status: "draft", details: [] });
+  mocks.overview.mockResolvedValue({
+    draft: { reference: "CF-1", category: "sales", status: "draft", stage: "details", details: [] },
+    otherDrafts: [],
+    submitted: null,
+  });
   await processQueuedInbound(input);
   expect(mocks.shopping).toHaveBeenCalledOnce();
   expect(mocks.request).not.toHaveBeenCalled();

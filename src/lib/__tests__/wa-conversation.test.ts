@@ -24,6 +24,7 @@ function setup(model: ShoppingModel = finish({ action: "answer", text: "Which pr
     model,
     history: vi.fn(async () => ({ messages: [{ role: "customer", text: "Previous equipment budget was 50000 USD" }] })),
     requestContext: vi.fn(async () => draft),
+    overview: vi.fn(async () => ({ draft, otherDrafts: [], submitted: null })),
     request: vi.fn(async () => [{ kind: "text" as const, text: "Request details" }]),
     runtime: vi.fn(async (s) => ({ session: s, turns: [{ kind: "text" as const, text: "Menu" }] })),
     render: vi.fn(async (s) => ({
@@ -53,12 +54,18 @@ describe("unified conversation owner", () => {
     expect(services.history).toHaveBeenCalledWith("test");
     expect(services.model).toHaveBeenCalledWith(expect.anything(), expect.stringContaining("Previous equipment budget"), expect.anything());
   });
-  it("does not fetch or inject historical requests into normal shopping", async () => {
+  it("gives shopping only current request state, never history or draft wording", async () => {
     const { services, send } = setup();
     await send("I need three mirrors");
     expect(services.history).not.toHaveBeenCalled();
     const context = (services.model as ReturnType<typeof vi.fn>).mock.calls[0]![1];
-    expect(JSON.parse(context).workflow.request).toBeNull();
+    // An unsent draft is current state the advisor must know about (so a
+    // new intent is not answered with the old draft), but its customer
+    // wording stays out while the customer is shopping.
+    const request = JSON.parse(context).workflow.request;
+    expect(request.draft).toMatchObject({ reference: "CF-test", status: "draft" });
+    expect(request.draft.details).toBeUndefined();
+    expect(request.customerIsWorkingOnDraft).toBe(false);
     expect(JSON.parse(context).workflow.previousChat).toBeNull();
   });
   it.each(["Hi", "hello", "hi there", "good morning"])("%s starts fresh without touching staff records", async text => {
