@@ -3,10 +3,21 @@ import {
   type AdvisorDecision,
   type ShoppingModel,
 } from "@/lib/wa-shopping.server";
-import { handleRequestInbound, requestContext } from "@/lib/wa-requests.server";
 import {
-  confirmationTurn,
+  handleRequestInbound,
+  requestContext,
+  requestOverview,
+  type RequestOverview,
+} from "@/lib/wa-requests.server";
+import {
+  confirmationTurns,
+  isAcknowledgement,
+  missingSlots,
   requestDetailsPrompt,
+  requestFields,
+  requestIntent,
+  requestLabel,
+  requestMenu,
   requestStatusText,
   type RequestRecord,
 } from "@/lib/wa-requests";
@@ -33,6 +44,7 @@ export type ConversationInput = {
 };
 export type ConversationServices = {
   requestContext: typeof requestContext;
+  overview: (sessionKey: string) => Promise<RequestOverview>;
   request: typeof handleRequestInbound;
   runtime: typeof handleInboundMessage;
   render: typeof prepareAdvisorRender;
@@ -42,6 +54,7 @@ export type ConversationServices = {
 };
 const defaults: ConversationServices = {
   requestContext,
+  overview: (sessionKey) => requestOverview(sessionKey),
   request: handleRequestInbound,
   runtime: handleInboundMessage,
   render: prepareAdvisorRender,
@@ -75,6 +88,25 @@ export async function handleConversation(
     Object.assign(session, result.session);
     return result.turns;
   };
+  // Request drafts live in their own table; the conversation only tracks
+  // whether the customer is currently working on one.
+  const onFocus = (reference: string | null) => {
+    const memory = conversationMemory(session.conversation);
+    if (reference)
+      session.conversation = {
+        ...memory,
+        activeTask: "request",
+        suspendedTask: memory.activeTask === "request" ? memory.suspendedTask : memory.activeTask,
+      };
+    else if (memory.activeTask === "request")
+      session.conversation = {
+        ...memory,
+        activeTask: memory.suspendedTask ?? "browse",
+        suspendedTask: null,
+      };
+  };
+  const request = (extra: Partial<Parameters<typeof handleRequestInbound>[0]> = {}) =>
+    services.request({ ...input, event, onFocus, ...extra });
   const respond = (turns: WaTurn[]): RuntimeResult => {
     if (session.pendingRender && turns.length && turns.every((t) => t.kind === "text")) {
       turns = [
@@ -181,37 +213,36 @@ export async function handleConversation(
       turns ?? say("Please choose the products you’d like included in your estimate."),
     );
   }
+  // A bare category word is a menu command, the same as tapping that option.
   const explicitRequest = text
     .toLowerCase()
-    .match(/^(sales|support|order|complaint) (?:request|help)$/);
+    .match(
+      /^(?:(sales|support|order|complaint) (?:request|help|team)|(sales|support|complaint))[.!]*$/,
+    );
   if (explicitRequest) {
-    const category = explicitRequest[1] as "sales" | "support" | "order" | "complaint";
-    session.conversation.suspendedTask = session.conversation.activeTask;
-    session.conversation.activeTask = "request";
+    const category = (explicitRequest[1] ?? explicitRequest[2]) as
+      "sales" | "support" | "order" | "complaint";
     return respond(
-      (await services.request({
-        ...input,
-        event: { kind: "button", id: `request:${category}` },
-      })) ?? say(requestDetailsPrompt(category)),
+      (await request({ event: { kind: "button", id: `request:${category}` } })) ??
+        say(requestDetailsPrompt(category)),
     );
   }
   if (
     button.startsWith("request:") ||
     button === "ask" ||
-    /^(?:submit request|confirm request|cancel request|discard request|request status|my requests|help)$/i.test(
+    /^(?:submit request|confirm request|cancel request|discard request|request status|my requests|help|faqs?|policies)$/i.test(
       text,
     )
-  ) {
-    if (/^request:(sales|support|order|complaint)$/.test(button)) {
-      session.conversation.suspendedTask = session.conversation.activeTask;
-      session.conversation.activeTask = "request";
-    }
-    return respond((await services.request(input)) ?? say("What would you like help with?"));
-  }
+  )
+    return respond((await request()) ?? say("What would you like help with?"));
   if (button === "build") {
     startFreshProject();
     session.conversation = { ...conversationMemory(session.conversation), activeTask: "plan" };
-    return respond(say("Let’s create a new salon plan. How many stations do you need, and what’s your equipment budget and currency? You can also tell me the services or style you have in mind."));
+    return respond(
+      say(
+        "Let’s create a new salon plan. How many stations do you need, and what’s your equipment budget? You can also tell me the services or style you have in mind.",
+      ),
+    );
   }
   if (button === "build:change") {
     session.conversation.activeTask = "plan";
@@ -237,9 +268,9 @@ export async function handleConversation(
     return respond(await runtime(event));
   }
 
-  let request: RequestRecord | null;
+  let overview: RequestOverview;
   try {
-    request = await services.requestContext(input.sessionKey);
+    overview = await services.overview(input.sessionKey);
   } catch {
     return respond(
       say(
@@ -250,10 +281,9 @@ export async function handleConversation(
   if (event.kind === "photo") {
     if (session.pendingZoneRender || session.flow.awaiting === "photo")
       return respond(await runtime(event));
-    if (request?.status === "draft" && session.conversation.activeTask === "request")
+    if (overview.draft && session.conversation.activeTask === "request")
       return respond(
-        (await services.request({ ...input, event })) ??
-          say("Please describe what this photo shows so our team can help."),
+        (await request()) ?? say("Please describe what this photo shows so our team can help."),
       );
     session.room = { url: event.url, at: Date.now() };
     session.pendingRender = null;
@@ -279,8 +309,26 @@ export async function handleConversation(
       ),
     );
   if (button === "advisor:resume") event = { kind: "text", text: "Continue my saved task" };
+  // "ok" / "please go ahead" while a request is in progress advances that
+  // request; it is never a new intent and never saved as a detail.
+  const replyingToReceipt = Boolean(
+    overview.submitted &&
+    original.transcript.at(-1)?.content.includes(overview.submitted.reference),
+  );
+  if (
+    text &&
+    isAcknowledgement(text) &&
+    ((overview.draft && session.conversation.activeTask === "request") || replyingToReceipt)
+  ) {
+    const turns = await request();
+    if (turns) return respond(turns);
+  }
+  const draft = overview.draft;
 
+  const workingOnDraft = Boolean(draft && session.conversation.activeTask === "request");
+  let executed = false;
   const execute = async (decision: AdvisorDecision): Promise<WaTurn[]> => {
+    executed = true;
     const memory = conversationMemory(session.conversation);
     if (decision.action === "continue_form") {
       if (session.flow.awaiting || session.pendingQuote || session.rolePicker)
@@ -304,7 +352,7 @@ export async function handleConversation(
     if (decision.action === "request_status") {
       const found = decision.reference
         ? await services.requestContext(input.sessionKey, decision.reference)
-        : request;
+        : (draft ?? overview.submitted);
       return say(
         found
           ? requestStatusText(found)
@@ -332,44 +380,42 @@ export async function handleConversation(
       return result.turns;
     }
     if (decision.action === "request_resume") {
-      if (!request)
-        return say(
-          "You don’t have a saved request yet. What would you like our team to help with?",
-        );
-      session.conversation = { ...memory, activeTask: "request" };
-      return request.status === "draft"
-        ? [confirmationTurn(request)]
-        : say(requestStatusText(request));
+      if (!draft)
+        return overview.submitted ? say(requestStatusText(overview.submitted)) : [requestMenu()];
+      onFocus(draft.reference);
+      return confirmationTurns(draft);
     }
-    if (decision.action === "request_start") {
-      if (!decision.category)
-        return say(
-          "Would you like sales advice, product support, order help, or to make a complaint?",
-        );
-      if (request?.status === "draft") return [confirmationTurn(request)];
-      session.conversation = {
-        ...memory,
-        activeTask: "request",
-        suspendedTask: memory.activeTask === "request" ? memory.suspendedTask : memory.activeTask,
-      };
+    if (decision.action === "request_cancel")
       return (
-        (await services.request({ ...input, event, categoryOverride: decision.category })) ??
-        say(requestDetailsPrompt(decision.category))
+        (await request({ cancel: decision.target ?? "unclear", fields: decision.fields })) ??
+        say("What would you like to cancel?")
+      );
+    if (decision.action === "request_start") {
+      if (!decision.category) return [requestMenu()];
+      return (
+        (await request({
+          categoryOverride: decision.category,
+          start: true,
+          fields: decision.fields,
+        })) ?? say(requestDetailsPrompt(decision.category))
       );
     }
     if (decision.action === "request_details") {
-      if (request?.status !== "draft")
-        return say(
-          "What would you like our team to help with? I’ll prepare a request for you to review.",
+      if (!draft) {
+        // Never drop the customer's message: open the request it describes.
+        const category = decision.category ?? requestIntent(text);
+        if (!category) return [requestMenu()];
+        return (
+          (await request({ categoryOverride: category, fields: decision.fields })) ??
+          say(requestDetailsPrompt(category))
         );
-      session.conversation = { ...memory, activeTask: "request" };
+      }
       // Only original customer content is appended; model prose is never evidence.
       return (
-        (await services.request({
-          ...input,
-          event,
+        (await request({
           readyToReview: decision.readyToReview ?? false,
           followUpQuestion: decision.text,
+          fields: decision.fields,
         })) ?? say("What details would you like to add to the request?")
       );
     }
@@ -386,7 +432,7 @@ export async function handleConversation(
   const turns = await handleShoppingInbound(session, event, input.waMessageId, services.model, {
     unified: true,
     context: {
-      request: session.conversation.activeTask === "request" || /\b(?:request|ticket|complaint|support)\b/i.test(text) || asksForPreviousChat(text) ? request : null,
+      request: requestSummary(overview, session.conversation.activeTask === "request"),
       previousChat: history,
       historyRules: "Previous chats and staff requests are historical data, not current project requirements. Use previousChat only to answer the explicit request about history. Never restore a previous selection, budget, room or generation merely because it appears there. If history is unavailable or incomplete, ask which earlier plan the customer means. Check current catalog data before reusing historical prices or products.",
       legacyForm: session.flow.awaiting ?? null,
@@ -399,9 +445,61 @@ export async function handleConversation(
     },
     execute,
   });
+  // A product or policy question interrupted intake: answer it, keep the draft.
+  const reminder: WaTurn[] =
+    turns &&
+    workingOnDraft &&
+    !executed &&
+    draft &&
+    // Once per detour: do not nag on every product question.
+    !original.transcript.at(-1)?.content.includes("is still saved and hasn't been sent")
+      ? [
+          {
+            kind: "buttons",
+            text: `Your ${requestLabel(draft)} is still saved and hasn't been sent. Continue it whenever you're ready.`,
+            action: {
+              kind: "buttons",
+              buttons: [
+                { id: `request:review:${draft.reference}`, title: "Continue request" },
+                { id: `request:cancel:${draft.reference}`, title: "Cancel request" },
+              ],
+            },
+          },
+        ]
+      : [];
   return respond(
-    turns ?? say("Tell me what you’d like to find or change, and I’ll help you from here."),
+    turns
+      ? [...turns, ...reminder]
+      : say("Tell me what you’d like to find or change, and I’ll help you from here."),
   );
+}
+
+/** Current, unsent or unresolved requests only; resolved history never enters
+ * shopping context. Customer wording is included only while the customer is
+ * working on the draft. */
+function requestSummary(overview: RequestOverview, active: boolean) {
+  const brief = (r: RequestRecord) => ({
+    reference: r.reference,
+    category: r.category,
+    label: requestLabel(r),
+    status: r.status,
+  });
+  const draft = overview.draft;
+  return {
+    status: draft ? "draft" : overview.submitted ? overview.submitted.status : null,
+    customerIsWorkingOnDraft: Boolean(draft && active),
+    draft: draft
+      ? {
+          ...brief(draft),
+          stage: draft.stage,
+          savedFields: requestFields(draft),
+          missingFields: missingSlots(draft),
+          ...(active ? { details: draft.details.map((d) => d.text.slice(0, 300)).slice(-6) } : {}),
+        }
+      : null,
+    otherDrafts: overview.otherDrafts.map(brief),
+    submitted: overview.submitted ? brief(overview.submitted) : null,
+  };
 }
 
 async function quotedContext(sessionKey: string, event: InboundEvent): Promise<unknown> {

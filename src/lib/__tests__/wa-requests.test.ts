@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/integrations/supabase/types";
-import { handleRequestInbound, type RequestStore } from "@/lib/wa-requests.server";
+import { handleRequestInbound } from "@/lib/wa-requests.server";
 import {
   requestIntent,
   requestMenu,
@@ -10,32 +10,12 @@ import {
 } from "@/lib/wa-requests";
 import { knowledgeAnswer, whatsappKnowledgeInstructions } from "@/lib/wa-knowledge";
 import type { InboundEvent } from "@/lib/wa-runtime";
+import { memoryRequestStore } from "./helpers/request-store";
 
 type Row = Database["public"]["Tables"]["wa_requests"]["Row"];
 let rows: Row[];
 let serial = 0;
-const db: RequestStore = {
-  latest: async (session) => [...rows].reverse().find((r) => r.session_key === session) ?? null,
-  replay: async (session, message) =>
-    rows.find((r) => r.session_key === session && r.last_inbound_id === message) ?? null,
-  create: async (row) => {
-    rows.push({
-      status: "draft",
-      stage: "details",
-      details: [],
-      last_inbound_id: null,
-      last_reply: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...row,
-    });
-  },
-  update: async (reference, session, patch) => {
-    const row = rows.find((r) => r.reference === reference && r.session_key === session);
-    if (!row) throw new Error("missing");
-    Object.assign(row, patch);
-  },
-};
+let db: ReturnType<typeof memoryRequestStore>;
 const send = (event: InboundEvent, message = `m-${++serial}`, session = "wa:test") =>
   handleRequestInbound(
     { sessionKey: session, phone: "15551234567", waMessageId: message, event },
@@ -44,7 +24,8 @@ const send = (event: InboundEvent, message = `m-${++serial}`, session = "wa:test
 const text = (value: string, id?: string) => send({ kind: "text", text: value }, id);
 
 beforeEach(() => {
-  rows = [];
+  db = memoryRequestStore();
+  rows = db.rows;
   vi.stubEnv("WHATSAPP_PHONE_ENC_KEY", "test-only-key");
 });
 
@@ -116,7 +97,7 @@ describe("durable request intake", () => {
       kind: "button",
       id: "request:sales:quote:330334,330283:4,2:CQ-ABCDEF1234",
     });
-    expect(JSON.stringify(reply)).toContain("delivery postcode");
+    expect(JSON.stringify(reply)).toContain("Delivery postcode and country");
     expect(JSON.stringify(rows[0]?.details)).toContain("4 x Chloe");
     expect(rows[0]?.status).toBe("draft");
     await text("Delivery to 10001, USA; standard options please.");

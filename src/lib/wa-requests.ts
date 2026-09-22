@@ -1,8 +1,41 @@
 import type { InboundEvent, WaTurn } from "@/lib/wa-runtime";
+import knowledge from "@/data/wa-knowledge.json";
 
 export const REQUEST_CATEGORIES = ["sales", "support", "order", "complaint"] as const;
 export type RequestCategory = (typeof REQUEST_CATEGORIES)[number];
-export type RequestDetail = { messageId: string; text: string; imageUrl?: string };
+
+/** Free-text slots the advisor may extract from the customer's own message.
+ * Every value must appear in that message (see groundedFields); the model
+ * never supplies evidence, it only labels what the customer wrote. */
+export const REQUEST_TEXT_FIELDS = [
+  "product",
+  "quantity",
+  "issue",
+  "order_number",
+  "purchase",
+  "preferred_time",
+  "timezone",
+  "location",
+  "recipient",
+  "address",
+  "postcode",
+  "country",
+  "phone",
+  "email",
+] as const;
+export type RequestTextField = (typeof REQUEST_TEXT_FIELDS)[number];
+export type RequestFields = Partial<Record<RequestTextField, string>> & {
+  /** Sales intent only: a callback or a showroom visit. */
+  contact?: "call" | "visit";
+  /** Order intent only: the customer wants a placed order cancelled. */
+  cancel_order?: boolean;
+};
+export type RequestDetail = {
+  messageId: string;
+  text: string;
+  imageUrl?: string;
+  fields?: RequestFields;
+};
 export type RequestRecord = {
   reference: string;
   session_key: string;
@@ -58,6 +91,14 @@ export function requestIntent(text: string): RequestCategory | null {
   return null;
 }
 
+/** A reply that only acknowledges our last message. It is never request
+ * evidence: during intake it advances the flow, on a review it confirms it. */
+export function isAcknowledgement(text: string): boolean {
+  return /^(?:ok(?:ay)?|k|yes(?: please)?|yep|yeah|sure|fine|alright|all right|great|perfect|done|sounds good|(?:please )?(?:go ahead|proceed|continue|carry on)(?: please)?|(?:ok(?:ay)?|yes)[, ]+(?:please )?(?:go ahead|proceed|continue|submit(?: it)?|send(?: it)?)|send it|submit it)[.!\s]*$/i.test(
+    text.trim(),
+  );
+}
+
 export function requestMenu(): WaTurn {
   return {
     kind: "list",
@@ -86,7 +127,7 @@ export function requestDetailsPrompt(category: RequestCategory): string {
     order:
       "What would you like help with on your order? Share your order number and what you need checked or changed. If you can't find the number, tell me what you purchased instead.",
     complaint:
-      "I'm sorry you've had a frustrating experience. Tell me what happened and how you'd like us to help. Include your order number if you have it. If equipment seems unsafe, stop using it and get qualified help before using it again.",
+      "I'm sorry you've had a frustrating experience. What went wrong, and how would you like us to help? An order number or a photo helps if you have one, but it's optional. If equipment seems unsafe, stop using it and get qualified help before using it again.",
   };
   return `${prompts[category]}\n\nYou'll be able to review everything before sending. Please leave out card details, passwords and ID documents. Type 'cancel request' if you'd like to stop.`;
 }
@@ -98,6 +139,165 @@ const requestLabels: Record<RequestCategory, string> = {
   complaint: "complaint",
 };
 
+const QUOTE_PREFIX = "Please confirm a final quote for estimate ";
+const isQuoteDetail = (d: RequestDetail) => d.text.startsWith(QUOTE_PREFIX);
+
+/** All structured slots saved so far; later answers correct earlier ones. */
+export function requestFields(request: Pick<RequestRecord, "details">): RequestFields {
+  return Object.assign({}, ...request.details.map((d) => d.fields ?? {})) as RequestFields;
+}
+
+type RequestKind = "delivery" | "call" | "visit" | "cancel_order" | RequestCategory;
+export function requestKind(request: Pick<RequestRecord, "category" | "details">): RequestKind {
+  const fields = requestFields(request);
+  if (request.category === "sales") {
+    if (request.details.some(isQuoteDetail)) return "delivery";
+    if (fields.contact) return fields.contact;
+  }
+  if (request.category === "order" && fields.cancel_order) return "cancel_order";
+  return request.category;
+}
+
+/** Customer-facing name for this particular draft. */
+export function requestLabel(request: Pick<RequestRecord, "category" | "details">): string {
+  const kind = requestKind(request);
+  return (
+    (
+      {
+        delivery: "delivery request",
+        call: "callback request",
+        visit: "showroom visit request",
+        cancel_order: "order cancellation request",
+      } as Record<string, string>
+    )[kind] ?? requestLabels[request.category]
+  );
+}
+
+type Slot = { any: RequestTextField[] };
+const NEEDS: Record<RequestKind, Slot[]> = {
+  delivery: [{ any: ["postcode"] }, { any: ["country"] }],
+  call: [{ any: ["preferred_time"] }, { any: ["timezone"] }],
+  visit: [{ any: ["location"] }, { any: ["preferred_time"] }],
+  sales: [{ any: ["product"] }],
+  support: [{ any: ["product"] }, { any: ["issue"] }],
+  order: [{ any: ["issue"] }, { any: ["order_number", "purchase"] }],
+  cancel_order: [{ any: ["order_number", "purchase"] }],
+  complaint: [{ any: ["issue"] }],
+};
+
+/** Required slots still missing, or null for a legacy unstructured draft. */
+export function missingSlots(
+  request: Pick<RequestRecord, "category" | "details">,
+): RequestTextField[] | null {
+  if (!request.details.some((d) => d.fields && Object.keys(d.fields).length)) return null;
+  const fields = requestFields(request);
+  return NEEDS[requestKind(request)]
+    .filter((slot) => !slot.any.some((key) => fields[key]?.trim()))
+    .map((slot) => slot.any[0]!);
+}
+
+const SHOWROOMS = "Carlstadt, NJ; Katy, TX; or Richmond Hill, Ontario";
+
+/** One focused, customer-facing question for the first missing slot. The
+ * application owns this copy so staff-facing notes never reach the customer. */
+export function nextQuestion(
+  request: Pick<RequestRecord, "category" | "details">,
+  again = false,
+): string {
+  const missing = missingSlots(request) ?? [];
+  const kind = requestKind(request);
+  const has = (k: RequestTextField) => missing.includes(k);
+  // After "ok" / "go ahead": say what is still needed instead of repeating.
+  if (again && kind === "call" && (has("preferred_time") || has("timezone")))
+    return "To set up the call I just need a day and time that suit you, plus your timezone (for example: Tuesday 3pm EST). Our team will then contact you to confirm.";
+  if (again) return `To continue, I just need one more detail. ${nextQuestion(request)}`;
+  if (kind === "call") {
+    if (has("preferred_time") && has("timezone"))
+      return "What day and time suit you for a call, and which timezone are you in? We'll use this WhatsApp number unless you tell me another.";
+    if (has("preferred_time")) return "What day and time suit you for the call?";
+    if (has("timezone")) return "Which timezone are you in, so our team calls at the right time?";
+  }
+  if (kind === "visit") {
+    if (has("location")) return `Which showroom would you like to visit: ${SHOWROOMS}?`;
+    if (has("preferred_time")) return "What day and time would you prefer for the visit?";
+  }
+  if (kind === "delivery") {
+    if (has("postcode") && has("country")) return "What's the delivery postcode and country?";
+    if (has("postcode")) return "What's the delivery postcode?";
+    if (has("country")) return "Which country is the delivery going to?";
+  }
+  if (has("product"))
+    return kind === "sales"
+      ? "Which products are you interested in, and how many do you need?"
+      : "Which product is this about? The model name or a photo of its label helps.";
+  if (has("issue"))
+    return kind === "complaint"
+      ? "What went wrong? An order number or photo helps if you have one, but it's optional."
+      : kind === "order"
+        ? "What do you need help with on this order?"
+        : "What's happening with it? A photo helps if you can send one.";
+  if (has("order_number"))
+    return "What's your order number? If you can't find it, tell me what you bought and roughly when.";
+  return "Is there anything else our team should know?";
+}
+
+const FIELD_LABELS: [RequestTextField, string][] = [
+  ["product", "Product"],
+  ["quantity", "Quantity"],
+  ["order_number", "Order number"],
+  ["purchase", "Purchase"],
+  ["recipient", "Recipient"],
+  ["address", "Address"],
+  ["postcode", "Postcode"],
+  ["country", "Country"],
+  ["location", "Showroom"],
+  ["preferred_time", "Preferred time"],
+  ["timezone", "Timezone"],
+  ["phone", "Phone"],
+  ["email", "Email"],
+];
+
+/** Short labelled lines, empty fields omitted, nothing printed twice. */
+export function requestSummary(request: Pick<RequestRecord, "category" | "details">): string {
+  const fields = requestFields(request);
+  const kind = requestKind(request);
+  const blocks: string[] = [];
+  for (const quote of request.details.filter(isQuoteDetail)) {
+    const [head, ...lines] = quote.text.split("\n");
+    blocks.push(
+      [`Estimate: ${head!.slice(QUOTE_PREFIX.length).replace(/:$/, "")}`, ...lines].join("\n"),
+    );
+  }
+  const labelled = FIELD_LABELS.filter(([key]) => fields[key]?.trim()).map(
+    ([key, label]) => `${label}: ${fields[key]!.trim()}`,
+  );
+  if (kind === "call")
+    labelled.push(`Contact: ${fields.phone ? fields.phone : "this WhatsApp number"}`);
+  if (labelled.length) blocks.push(labelled.join("\n"));
+  // A message that only answered a slot question is already shown above.
+  const notes = request.details
+    .filter((d) => !isQuoteDetail(d) && !isAcknowledgement(d.text))
+    .filter((d) => !d.fields || Object.keys(d.fields).length === 0 || d.fields.issue || d.imageUrl)
+    .map((d) => `${d.text}${d.imageUrl ? " [photo attached]" : ""}`);
+  if (notes.length) blocks.push(`Details:\n${notes.join("\n")}`);
+  return blocks.join("\n\n").slice(0, 2000);
+}
+
+function nextStep(request: Pick<RequestRecord, "category" | "details">): string {
+  switch (requestKind(request)) {
+    case "delivery":
+      return "Our team will confirm delivery options and cost.";
+    case "call":
+      return "Our team will contact you to arrange the call. Nothing is booked until they confirm a time.";
+    case "visit":
+      return "Our team will confirm a visit time. Please wait for their confirmation before travelling.";
+    case "cancel_order":
+      return "Our team will check whether the order can still be cancelled. It isn't cancelled until they confirm.";
+    default:
+      return "Our team will review it.";
+  }
+}
+
 export function requestReceipt(request: RequestRecord): string {
   const next: Record<RequestCategory, string> = {
     sales:
@@ -108,7 +308,7 @@ export function requestReceipt(request: RequestRecord): string {
       "It's waiting for our team's review. Any change, cancellation or refund still needs their confirmation.",
     complaint: "Your concerns have been recorded for our team's review.",
   };
-  return `Thank you—your ${requestLabels[request.category]} has been received.\nReference: ${request.reference}\n\n${next[request.category]}\n\nType 'request status' to check progress, or 'menu' to continue browsing.`;
+  return `Thank you—your ${requestLabel(request)} has been received.\nReference: ${request.reference}\n\n${next[request.category]}\n\nType 'request status' to check progress, or 'menu' to continue browsing.`;
 }
 
 export function requestStatusText(request: RequestRecord): string {
@@ -120,28 +320,37 @@ export function requestStatusText(request: RequestRecord): string {
       "Our team has marked this request as resolved. Still need help? Type 'help' to start another request.",
     cancelled: "This draft wasn't submitted. Type 'help' if you'd like to start again.",
   };
-  return `Your ${requestLabels[request.category]}\nReference: ${request.reference}\n\n${states[request.status]}${request.category === "order" ? "\nThis update is about your enquiry. For shipment tracking, check your dispatch email." : ""}`;
+  return `Your ${requestLabel(request)}\nReference: ${request.reference}\n\n${states[request.status]}${request.category === "order" ? "\nThis update is about your enquiry. For shipment tracking, check your dispatch email." : ""}`;
+}
+
+/** Review with Submit, or the one question still needed before review. */
+export function confirmationTurns(request: RequestRecord): WaTurn[] {
+  const missing = missingSlots(request);
+  if (missing?.length) return [{ kind: "text", text: nextQuestion(request) }];
+  if (!requestHasDetails(request))
+    return [{ kind: "text", text: requestDetailsPrompt(request.category) }];
+  const label = requestLabel(request);
+  const buttons = {
+    kind: "buttons" as const,
+    buttons: [
+      { id: `request:submit:${request.reference}`, title: "Submit request" },
+      { id: `request:edit:${request.reference}`, title: "Add details" },
+      { id: `request:cancel:${request.reference}`, title: "Cancel request" },
+    ],
+  };
+  const review = `*Your ${label}* (not sent yet)\n\n${requestSummary(request)}`;
+  const next = `Next: tap Submit request to send it. ${nextStep(request)}`;
+  // WhatsApp caps an interactive body at 1024 characters: never truncate it.
+  if (review.length + next.length > 950)
+    return [
+      { kind: "text", text: review },
+      { kind: "buttons", text: next, action: buttons },
+    ];
+  return [{ kind: "buttons", text: `${review}\n\n${next}`, action: buttons }];
 }
 
 export function confirmationTurn(request: RequestRecord): WaTurn {
-  if (!requestHasDetails(request))
-    return { kind: "text", text: requestDetailsPrompt(request.category) };
-  const summary = request.details
-    .map((d) => `${d.text}${d.imageUrl ? " [photo attached]" : ""}`)
-    .join("\n")
-    .slice(0, 2200);
-  return {
-    kind: "buttons",
-    text: `Here's your ${requestLabels[request.category]}:\n\n${summary}\n\nDoes that look right? Tap Submit request to send it for our team to review, or Add details if there's anything else.`,
-    action: {
-      kind: "buttons",
-      buttons: [
-        { id: `request:submit:${request.reference}`, title: "Submit request" },
-        { id: `request:edit:${request.reference}`, title: "Add details" },
-        { id: `request:cancel:${request.reference}`, title: "Cancel request" },
-      ],
-    },
-  };
+  return confirmationTurns(request).at(-1)!;
 }
 
 /** A number, navigation command or empty draft is not a usable staff enquiry. */
@@ -149,19 +358,119 @@ export function requestHasDetails(request: Pick<RequestRecord, "details">): bool
   return request.details.some(
     (d) =>
       d.text.trim().length >= 8 &&
+      !isAcknowledgement(d.text) &&
       !/^(?:menu|hi|hello|help|support|sales|I (?:want|need)(?: to buy)? (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten))[.!? ]*$/i.test(
         d.text.trim(),
       ),
   );
 }
 
-export function detailFrom(event: InboundEvent, messageId: string): RequestDetail | null {
-  if (event.kind === "text") return { messageId, text: event.text.trim().slice(0, 2500) };
+const normalize = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[^\p{L}\p{N}@+'.-]+/gu, " ")
+    .trim();
+
+/** Keeps only slots whose values the customer actually wrote in this message. */
+export function groundedFields(
+  fields: RequestFields | undefined,
+  category: RequestCategory,
+  text: string,
+): RequestFields {
+  if (!fields) return {};
+  const source = ` ${normalize(text)} `;
+  const out: RequestFields = {};
+  for (const key of REQUEST_TEXT_FIELDS) {
+    const value = fields[key]?.trim();
+    if (value && value.length <= 200 && normalize(value) && source.includes(normalize(value)))
+      out[key] = value;
+  }
+  if (category === "sales" && (fields.contact === "call" || fields.contact === "visit"))
+    out.contact = fields.contact;
+  if (category === "order" && fields.cancel_order === true) out.cancel_order = true;
+  return out;
+}
+
+export function detailFrom(
+  event: InboundEvent,
+  messageId: string,
+  fields?: RequestFields,
+): RequestDetail | null {
+  const extra = fields && Object.keys(fields).length ? { fields } : {};
+  if (event.kind === "text") return { messageId, text: event.text.trim().slice(0, 2500), ...extra };
   if (event.kind === "photo")
     return {
       messageId,
       text: event.caption?.trim().slice(0, 2500) || "Photo supplied by customer",
       imageUrl: event.url,
+      ...extra,
     };
   return null;
+}
+
+const FAQ_TOPICS = [
+  { id: "delivery", title: "Delivery", entry: "delivery", action: null },
+  {
+    id: "returns",
+    title: "Returns",
+    entry: "returns",
+    action: { id: "request:order", title: "Order help" },
+  },
+  {
+    id: "warranty",
+    title: "Warranty",
+    entry: "warranty",
+    action: { id: "request:support", title: "Product support" },
+  },
+  {
+    id: "payments",
+    title: "Payments",
+    entry: "orders",
+    action: { id: "request:order", title: "Order help" },
+  },
+  { id: "financing", title: "Financing", entry: "finance", action: null },
+  {
+    id: "showrooms",
+    title: "Showroom visits",
+    entry: "showrooms",
+    action: { id: "request:sales", title: "Sales / visit" },
+  },
+] as const;
+
+export function faqMenu(): WaTurn {
+  return {
+    kind: "list",
+    text: "Which topic would you like to know about?",
+    action: {
+      kind: "list",
+      button: "Choose a topic",
+      rows: FAQ_TOPICS.map((t) => ({ id: `request:faq:${t.id}`, title: t.title })),
+    },
+  };
+}
+
+/** Verified website knowledge only; an expired snapshot defers to the team. */
+export function faqAnswer(topic: string, now = Date.now()): WaTurn[] | null {
+  const faq = FAQ_TOPICS.find((t) => t.id === topic);
+  const entry = faq && knowledge.entries.find((e) => e.id === faq.entry);
+  if (!faq || !entry) return null;
+  const current = now <= Date.parse(`${knowledge.reviewAfter}T23:59:59Z`);
+  const body = current
+    ? `*${faq.title}*\n${entry.answer}\n\nMore details: ${entry.source}`
+    : `*${faq.title}*\nLet's check the latest details with our team before you make a decision. You can contact them here: https://comfortelfurniture.com/contact-us/`;
+  return [
+    {
+      kind: "buttons",
+      text: body,
+      action: {
+        kind: "buttons",
+        buttons: [
+          { id: "request:faq", title: "Back to FAQs" },
+          ...(current && faq.action ? [faq.action] : []),
+          { id: "nav:menu", title: "Main menu" },
+        ],
+      },
+    },
+  ];
 }
