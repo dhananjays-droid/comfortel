@@ -16,6 +16,7 @@ import {
   nextQuestion,
   requestDetailsPrompt,
   requestFields,
+  salesBudgetFields,
   requestIntent,
   requestKind,
   requestLabel,
@@ -627,7 +628,10 @@ export async function handleRequestInbound(
             ? confirmationTurns(current)
             : textTurn(requestDetailsPrompt(current.category)),
       );
-    const fields = groundedFields(input.fields, current.category, text);
+    const fields = {
+      ...groundedFields(input.fields, current.category, text),
+      ...(current.category === "sales" ? salesBudgetFields(text, requestFields(current)) : {}),
+    };
     // A captioned photo describes the problem even without advisor labels.
     if (event.kind === "photo" && text && !fields.issue && missingSlots(current)?.includes("issue"))
       fields.issue = text;
@@ -645,9 +649,15 @@ export async function handleRequestInbound(
       ];
     const withDetail = { ...current, details: [...current.details, detail] };
     const missing = missingSlots(withDetail);
+    const clarification =
+      input.readyToReview === false && input.followUpQuestion?.includes("?")
+        ? customerQuestion(input.followUpQuestion)
+        : null;
+    if (clarification && !missing?.length) detail.pendingQuestion = clarification;
     // Structured drafts are ready only when every required slot is filled;
     // legacy drafts keep the advisor's readiness judgement.
-    const ready = missing ? missing.length === 0 : input.readyToReview !== false;
+    const ready =
+      !clarification && (missing ? missing.length === 0 : input.readyToReview !== false);
     const next = { ...withDetail, stage: ready ? ("confirm" as const) : ("details" as const) };
     if (!requestHasDetails(next))
       return textTurn(
@@ -688,7 +698,10 @@ export async function handleRequestInbound(
     );
   if (category) {
     const quoteContext = newQuote;
-    const fields = groundedFields(input.fields, category, text);
+    const fields = {
+      ...groundedFields(input.fields, category, text),
+      ...(category === "sales" ? salesBudgetFields(text) : {}),
+    };
     const detail = quoteContext
       ? { messageId: waMessageId, text: quoteContext }
       : detailFrom(event, waMessageId, fields);

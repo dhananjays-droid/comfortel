@@ -97,6 +97,82 @@ const buttons = (turns: WaTurn[]) =>
 
 beforeEach(() => vi.stubEnv("WHATSAPP_PHONE_ENC_KEY", "test-only-key"));
 
+describe("Loom sales continuity: four focused chats", () => {
+  it("1. saves a budget-only enquiry and asks a focused product question", async () => {
+    const h = harness();
+    await h.tap("request:sales");
+    h.decide("My budget is $500", { action: "request_start", category: "sales", text: "Thanks" });
+    const reply = await h.say("My budget is $500");
+    expect(body(reply)).toContain("Which products");
+    expect(body(reply)).not.toContain("Happy to help");
+    expect(buttons(reply)).toHaveLength(0);
+    h.decide("chairs", {
+      action: "request_details",
+      text: "How many chairs do you need?",
+      readyToReview: false,
+      fields: { product: "chairs" },
+    });
+    expect(body(await h.say("chairs"))).toContain("How many chairs");
+    const ref = h.drafts()[0]!.reference;
+    expect(buttons(await h.tap(`request:review:${ref}`))).toHaveLength(0);
+    expect(body(await h.tap(`request:submit:${ref}`))).toContain("Please add");
+  });
+
+  it("2. updates $500 to $600 without a model call for the pending amount", async () => {
+    const h = harness();
+    await h.tap("request:sales");
+    h.decide("I want chairs on budget $500", {
+      action: "request_details",
+      text: "Thanks",
+      fields: { product: "chairs" },
+    });
+    await h.say("I want chairs on budget $500");
+    const ref = h.drafts()[0]!.reference;
+    await h.tap(`request:edit:${ref}`);
+    expect(body(await h.say("I'm ready to adjust my budget"))).toContain("new budget");
+    expect(buttons(await h.tap(`request:review:${ref}`))).toHaveLength(0);
+    const calls = h.model.mock.calls.length;
+    const result = body(await h.say("$600"));
+    expect(h.model).toHaveBeenCalledTimes(calls);
+    expect(result).toContain("Budget: 600");
+    expect(result).toContain("Currency: USD");
+    expect(result).not.toContain("500");
+    expect(JSON.stringify(h.drafts()[0]!.details)).toContain("500"); // audit history retained
+    expect(h.drafts()[0]!.status).toBe("draft");
+  });
+
+  it("3. handles a legacy draft correction while preserving explicit CAD", async () => {
+    const h = harness();
+    await h.tap("request:sales");
+    const draft = h.drafts()[0]!;
+    draft.details = [{ messageId: "old", text: "I want chairs, my budget is CAD $500" }];
+    await h.say("change my budget");
+    const reply = body(await h.say("$600"));
+    expect(reply).not.toContain("500");
+    expect(body(confirmationTurns(h.drafts()[0] as unknown as RequestRecord))).not.toContain(
+      "Submit request",
+    );
+    expect(JSON.stringify(h.drafts()[0]!.details)).toContain('"currency":"CAD"');
+    h.decide("chairs", { action: "request_details", text: "Thanks", fields: { product: "chairs" } });
+    const review = body(await h.say("chairs"));
+    expect(review).toContain("Budget: 600");
+    expect(review).not.toContain("500");
+  });
+
+  it("4. product advice asks its question without competing resume controls", async () => {
+    const h = harness();
+    await h.tap("request:sales");
+    h.decide("Is Oakley suitable?", {
+      action: "answer",
+      text: "Would you like alternatives within your budget?",
+    });
+    const reply = await h.say("Is Oakley suitable?");
+    expect(body(reply)).not.toContain("Continue it whenever");
+    expect(buttons(reply)).toHaveLength(0);
+    expect(h.drafts()).toHaveLength(1);
+  });
+});
+
 describe("bug 1: a new intent after delivery details", () => {
   it("routes 'sales' without repeating the saved delivery address", async () => {
     const h = harness();

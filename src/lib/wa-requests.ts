@@ -1,5 +1,6 @@
 import type { InboundEvent, WaTurn } from "@/lib/wa-runtime";
 import knowledge from "@/data/wa-knowledge.json";
+import { budgetCurrency } from "@/lib/wa-currency";
 
 export const REQUEST_CATEGORIES = ["sales", "support", "order", "complaint"] as const;
 export type RequestCategory = (typeof REQUEST_CATEGORIES)[number];
@@ -10,6 +11,8 @@ export type RequestCategory = (typeof REQUEST_CATEGORIES)[number];
 export const REQUEST_TEXT_FIELDS = [
   "product",
   "quantity",
+  "budget",
+  "currency",
   "issue",
   "order_number",
   "purchase",
@@ -25,12 +28,14 @@ export const REQUEST_TEXT_FIELDS = [
 ] as const;
 export type RequestTextField = (typeof REQUEST_TEXT_FIELDS)[number];
 export type RequestFields = Partial<Record<RequestTextField, string>> & {
+  budget_pending?: boolean;
   /** Sales intent only: a callback or a showroom visit. */
   contact?: "call" | "visit";
   /** Order intent only: the customer wants a placed order cancelled. */
   cancel_order?: boolean;
 };
 export type RequestDetail = {
+  pendingQuestion?: string;
   messageId: string;
   text: string;
   imageUrl?: string;
@@ -143,8 +148,48 @@ const QUOTE_PREFIX = "Please confirm a final quote for estimate ";
 const isQuoteDetail = (d: RequestDetail) => d.text.startsWith(QUOTE_PREFIX);
 
 /** All structured slots saved so far; later answers correct earlier ones. */
-export function requestFields(request: Pick<RequestRecord, "details">): RequestFields {
-  return Object.assign({}, ...request.details.map((d) => d.fields ?? {})) as RequestFields;
+export function requestFields(
+  request: Pick<RequestRecord, "details"> & Partial<Pick<RequestRecord, "category">>,
+): RequestFields {
+  const current: RequestFields = {};
+  for (const detail of request.details) {
+    Object.assign(
+      current,
+      request.category === "sales" ? salesBudgetFields(detail.text, current) : {},
+      detail.fields ?? {},
+    );
+  }
+  return current;
+}
+
+/** Resolve explicit budget edits, including short answers to our budget question.
+ * Raw details remain the audit trail; the latest value is the current summary. */
+export function salesBudgetFields(text: string, current: RequestFields = {}): RequestFields {
+  if (/\?|\b(?:don't|do not|not ready|maybe|could|would|can I|should)\b/i.test(text)) return {};
+  const mentionsBudget = /\bbudget\b/i.test(text);
+  const shortAmount =
+    /^(?:(?:USD|CAD|AUD|EUR|GBP)\s*)?[$£€]?\s*\d[\d,.]*(?:\s*k)?(?:\s*(?:USD|CAD|AUD|EUR|GBP|dollars?))?[.! ]*$/i.test(
+      text.trim(),
+    );
+  if (!mentionsBudget && !(current.budget_pending && shortAmount)) return {};
+  // Multiple amounts need contextual interpretation; never pick the first
+  // amount from a per-item/total comparison or a "500 to 600" correction.
+  if ((text.match(/\d[\d,]*(?:\.\d+)?\s*k?/gi) ?? []).length > 1) return {};
+  const amount =
+    text.match(/(?:[$£€]\s*|\bbudget\s*(?:(?:is|of|to|at)\s*)?)(\d[\d,]*(?:\.\d+)?\s*k?)/i) ??
+    (shortAmount ? text.match(/(\d[\d,]*(?:\.\d+)?\s*k?)/i) : null);
+  if (!amount)
+    return /\b(?:adjust|change|update|increase|decrease|raise|lower)\b/i.test(text)
+      ? { budget_pending: true }
+      : {};
+  const stated = budgetCurrency(text);
+  return {
+    budget: `${amount[1]!.trim()}${/\b(?:each|per (?:chair|item|unit|station))\b/i.test(text) ? " per item" : ""}`,
+    ...(stated
+      ? { currency: stated.explicit ? stated.currency : (current.currency ?? stated.currency) }
+      : {}),
+    budget_pending: false,
+  };
 }
 
 type RequestKind = "delivery" | "call" | "visit" | "cancel_order" | RequestCategory;
@@ -189,8 +234,9 @@ const NEEDS: Record<RequestKind, Slot[]> = {
 export function missingSlots(
   request: Pick<RequestRecord, "category" | "details">,
 ): RequestTextField[] | null {
-  if (!request.details.some((d) => d.fields && Object.keys(d.fields).length)) return null;
   const fields = requestFields(request);
+  if (fields.budget_pending) return ["budget"];
+  if (!Object.keys(fields).length) return null;
   return NEEDS[requestKind(request)]
     .filter((slot) => !slot.any.some((key) => fields[key]?.trim()))
     .map((slot) => slot.any[0]!);
@@ -205,8 +251,11 @@ export function nextQuestion(
   again = false,
 ): string {
   const missing = missingSlots(request) ?? [];
+  if (!missing.length && request.details.at(-1)?.pendingQuestion)
+    return request.details.at(-1)!.pendingQuestion!;
   const kind = requestKind(request);
   const has = (k: RequestTextField) => missing.includes(k);
+  if (has("budget")) return "What would you like your new budget to be?";
   // After "ok" / "go ahead": say what is still needed instead of repeating.
   if (again && kind === "call" && (has("preferred_time") || has("timezone")))
     return "To set up the call I just need a day and time that suit you, plus your timezone (for example: Tuesday 3pm EST). Our team will then contact you to confirm.";
@@ -244,6 +293,8 @@ export function nextQuestion(
 const FIELD_LABELS: [RequestTextField, string][] = [
   ["product", "Product"],
   ["quantity", "Quantity"],
+  ["budget", "Budget"],
+  ["currency", "Currency"],
   ["order_number", "Order number"],
   ["purchase", "Purchase"],
   ["recipient", "Recipient"],
@@ -277,8 +328,33 @@ export function requestSummary(request: Pick<RequestRecord, "category" | "detail
   // A message that only answered a slot question is already shown above.
   const notes = request.details
     .filter((d) => !isQuoteDetail(d) && !isAcknowledgement(d.text))
-    .filter((d) => !d.fields || Object.keys(d.fields).length === 0 || d.fields.issue || d.imageUrl)
-    .map((d) => `${d.text}${d.imageUrl ? " [photo attached]" : ""}`);
+    .filter(
+      (d) =>
+        !d.fields ||
+        Object.keys(d.fields).length === 0 ||
+        d.fields.issue ||
+        d.imageUrl ||
+        (d.fields.budget && !d.fields.product),
+    )
+    .map((d) => {
+      const text =
+        fields.budget && /\bbudget\b/i.test(d.text)
+          ? d.text
+              .replace(
+                /\b(?:my |on |a )?budget\s*(?:(?:is|of|to|at)\s*)?(?:(?:USD|CAD|AUD|EUR|GBP)\s*)?[$£€]?\s*\d[\d,.]*\s*k?(?:\s*(?:USD|CAD|AUD|EUR|GBP|dollars?))?/gi,
+                "",
+              )
+              .replace(
+                /^(?:I'm ready to |I want to )?(?:adjust|change|update)\s*(?:my )?budget[.! ]*$/i,
+                "",
+              )
+              .trim()
+          : d.fields?.budget && /^\s*\$?\s*\d[\d,.]*\s*$/.test(d.text)
+            ? ""
+            : d.text;
+      return `${text}${d.imageUrl ? " [photo attached]" : ""}`;
+    })
+    .filter(Boolean);
   if (notes.length) blocks.push(`Details:\n${notes.join("\n")}`);
   return blocks.join("\n\n").slice(0, 2000);
 }
@@ -326,6 +402,8 @@ export function requestStatusText(request: RequestRecord): string {
 /** Review with Submit, or the one question still needed before review. */
 export function confirmationTurns(request: RequestRecord): WaTurn[] {
   const missing = missingSlots(request);
+  if (request.details.at(-1)?.pendingQuestion)
+    return [{ kind: "text", text: nextQuestion(request) }];
   if (missing?.length) return [{ kind: "text", text: nextQuestion(request) }];
   if (!requestHasDetails(request))
     return [{ kind: "text", text: requestDetailsPrompt(request.category) }];

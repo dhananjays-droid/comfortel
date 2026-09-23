@@ -13,8 +13,10 @@ import {
   confirmationTurns,
   isAcknowledgement,
   missingSlots,
+  nextQuestion,
   requestDetailsPrompt,
   requestFields,
+  salesBudgetFields,
   requestIntent,
   requestLabel,
   requestMenu,
@@ -143,19 +145,32 @@ export async function handleConversation(
     ].slice(-24);
     return { session, turns };
   };
-  if (button === "shop:clear" || /^(?:please |plz )?(?:clear|clear (?:my |the )?(?:plan|selection|cart)|reset (?:my |the )?plan)[.! ]*$/i.test(text)) {
+  if (
+    button === "shop:clear" ||
+    /^(?:please |plz )?(?:clear|clear (?:my |the )?(?:plan|selection|cart)|reset (?:my |the )?plan)[.! ]*$/i.test(
+      text,
+    )
+  ) {
     clearShoppingPlan(session);
     clearedPlan = true;
-    return respond(say("Your product selection, budget and station requirements are cleared. I’ve kept your room photo. Existing staff requests and running images are unchanged. What would you like to plan next?"));
+    return respond(
+      say(
+        "Your product selection, budget and station requirements are cleared. I’ve kept your room photo. Existing staff requests and running images are unchanged. What would you like to plan next?",
+      ),
+    );
   }
   // Existing confirmation/status/cancel guards remain deterministic, ahead of AI.
   if (/^(?:please )?add (?:this|these|it)?\s*to my plan[.! ]*$/i.test(text)) {
     const render = session.lastRender;
     if (render?.productIds.length) {
-      const items = render.productIds.map(id => `${id}:${render.quantities[id] ?? 1}`).join(",");
+      const items = render.productIds.map((id) => `${id}:${render.quantities[id] ?? 1}`).join(",");
       return respond(await runtime({ kind: "button", id: `plan:add:${items}` }));
     }
-    return respond(say("Which products would you like in your plan? Choose a product or tell me its name and quantity."));
+    return respond(
+      say(
+        "Which products would you like in your plan? Choose a product or tell me its name and quantity.",
+      ),
+    );
   }
   if (
     button.startsWith("render:") ||
@@ -176,9 +191,10 @@ export async function handleConversation(
   if (!button && isGreeting(text) && !/^(?:menu|start)[.!?]*$/i.test(text)) {
     startFreshProject();
     const turns = await runtime({ kind: "button", id: "nav:menu" });
-    const first = turns.find(t => "text" in t);
+    const first = turns.find((t) => "text" in t);
     if (first && "text" in first)
-      first.text += "\n\nLet’s start fresh—your previous shopping selection won’t carry over. Existing staff requests are unchanged.";
+      first.text +=
+        "\n\nLet’s start fresh—your previous shopping selection won’t carry over. Existing staff requests are unchanged.";
     return respond(turns);
   }
   if (button === "nav:menu" || /^(?:menu|start)[.!?]*$/i.test(text)) {
@@ -326,6 +342,15 @@ export async function handleConversation(
   const draft = overview.draft;
 
   const workingOnDraft = Boolean(draft && session.conversation.activeTask === "request");
+  // A short answer to an explicit budget-edit question belongs to that draft,
+  // not an unrelated search or a second request.
+  if (workingOnDraft && draft?.category === "sales" && text) {
+    const budget = salesBudgetFields(text, requestFields(draft));
+    if (budget.budget_pending || (requestFields(draft).budget_pending && budget.budget)) {
+      const turns = await request();
+      if (turns) return respond(turns);
+    }
+  }
   let executed = false;
   const execute = async (decision: AdvisorDecision): Promise<WaTurn[]> => {
     executed = true;
@@ -392,6 +417,17 @@ export async function handleConversation(
       );
     if (decision.action === "request_start") {
       if (!decision.category) return [requestMenu()];
+      // The advisor may classify a descriptive answer as "start sales".
+      // Exact new-request/menu commands are handled above; do not restart
+      // the active category and discard the answer here.
+      if (workingOnDraft && draft?.category === decision.category)
+        return (
+          (await request({
+            fields: decision.fields,
+            readyToReview: decision.readyToReview,
+            followUpQuestion: decision.text,
+          })) ?? say(nextQuestion(draft))
+        );
       return (
         (await request({
           categoryOverride: decision.category,
@@ -434,7 +470,8 @@ export async function handleConversation(
     context: {
       request: requestSummary(overview, session.conversation.activeTask === "request"),
       previousChat: history,
-      historyRules: "Previous chats and staff requests are historical data, not current project requirements. Use previousChat only to answer the explicit request about history. Never restore a previous selection, budget, room or generation merely because it appears there. If history is unavailable or incomplete, ask which earlier plan the customer means. Check current catalog data before reusing historical prices or products.",
+      historyRules:
+        "Previous chats and staff requests are historical data, not current project requirements. Use previousChat only to answer the explicit request about history. Never restore a previous selection, budget, room or generation merely because it appears there. If history is unavailable or incomplete, ask which earlier plan the customer means. Check current catalog data before reusing historical prices or products.",
       legacyForm: session.flow.awaiting ?? null,
       legacyQuote: session.pendingQuote,
       legacyRolePicker: Boolean(session.rolePicker),
@@ -451,6 +488,7 @@ export async function handleConversation(
     workingOnDraft &&
     !executed &&
     draft &&
+    !turns.some((turn) => "text" in turn && /\?/.test(turn.text)) &&
     // Once per detour: do not nag on every product question.
     !original.transcript.at(-1)?.content.includes("is still saved and hasn't been sent")
       ? [

@@ -39,8 +39,18 @@ export const SHOPPING_TOOLS = [
       type: "object",
       properties: {
         stations: { type: "integer", minimum: 1, maximum: MAX_PLAN_STATIONS },
-        objective: { enum: ["fixed_stations", "max_stations"], description: "Default fixed_stations. Use max_stations only for an explicit maximum-capacity request; omit stations unless it is a customer-specified upper limit." },
-        max_stations: { type: "integer", minimum: 1, maximum: MAX_PLAN_STATIONS, description: "Customer-specified station upper limit; never infer room capacity from a photo." },
+        objective: {
+          enum: ["fixed_stations", "max_stations"],
+          description:
+            "Default fixed_stations. Use max_stations only for an explicit maximum-capacity request; omit stations unless it is a customer-specified upper limit.",
+        },
+        max_stations: {
+          type: "integer",
+          minimum: 1,
+          maximum: MAX_PLAN_STATIONS,
+          description:
+            "Customer-specified station upper limit; never infer room capacity from a photo.",
+        },
         equipment_quantities: {
           type: "object",
           properties: {
@@ -51,7 +61,8 @@ export const SHOPPING_TOOLS = [
             waiting: { type: "integer", minimum: 0, maximum: 10 },
           },
           additionalProperties: false,
-          description: "Explicit counts only. Zero means already owned/not requested. Preserve on revisions. Omit unspecified roles to use disclosed draft assumptions.",
+          description:
+            "Explicit counts only. Zero means already owned/not requested. Preserve on revisions. Omit unspecified roles to use disclosed draft assumptions.",
         },
         budget: { type: "number", exclusiveMinimum: 0 },
         currency: { enum: ["USD"] },
@@ -190,6 +201,15 @@ export const SHOPPING_TOOLS = [
           properties: {
             product: { type: "string" },
             quantity: { type: "string" },
+            budget: {
+              type: "string",
+              description:
+                "Current enquiry budget, exact amount stated; keep per-item versus total scope explicit in the value.",
+            },
+            currency: {
+              type: "string",
+              description: "Explicit currency wording only; bare $ is handled by the application.",
+            },
             issue: {
               type: "string",
               description: "What went wrong or what help is needed, in the customer's words.",
@@ -309,7 +329,11 @@ const Decision = z
   .strict();
 type Block = { type: string; id?: string; name?: string; input?: unknown; text?: string };
 type Message = { role: "user" | "assistant"; content: string | unknown[] };
-export type ShoppingModel = (messages: Message[], context: string, finishOnly?: boolean | "plan_salon") => Promise<Block[]>;
+export type ShoppingModel = (
+  messages: Message[],
+  context: string,
+  finishOnly?: boolean | "plan_salon",
+) => Promise<Block[]>;
 export type AdvisorDecision = z.infer<typeof Decision>;
 export type AdvisorOptions = {
   unified?: boolean;
@@ -353,6 +377,7 @@ export function findShoppingProducts(input: unknown) {
 }
 
 const INSTRUCTIONS = `You are Comfortel's WhatsApp advisor. Own the customer's whole journey, not merely the last sentence. Use tools, never plain-text action markers.
+SALES CONTINUITY: When a sales draft is active, save product/category, quantity and budget answers with request_details (including generic products such as chairs). Do not restart request_start for answers to that same enquiry. Budget corrections replace the current budget, not a new enquiry. Extract budget and currency when stated; keep per-item and total budgets distinct. Ask only the next missing detail; never repeat the sales introduction. If a relevant clarification is still unanswered, use readyToReview:false and one customer-facing question. Do not require an exact SKU for a general sales enquiry.
 You can browse, plan equipment, compare, prepare quotes, help with support, and prepare image proposals. Business actions are performed by the application, never by your prose.
 Older sessions may have workflow.legacyForm, legacyQuote or legacyRolePicker. Use continue_form ONLY if the current message answers that existing form (for example requested name/email for a quote). Answer interruptions normally; do not lose the saved form. New project planning uses plan_salon, not continue_form.
 For request_details always include readyToReview: true only with enough relevant information for staff, otherwise false and text asks one missing detail. A quantity alone is not enough. Use request_status for progress (with the exact reference when supplied), request_resume for continuing a draft, pause_task for 'never mind' or a temporary detour requested by the customer, clear_selection only when they explicitly ask to discard the selected products. Use renderMode=edit for changes to the last generated image; refit_room for their photo; staged_room only for an explicitly requested imagined example. Do not promise a plan will fit a budget until calculated. For show/select/compare always include retrieved product IDs in lines.
@@ -446,7 +471,11 @@ async function requestShoppingModel(
       ],
       tools: SHOPPING_TOOLS,
       tool_choice: finishOnly
-        ? { type: "tool", name: finishOnly === "plan_salon" ? "plan_salon" : "finish", disable_parallel_tool_use: true }
+        ? {
+            type: "tool",
+            name: finishOnly === "plan_salon" ? "plan_salon" : "finish",
+            disable_parallel_tool_use: true,
+          }
         : { type: "any", disable_parallel_tool_use: true },
       messages,
     }),
@@ -501,17 +530,23 @@ function withSelectionActions(turn: WaTurn): WaTurn[] {
 }
 
 function proposalTurns(session: SessionState, plans: ReturnType<typeof salonPlans>): WaTurn[] {
-  const chosen = plans.options.find(p => p.tier === plans.recommendedTier)!;
+  const chosen = plans.options.find((p) => p.tier === plans.recommendedTier)!;
   const n = plans.requirements.stations;
-  const split = plans.requirements.service_focus === "mixed"
-    ? ` — ${n - 2} hair/colour, 1 barber, 1 makeup/brow` : "";
+  const split =
+    plans.requirements.service_focus === "mixed"
+      ? ` — ${n - 2} hair/colour, 1 barber, 1 makeup/brow`
+      : "";
   const remaining = plans.requirements.budget - chosen.total;
-  const budget = remaining >= 0
-    ? `Remaining: ${formatPrice(remaining)}.`
-    : `Over budget by ${formatPrice(-remaining)}; requested quantities kept. Change the quantities or scope to fit your budget.`;
+  const budget =
+    remaining >= 0
+      ? `Remaining: ${formatPrice(remaining)}.`
+      : `Over budget by ${formatPrice(-remaining)}; requested quantities kept. Change the quantities or scope to fit your budget.`;
   const missing = chosen.missingRoles.length
-    ? `\nIncomplete plan: no matching ${chosen.missingRoles.join(", ")} products found.` : "";
-  const lines = chosen.lines.map(l => `${l.qty} × ${l.name} — ${formatPrice(l.subtotal)}`).join("\n");
+    ? `\nIncomplete plan: no matching ${chosen.missingRoles.join(", ")} products found.`
+    : "";
+  const lines = chosen.lines
+    .map((l) => `${l.qty} × ${l.name} — ${formatPrice(l.subtotal)}`)
+    .join("\n");
   const actions = selectionTurn(session);
   return withSelectionActions({
     ...actions,
@@ -587,9 +622,20 @@ export async function handleShoppingInbound(
   // Record the currency before any model/tool step, so a bare $ amount never
   // triggers a confirmation question and the model cannot relabel it.
   recordStatedCurrency(session, event.text);
-  if (/\b(?:don['’]?t|do not) like\b.*\b(?:any|them|these|above)\b|\bnone of (?:these|them)\b/i.test(event.text)) {
-    session.rejectedProductIds = [...new Set([...(session.rejectedProductIds ?? []), ...(session.shownProductIds ?? [])])].slice(-40);
-    return [{ kind: "text", text: "Understood—those options aren't right for you. What would you like different: the style, colour, or price?" }];
+  if (
+    /\b(?:don['’]?t|do not) like\b.*\b(?:any|them|these|above)\b|\bnone of (?:these|them)\b/i.test(
+      event.text,
+    )
+  ) {
+    session.rejectedProductIds = [
+      ...new Set([...(session.rejectedProductIds ?? []), ...(session.shownProductIds ?? [])]),
+    ].slice(-40);
+    return [
+      {
+        kind: "text",
+        text: "Understood—those options aren't right for you. What would you like different: the style, colour, or price?",
+      },
+    ];
   }
   const context = JSON.stringify({
     mode: options.unified ? "unified" : "legacy",
@@ -603,7 +649,8 @@ export async function handleShoppingInbound(
     quantities: session.plan.qty,
     displayed: productSummaries(session.shownProductIds ?? []),
     rejectedProducts: productSummaries(session.rejectedProductIds ?? []),
-    searchGuidance: "Do not recommend rejected products again unless the customer explicitly asks to reconsider one. For a chair with a separate basin, search each product type separately; do not claim plumbing or chair/basin compatibility without evidence. After two searches, answer from retrieved facts or ask one focused clarification. Do not repeatedly rephrase searches.",
+    searchGuidance:
+      "Do not recommend rejected products again unless the customer explicitly asks to reconsider one. For a chair with a separate basin, search each product type separately; do not claim plumbing or chair/basin compatibility without evidence. After two searches, answer from retrieved facts or ask one focused clarification. Do not repeatedly rephrase searches.",
     specifications:
       "Not included here. Call find_products with ids before stating or comparing specifications.",
     lastDocument: session.lastDocument,
@@ -654,7 +701,10 @@ export async function handleShoppingInbound(
       if ((call.name === "find_products" || call.name === "plan_salon") && call.id) {
         try {
           const signature = JSON.stringify([call.name, call.input]);
-          if (seen.has(signature) || ((step === maxSteps - 1 || searches >= 2) && !(forcePlan && call.name === "plan_salon")))
+          if (
+            seen.has(signature) ||
+            ((step === maxSteps - 1 || searches >= 2) && !(forcePlan && call.name === "plan_salon"))
+          )
             throw new Error(
               "Search budget reached or identical search repeated. Use finish with existing facts or ask a clarification.",
             );
@@ -700,7 +750,9 @@ export async function handleShoppingInbound(
             toolResult(plans);
           } else {
             const lookup = Lookup.parse(call.input);
-            const products = findShoppingProducts(lookup).filter(p => lookup.ids || !session.rejectedProductIds?.includes(p.id));
+            const products = findShoppingProducts(lookup).filter(
+              (p) => lookup.ids || !session.rejectedProductIds?.includes(p.id),
+            );
             products.forEach((p) => known.add(p.id));
             toolResult(products);
           }
@@ -765,16 +817,38 @@ export async function handleShoppingInbound(
         if (session.conversation.stations && session.conversation.budget) forcePlan = true;
         continue;
       }
-      if (options.unified && decision.action === "answer" &&
-          /(?:let me|i['’]ll|i will|one moment).{0,70}(?:build|prepare|pull|put together|draft)|(?:build|prepare|pull|put together).{0,40}(?:plan|proposal).{0,25}(?:now|moment)/i.test(decision.text)) {
-        const project = conversationMemory({ ...conversationMemory(session.conversation), ...decision.project });
+      if (
+        options.unified &&
+        decision.action === "answer" &&
+        /(?:let me|i['’]ll|i will|one moment).{0,70}(?:build|prepare|pull|put together|draft)|(?:build|prepare|pull|put together).{0,40}(?:plan|proposal).{0,25}(?:now|moment)/i.test(
+          decision.text,
+        )
+      ) {
+        const project = conversationMemory({
+          ...conversationMemory(session.conversation),
+          ...decision.project,
+        });
         if (project.stations && project.budget && project.currency === "USD") {
           session.conversation = project;
           forcePlan = true;
-          toolResult({ error: "No background planning exists. Call plan_salon now using these saved requirements and the customer's service/layout preferences. Do not send another acknowledgement.", project }, true);
+          toolResult(
+            {
+              error:
+                "No background planning exists. Call plan_salon now using these saved requirements and the customer's service/layout preferences. Do not send another acknowledgement.",
+              project,
+            },
+            true,
+          );
           continue;
         }
-        toolResult({ error: "Do not promise background work. Ask only the essential missing planning detail; do not ask again for saved confirmed facts.", project }, true);
+        toolResult(
+          {
+            error:
+              "Do not promise background work. Ask only the essential missing planning detail; do not ask again for saved confirmed facts.",
+            project,
+          },
+          true,
+        );
         continue;
       }
       console.info(
@@ -793,17 +867,35 @@ export async function handleShoppingInbound(
       }
       if (decision.action === "delegate" && !options.unified) return null;
       const lines = decision.lines ?? [];
-      if (decision.action === "show" && lines.some(l => session.rejectedProductIds?.includes(l.id)) &&
-          !/\b(reconsider|show.*again)\b/i.test(event.text)) {
+      if (
+        decision.action === "show" &&
+        lines.some((l) => session.rejectedProductIds?.includes(l.id)) &&
+        !/\b(reconsider|show.*again)\b/i.test(event.text)
+      ) {
         console.warn("wa-advisor-shortlist-rejected", "previously_rejected_product");
-        toolResult({ error: "Customer rejected these products. Offer other retrieved options or ask what they want different; do not resend rejected products." }, true);
+        toolResult(
+          {
+            error:
+              "Customer rejected these products. Offer other retrieved options or ask what they want different; do not resend rejected products.",
+          },
+          true,
+        );
         continue;
       }
-      if (decision.action === "show" && lines.some((l) =>
-        CATALOG_FULL[l.id] && !matchesProductPurpose(CATALOG_FULL[l.id]!, event.text),
-      )) {
+      if (
+        decision.action === "show" &&
+        lines.some(
+          (l) => CATALOG_FULL[l.id] && !matchesProductPurpose(CATALOG_FULL[l.id]!, event.text),
+        )
+      ) {
         console.warn("wa-advisor-shortlist-rejected", "product_purpose_mismatch");
-        toolResult({ error: "Shortlist contains a different product type or an accessory instead of the requested equipment. Search for complete matching products and replace those lines and the accompanying text. Offer accessories only when requested." }, true);
+        toolResult(
+          {
+            error:
+              "Shortlist contains a different product type or an accessory instead of the requested equipment. Search for complete matching products and replace those lines and the accompanying text. Offer accessories only when requested.",
+          },
+          true,
+        );
         continue;
       }
       if (
@@ -983,7 +1075,12 @@ export async function handleShoppingInbound(
       return [{ kind: "text", text: decision.text }];
     }
     console.warn("wa-shopping-search-exhausted", JSON.stringify({ searches, steps: maxSteps }));
-    return [{ kind: "text", text: "I haven’t found a suitable alternative yet. What matters most for the next options: a lower price, a different style, or a different colour? Your current selection is unchanged." }];
+    return [
+      {
+        kind: "text",
+        text: "I haven’t found a suitable alternative yet. What matters most for the next options: a lower price, a different style, or a different colour? Your current selection is unchanged.",
+      },
+    ];
   } catch (error) {
     console.warn("wa-shopping-failed", error instanceof Error ? error.message : "unknown");
     return [
