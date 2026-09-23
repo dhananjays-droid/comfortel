@@ -424,7 +424,7 @@ export async function handleConversation(
         return (
           (await request({
             fields: decision.fields,
-            readyToReview: decision.readyToReview,
+            ...(decision.readyToReview !== undefined ? { readyToReview: decision.readyToReview } : {}),
             followUpQuestion: decision.text,
           })) ?? say(nextQuestion(draft))
         );
